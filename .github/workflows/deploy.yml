@@ -1,0 +1,22 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy-api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy API to Railway
+        run: echo "Add Railway deploy action here"
+        # Use: https://github.com/bervProject/railway-deploy
+
+  deploy-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy Web to Vercel
+        run: echo "Vercel auto-deploys from GitHub"
+        # Vercel connects directly to GitHub repo
