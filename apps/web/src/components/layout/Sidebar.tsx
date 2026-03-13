@@ -34,7 +34,9 @@ import {
   Shield,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/auth.store';
+import { useAppStore } from '@/store/app.store';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useHydration } from '@/hooks/useHydration';
 
 type NavItem = { label: string; href: string; icon: any };
 type NavGroup = { label: string; href: string; icon: any; permission: string; children: NavItem[] };
@@ -95,7 +97,9 @@ const nav: NavEntry[] = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const hotel = useAppStore((s) => s.hotel);
   const logout = useAuthStore((s) => s.logout);
+  const hydrated = useHydration();
   const { canNav, can } = usePermissions();
 
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
@@ -119,13 +123,33 @@ export default function Sidebar() {
     <aside className="w-64 bg-[#161b27] border-r border-[#1e2536] flex flex-col h-full shrink-0">
       {/* Logo */}
       <div className="flex items-center gap-3 px-6 py-5 border-b border-[#1e2536]">
-        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center">
-          <Hotel size={18} className="text-white" />
-        </div>
-        <div>
-          <span className="text-white font-bold text-base tracking-tight">HotelOS</span>
-          <p className="text-[10px] text-slate-500 uppercase tracking-widest">Management</p>
-        </div>
+        {!hydrated ? (
+          <>
+            <div className="w-9 h-9 rounded-xl bg-[#1e2536] animate-pulse shrink-0" />
+            <div className="space-y-1.5">
+              <div className="w-28 h-3.5 rounded bg-[#1e2536] animate-pulse" />
+              <div className="w-16 h-2.5 rounded bg-[#1e2536] animate-pulse" />
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center shrink-0 overflow-hidden">
+              {hotel?.logo ? (
+                <img src={hotel.logo} alt={hotel.name} className="w-full h-full object-cover" />
+              ) : (
+                <Hotel size={18} className="text-white" />
+              )}
+            </div>
+            <div className="min-w-0">
+              <span className="text-white font-bold text-base tracking-tight truncate block">
+                {hotel?.name ?? 'HotelOS'}
+              </span>
+              <p className="text-[10px] text-slate-500 uppercase tracking-widest">
+                {hotel?.city ?? 'Management'}
+              </p>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Nav */}

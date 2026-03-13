@@ -1,27 +1,17 @@
 'use server';
 
-import { apiFetch, clearAuthCookies, COOKIE_ACCESS, COOKIE_REFRESH, setAuthCookies } from '@/lib/fetch-config';
+import { apiFetch, clearAuthCookies, getAccessToken, setAuthCookies } from '@/lib/fetch-config';
+import { AuthUser } from '@/store/auth.store';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
+const COOKIE_ACCESS = 'hotel_access_token';
+const COOKIE_REFRESH = 'hotel_refresh_token';
+
 // ─── Types ─────────────────────────────────────────────────────────────────────
-export type AuthUser = {
-  id: string;
-  email: string;
-  name: string;
-  role: string;
-  department: string;
-  position: string;
-  permissionOverrides?: {
-    grants: string[];
-    denies: string[];
-  };
-};
-
 export type AuthResult =
-  | { success: true;  user: AuthUser; message: string }
+  | { success: true; user: AuthUser; hotel: any }
   | { success: false; message: string; field?: 'email' | 'password' | 'general' };
-
 
 // ─── Login ─────────────────────────────────────────────────────────────────────
 export async function loginAction(email: string, password: string): Promise<AuthResult> {
@@ -45,9 +35,11 @@ export async function loginAction(email: string, password: string): Promise<Auth
       // Map common API errors to field-specific messages
       const message = data?.message ?? 'Login failed. Please try again.';
       const lower = message.toLowerCase();
-      const field = lower.includes('password') ? 'password'
-                  : lower.includes('email') || lower.includes('user') ? 'email'
-                  : 'general';
+      const field = lower.includes('password')
+        ? 'password'
+        : lower.includes('email') || lower.includes('user')
+          ? 'email'
+          : 'general';
       return { success: false, message, field };
     }
 
@@ -56,8 +48,12 @@ export async function loginAction(email: string, password: string): Promise<Auth
 
     return {
       success: true,
-      user: data.user,
-      message: data.message ?? 'Login successful',
+      user: {
+        ...data.user,
+        permissionOverrides: data.user.permissionOverrides ?? { grants: [], denies: [] },
+      },
+      // message: data.message ?? 'Login successful',
+      hotel: data.hotel ?? null,
     };
   } catch {
     return {
@@ -74,7 +70,7 @@ export async function logoutAction(): Promise<void> {
 
   try {
     const refreshToken = cookieStore.get(COOKIE_REFRESH)?.value;
-    const accessToken  = cookieStore.get(COOKIE_ACCESS)?.value;
+    const accessToken = cookieStore.get(COOKIE_ACCESS)?.value;
 
     // Tell the API to invalidate the refresh token
     if (refreshToken && accessToken) {
@@ -94,7 +90,7 @@ export async function logoutAction(): Promise<void> {
 
 // ─── Refresh access token ──────────────────────────────────────────────────────
 // Called from middleware when the access token is expired.
-export async function refreshTokenAction(): Promise<{ success: boolean }> {
+export async function refreshAction(): Promise<{ success: boolean }> {
   const cookieStore = await cookies();
   const refreshToken = cookieStore.get(COOKIE_REFRESH)?.value;
 
@@ -141,5 +137,33 @@ export async function getSession(): Promise<AuthUser | null> {
     return data.user ?? null;
   } catch {
     return null;
+  }
+}
+
+export async function getMeAction(): Promise<
+  { success: true; user: AuthUser; hotel: any } | { success: false }
+> {
+  const accessToken = await getAccessToken();
+  if (!accessToken) return { success: false };
+
+  try {
+    const res = await apiFetch(`/auth/me`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      cache: 'no-store',
+    });
+
+    if (!res.ok) return { success: false };
+
+    const data = await res.json();
+    return {
+      success: true,
+      user: {
+        ...data.user,
+        permissionOverrides: data.user.permissionOverrides ?? { grants: [], denies: [] },
+      },
+      hotel: data.hotel ?? null,
+    };
+  } catch {
+    return { success: false };
   }
 }

@@ -100,6 +100,7 @@ enum LeaveType {
 model Hotel {
   id        String   @id @default(uuid())
   name      String
+  domain    String?  @unique
   address   String
   city      String
   country   String

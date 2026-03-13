@@ -1,24 +1,40 @@
 'use client';
 
-import { loginAction, logoutAction } from '@/app/actions/auth.actions';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { AuthUser } from '@/app/actions/auth.actions';
+import { loginAction, logoutAction } from '@/actions/auth.actions'; // ← correct path
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+// Single source of truth — auth.actions.ts imports this from here
+export type AuthUser = {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  department: string | null;
+  position: string | null;
+  permissionOverrides: {
+    grants: string[];
+    denies: string[];
+  };
+};
 
 interface AuthState {
   user: AuthUser | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
+
   login: (
     email: string,
     password: string,
-  ) => Promise<{ success: boolean; field?: string; message?: string }>;
+  ) => Promise<{ success: boolean; hotel?: any; message?: string }>;
   logout: () => Promise<void>;
   setUser: (user: AuthUser | null) => void;
   clearError: () => void;
 }
 
+// ─── Store ────────────────────────────────────────────────────────────────────
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
@@ -30,12 +46,16 @@ export const useAuthStore = create<AuthState>()(
       login: async (email, password) => {
         set({ isLoading: true, error: null });
         const result = await loginAction(email, password);
+
         if (!result.success) {
           set({ isLoading: false, error: result.message });
-          return { success: false, field: result.field, message: result.message };
+          return { success: false, message: result.message };
         }
+
+        console.log(result, 'ffs');
+
         set({ user: result.user, isAuthenticated: true, isLoading: false, error: null });
-        return { success: true };
+        return { success: true, hotel: result.hotel };
       },
 
       logout: async () => {

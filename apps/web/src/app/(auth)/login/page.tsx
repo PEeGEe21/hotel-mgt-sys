@@ -1,36 +1,48 @@
 'use client';
-import { useState } from 'react';
-import { Hotel, Lock, Mail, Eye, EyeOff } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Hotel, Lock, Mail, Eye, EyeOff, MapPin } from 'lucide-react';
 import { useAuthStore } from '@/store/auth.store';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useAppStore } from '@/store/app.store';
+import { useHotelBranding } from '@/hooks/useHotelBranding';
 
 export default function LoginPage() {
+  // const login = useAuthStore((s) => s.login);
+
+  const { login, isLoading, error, clearError } = useAuthStore();
+  const { setHotel } = useAppStore();
+  const hotel = useHotelBranding();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const login = useAuthStore((s) => s.login);
-  const router = useRouter();
-  const searchParams = useSearchParams();
+  // const [error, setError] = useState('');
+
+  useEffect(() => {
+    return () => clearError();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setError('');
+    // setError('');
     try {
       const result = await login(email, password);
       if (!result.success) {
-        setError(result.message ?? 'Invalid email or password.');
+        // setError(result.message ?? 'Invalid email or password.');
         setLoading(false);
         return;
       }
+
+      if (result.hotel) setHotel(result.hotel);
 
       // Respect ?from= redirect, fall back to dashboard
       const from = searchParams.get('from') ?? '/dashboard';
       router.push(from);
     } catch {
-      setError('Invalid email or password. Please try again.');
+      // setError('Invalid email or password. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -46,12 +58,34 @@ export default function LoginPage() {
       <div className="w-full max-w-sm relative">
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
+          {hotel?.logo ? (
+            <img
+              src={hotel.logo}
+              alt={hotel.name}
+              className="w-14 h-14 rounded-2xl object-cover mb-4 shadow-xl"
+            />
+          ) : (
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center mb-4 shadow-xl shadow-blue-500/25">
+              <Hotel size={26} className="text-white" />
+            </div>
+          )}
+          <h1 className="text-2xl font-bold text-white">{hotel?.name ?? 'HotelOS'}</h1>
+          {hotel?.city && (
+            <p className="text-slate-500 text-xs mt-1 flex items-center gap-1">
+              <MapPin size={11} />
+              {hotel.city}, {hotel.country}
+            </p>
+          )}
+          <p className="text-slate-500 text-sm mt-2">Sign in to your account</p>
+        </div>
+
+        {/* <div className="flex flex-col items-center mb-8">
           <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center mb-4 shadow-xl shadow-blue-500/25">
             <Hotel size={26} className="text-white" />
           </div>
           <h1 className="text-2xl font-bold text-white">Welcome back</h1>
           <p className="text-slate-500 text-sm mt-1">Sign in to HotelOS</p>
-        </div>
+        </div> */}
 
         {/* Card */}
         <div className="bg-[#161b27] border border-[#1e2536] rounded-2xl p-6 shadow-xl">
@@ -111,12 +145,12 @@ export default function LoginPage() {
               disabled={loading}
               className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-2.5 rounded-lg transition-colors text-sm mt-2"
             >
-              {loading ? 'Signing in...' : 'Sign in'}
+              {isLoading ? 'Signing in...' : 'Sign in'}
             </button>
           </form>
         </div>
         <p className="text-center text-xs text-slate-600 mt-4">
-          HotelOS © {new Date().getFullYear()}
+          {hotel?.name ?? 'HotelOS'} © {new Date().getFullYear()}
         </p>
       </div>
     </div>

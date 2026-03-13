@@ -3,10 +3,10 @@
 import { cookies } from 'next/headers';
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
-export const API_URL = process.env.API_URL || 'http://localhost:4000/api/v1';
-
-export const COOKIE_ACCESS = 'hotel_access_token';
-export const COOKIE_REFRESH = 'hotel_refresh_token';
+const API_URL = process.env.API_URL || 'http://localhost:4000/api/v1';
+const IS_PROD        = process.env.NODE_ENV === 'production';
+const COOKIE_ACCESS = 'hotel_access_token';
+const COOKIE_REFRESH = 'hotel_refresh_token';
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 export async function apiFetch(path: string, options: RequestInit) {
@@ -28,7 +28,7 @@ export async function setAuthCookies(
     name: COOKIE_ACCESS,
     value: accessToken,
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: IS_PROD,
     sameSite: 'lax',
     path: '/',
     maxAge: 60 * 15, // 15 minutes
@@ -38,7 +38,7 @@ export async function setAuthCookies(
     name: COOKIE_REFRESH,
     value: refreshToken,
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: IS_PROD,
     sameSite: 'strict',
     path: '/',
     maxAge: 60 * 60 * 24 * 7, // 7 days
