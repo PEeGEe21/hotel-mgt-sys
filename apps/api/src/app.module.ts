@@ -14,6 +14,7 @@ import { FinanceModule } from './modules/finance/finance.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { FacilitiesModule } from './modules/facilities/facilities.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { FloorsModule } from './modules/floors/floors.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { PrismaModule } from './prisma/prisma.module';
     FinanceModule,
     ReportsModule,
     FacilitiesModule,
+    FloorsModule,
   ],
 })
 export class AppModule {}

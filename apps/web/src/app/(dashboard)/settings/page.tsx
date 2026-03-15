@@ -2,10 +2,19 @@
 
 import Link from 'next/link';
 import {
-  Building2, Users, Package, BedDouble, Truck,
-  Clock, Shield, Settings, ChevronRight, Hotel
+  Building2,
+  Users,
+  Package,
+  BedDouble,
+  Truck,
+  Clock,
+  Shield,
+  Settings,
+  ChevronRight,
+  Hotel,
 } from 'lucide-react';
 import { usePermissions } from '@/hooks/usePermissions';
+import { Layers } from '@solar-icons/react';
 
 const sections = [
   {
@@ -40,6 +49,14 @@ const sections = [
     icon: Package,
     color: 'text-emerald-400',
     bg: 'bg-emerald-500/10 border-emerald-500/20',
+  },
+  {
+    label: 'Floors & Areas',
+    description: 'Define floors, levels and outside areas',
+    href: '/settings/floors',
+    icon: Layers,
+    color: 'text-violet-400',
+    bg: 'bg-violet-500/10 border-violet-500/20',
   },
   {
     label: 'Room Types',
@@ -79,7 +96,7 @@ const sections = [
 export default function SettingsPage() {
   const { isAdmin, isManagement } = usePermissions();
 
-  const visible = sections.filter(s => !s.adminOnly || isAdmin);
+  const visible = sections.filter((s) => !s.adminOnly || isAdmin);
 
   return (
     <div className="space-y-6 max-w-full">
@@ -90,16 +107,26 @@ export default function SettingsPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {visible.map(({ label, description, href, icon: Icon, color, bg }) => (
-          <Link key={href} href={href}
-            className="bg-[#161b27] border border-[#1e2536] hover:border-slate-600 rounded-xl p-5 flex items-center gap-4 transition-all group">
-            <div className={`w-11 h-11 rounded-xl border ${bg} flex items-center justify-center shrink-0`}>
+          <Link
+            key={href}
+            href={href}
+            className="bg-[#161b27] border border-[#1e2536] hover:border-slate-600 rounded-xl p-5 flex items-center gap-4 transition-all group"
+          >
+            <div
+              className={`w-11 h-11 rounded-xl border ${bg} flex items-center justify-center shrink-0`}
+            >
               <Icon size={20} className={color} />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-slate-200 group-hover:text-white transition-colors">{label}</p>
+              <p className="text-sm font-semibold text-slate-200 group-hover:text-white transition-colors">
+                {label}
+              </p>
               <p className="text-xs text-slate-500 mt-0.5 truncate">{description}</p>
             </div>
-            <ChevronRight size={16} className="text-slate-600 group-hover:text-slate-400 transition-colors shrink-0" />
+            <ChevronRight
+              size={16}
+              className="text-slate-600 group-hover:text-slate-400 transition-colors shrink-0"
+            />
           </Link>
         ))}
       </div>

@@ -545,7 +545,7 @@ function AddItemModal({
       <DialogOverlay className="bg-black/60 backdrop-blur-sm" />
       <DialogContent
         aria-describedby={undefined}
-        className="w-full max-w-lg sm:max-w-2xl !rounded-2xl bg-[#161b27] border !border-[#161b27] p-6 [&>button]:hidden shadow-2xl !mt-0"
+        className="w-full max-w-lg sm:max-w-2xl !rounded-2xl bg-[#161b27] border border-[#1e2536] ring-0 !outline-none p-6 [&>button]:hidden shadow-2xl !mt-0"
       >
         <div>
           <div className="flex items-center justify-between mb-5">

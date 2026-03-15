@@ -121,6 +121,25 @@ async function main() {
     console.log(`✅ ${u.role}: ${u.email} / ${u.password}`);
   }
 
+  // ─── Floors ───────────────────────────────────────────────────────────────
+  const floorDefs = [
+    { level: 1, name: 'Floor 1' },
+    { level: 2, name: 'Floor 2' },
+    { level: 3, name: 'Floor 3' },
+    { level: 4, name: 'Floor 4 (Penthouse)' },
+  ];
+
+  const floorMap: Record<number, string> = {};
+  for (const f of floorDefs) {
+    const floor = await prisma.floor.upsert({
+      where: { hotelId_level: { hotelId: hotel.id, level: f.level } },
+      update: { name: f.name },
+      create: { hotelId: hotel.id, level: f.level, name: f.name },
+    });
+    floorMap[f.level] = floor.id;
+  }
+  console.log(`✅ ${floorDefs.length} floors seeded`);
+
   // ─── Rooms ────────────────────────────────────────────────────────────────
   const rooms = [
     { number: '101', floor: 1, type: 'STANDARD', baseRate: 45000 },
@@ -141,7 +160,7 @@ async function main() {
       create: {
         hotelId: hotel.id,
         number: r.number,
-        floor: r.floor,
+        floorId: floorMap[r.floor],
         type: r.type as any,
         status: 'AVAILABLE',
         baseRate: r.baseRate,
@@ -151,6 +170,739 @@ async function main() {
     });
   }
   console.log(`✅ ${rooms.length} rooms seeded`);
+
+  // ─── Guests ───────────────────────────────────────────────────────────────
+  const guestDefs = [
+    {
+      id: 'seed-guest-1',
+      firstName: 'Chidi',
+      lastName: 'Okeke',
+      email: 'chidi.okeke@gmail.com',
+      phone: '+234 802 111 2233',
+      nationality: 'Nigerian',
+      idType: 'NATIONAL_ID',
+      idNumber: 'NIN-001122334',
+      stayType: 'full_time',
+      isVip: false,
+      notes: null,
+    },
+    {
+      id: 'seed-guest-2',
+      firstName: 'Amina',
+      lastName: 'Yusuf',
+      email: 'amina.yusuf@outlook.com',
+      phone: '+234 803 222 3344',
+      nationality: 'Nigerian',
+      idType: 'PASSPORT',
+      idNumber: 'A12345678',
+      stayType: 'full_time',
+      isVip: true,
+      notes: 'VIP — prefers high floor, no feather pillows',
+    },
+    {
+      id: 'seed-guest-3',
+      firstName: 'Emeka',
+      lastName: 'Nwosu',
+      email: 'emeka.nwosu@yahoo.com',
+      phone: '+234 805 333 4455',
+      nationality: 'Nigerian',
+      idType: 'DRIVERS_LICENSE',
+      idNumber: 'DL-556677',
+      stayType: 'full_time',
+      isVip: false,
+      notes: null,
+    },
+    {
+      id: 'seed-guest-4',
+      firstName: 'Ngozi',
+      lastName: 'Adeyemi',
+      email: 'ngozi.a@corporate.ng',
+      phone: '+234 806 444 5566',
+      nationality: 'Nigerian',
+      idType: 'PASSPORT',
+      idNumber: 'B98765432',
+      stayType: 'full_time',
+      isVip: true,
+      notes: 'Corporate guest — invoice to Adeyemi & Associates Ltd',
+    },
+    {
+      id: 'seed-guest-5',
+      firstName: 'Tunde',
+      lastName: 'Bakare',
+      email: 'tunde.bakare@gmail.com',
+      phone: '+234 807 555 6677',
+      nationality: 'Nigerian',
+      idType: 'NATIONAL_ID',
+      idNumber: 'NIN-998877665',
+      stayType: 'full_time',
+      isVip: false,
+      notes: null,
+    },
+    {
+      id: 'seed-guest-6',
+      firstName: 'Fatima',
+      lastName: 'Ibrahim',
+      email: 'fatima.ibrahim@gmail.com',
+      phone: '+234 808 666 7788',
+      nationality: 'Nigerian',
+      idType: 'PASSPORT',
+      idNumber: 'C11223344',
+      stayType: 'short_time',
+      isVip: false,
+      notes: 'Allergic to shellfish — note for room service',
+    },
+    {
+      id: 'seed-guest-7',
+      firstName: 'David',
+      lastName: 'Okonkwo',
+      email: 'david.okonkwo@company.com',
+      phone: '+234 809 777 8899',
+      nationality: 'Nigerian',
+      idType: 'NATIONAL_ID',
+      idNumber: 'NIN-334455667',
+      stayType: 'short_time',
+      isVip: false,
+      notes: null,
+    },
+    {
+      id: 'seed-guest-8',
+      firstName: 'Kemi',
+      lastName: 'Oladele',
+      email: 'kemi.oladele@gmail.com',
+      phone: '+234 810 888 9900',
+      nationality: 'Nigerian',
+      idType: 'PASSPORT',
+      idNumber: 'D55443322',
+      stayType: 'short_time',
+      isVip: true,
+      notes: 'VIP — return guest, complimentary upgrade when available',
+    },
+  ];
+
+  const guestMap: Record<string, string> = {};
+  for (const g of guestDefs) {
+    const guest = await prisma.guest.upsert({
+      where: { id: g.id },
+      update: {},
+      create: {
+        id: g.id,
+        hotelId: hotel.id,
+        firstName: g.firstName,
+        lastName: g.lastName,
+        email: g.email,
+        phone: g.phone,
+        nationality: g.nationality,
+        idType: g.idType,
+        idNumber: g.idNumber,
+        isVip: g.isVip,
+        notes: g.notes,
+      },
+    });
+    guestMap[g.id] = guest.id;
+  }
+  console.log(`✅ ${guestDefs.length} guests seeded`);
+
+  // ─── Rooms lookup ──────────────────────────────────────────────────────────
+  // We need room IDs to create reservations — look them up by number
+  const roomLookup: Record<string, string> = {};
+  const seededRooms = await prisma.room.findMany({
+    where: { hotelId: hotel.id },
+    select: { id: true, number: true },
+  });
+  for (const r of seededRooms) roomLookup[r.number] = r.id;
+
+  // ─── Reservations ─────────────────────────────────────────────────────────
+  type ResDef = {
+    id: string;
+    reservationNo: string;
+    guestId: string;
+    roomNumber: string;
+    checkIn: Date;
+    checkOut: Date;
+    adults: number;
+    children: number;
+    status: 'CONFIRMED' | 'CHECKED_IN' | 'CHECKED_OUT' | 'PENDING';
+    paymentStatus: 'UNPAID' | 'PARTIAL' | 'PAID';
+    totalAmount: number;
+    paidAmount: number;
+    source: string;
+    specialRequests?: string;
+    notes?: string;
+  };
+
+  const today = new Date('2026-03-13');
+  const d = (offset: number) => {
+    const dt = new Date(today);
+    dt.setDate(dt.getDate() + offset);
+    return dt;
+  };
+
+  const resDefs: ResDef[] = [
+    // Room 101 — checked in, staying 3 nights
+    {
+      id: 'seed-res-1',
+      reservationNo: 'RES-2026-0001',
+      guestId: 'seed-guest-1',
+      roomNumber: '101',
+      checkIn: d(-1),
+      checkOut: d(2),
+      adults: 2,
+      children: 0,
+      status: 'CHECKED_IN',
+      paymentStatus: 'PARTIAL',
+      totalAmount: 135000,
+      paidAmount: 45000,
+      source: 'DIRECT',
+      specialRequests: 'Late check-out if possible',
+    },
+    // Room 102 — checked in, VIP, longer stay
+    {
+      id: 'seed-res-2',
+      reservationNo: 'RES-2026-0002',
+      guestId: 'seed-guest-2',
+      roomNumber: '102',
+      checkIn: d(-3),
+      checkOut: d(4),
+      adults: 1,
+      children: 0,
+      status: 'CHECKED_IN',
+      paymentStatus: 'PARTIAL',
+      totalAmount: 455000,
+      paidAmount: 195000,
+      source: 'DIRECT',
+      notes: 'VIP — complimentary welcome drink arranged',
+    },
+    // Room 201 — confirmed, arriving tomorrow
+    {
+      id: 'seed-res-3',
+      reservationNo: 'RES-2026-0003',
+      guestId: 'seed-guest-3',
+      roomNumber: '201',
+      checkIn: d(1),
+      checkOut: d(4),
+      adults: 2,
+      children: 1,
+      status: 'CONFIRMED',
+      paymentStatus: 'UNPAID',
+      totalAmount: 195000,
+      paidAmount: 0,
+      source: 'BOOKING.COM',
+      specialRequests: 'Extra bed for child',
+    },
+    // Room 203 — checked in, presidential suite
+    {
+      id: 'seed-res-4',
+      reservationNo: 'RES-2026-0004',
+      guestId: 'seed-guest-4',
+      roomNumber: '203',
+      checkIn: d(-2),
+      checkOut: d(3),
+      adults: 2,
+      children: 0,
+      status: 'CHECKED_IN',
+      paymentStatus: 'PARTIAL',
+      totalAmount: 600000,
+      paidAmount: 240000,
+      source: 'DIRECT',
+      notes: 'Corporate booking — invoice required',
+    },
+    // Room 301 — confirmed, arriving in 2 days
+    {
+      id: 'seed-res-5',
+      reservationNo: 'RES-2026-0005',
+      guestId: 'seed-guest-5',
+      roomNumber: '301',
+      checkIn: d(2),
+      checkOut: d(5),
+      adults: 2,
+      children: 0,
+      status: 'CONFIRMED',
+      paymentStatus: 'UNPAID',
+      totalAmount: 360000,
+      paidAmount: 0,
+      source: 'DIRECT',
+    },
+    // Room 302 — checked in
+    {
+      id: 'seed-res-6',
+      reservationNo: 'RES-2026-0006',
+      guestId: 'seed-guest-6',
+      roomNumber: '302',
+      checkIn: d(-1),
+      checkOut: d(2),
+      adults: 1,
+      children: 0,
+      status: 'CHECKED_IN',
+      paymentStatus: 'UNPAID',
+      totalAmount: 180000,
+      paidAmount: 0,
+      source: 'AIRBNB',
+    },
+    // Room 401 — checked out yesterday (historical)
+    {
+      id: 'seed-res-7',
+      reservationNo: 'RES-2026-0007',
+      guestId: 'seed-guest-7',
+      roomNumber: '401',
+      checkIn: d(-5),
+      checkOut: d(-1),
+      adults: 2,
+      children: 0,
+      status: 'CHECKED_OUT',
+      paymentStatus: 'PAID',
+      totalAmount: 1400000,
+      paidAmount: 1400000,
+      source: 'DIRECT',
+    },
+    // Room 103 — checked in, VIP return guest
+    {
+      id: 'seed-res-8',
+      reservationNo: 'RES-2026-0008',
+      guestId: 'seed-guest-8',
+      roomNumber: '103',
+      checkIn: d(-2),
+      checkOut: d(1),
+      adults: 2,
+      children: 0,
+      status: 'CHECKED_IN',
+      paymentStatus: 'PARTIAL',
+      totalAmount: 195000,
+      paidAmount: 65000,
+      source: 'DIRECT',
+      notes: 'Return VIP guest — complimentary upgrade applied',
+    },
+  ];
+
+  // Update room statuses to match reservations
+  const roomStatusUpdates: Record<string, string> = {
+    '101': 'OCCUPIED',
+    '102': 'OCCUPIED',
+    '103': 'OCCUPIED',
+    '201': 'RESERVED',
+    '203': 'OCCUPIED',
+    '301': 'RESERVED',
+    '302': 'OCCUPIED',
+    '401': 'AVAILABLE', // checked out
+  };
+  for (const [number, status] of Object.entries(roomStatusUpdates)) {
+    if (roomLookup[number]) {
+      await prisma.room.update({
+        where: { id: roomLookup[number] },
+        data: { status: status as any },
+      });
+    }
+  }
+
+  const resMap: Record<string, string> = {};
+  for (const r of resDefs) {
+    if (!roomLookup[r.roomNumber]) continue;
+    const res = await prisma.reservation.upsert({
+      where: { id: r.id },
+      update: {},
+      create: {
+        id: r.id,
+        hotelId: hotel.id,
+        guestId: guestMap[r.guestId],
+        roomId: roomLookup[r.roomNumber],
+        reservationNo: r.reservationNo,
+        checkIn: r.checkIn,
+        checkOut: r.checkOut,
+        adults: r.adults,
+        children: r.children,
+        status: r.status,
+        paymentStatus: r.paymentStatus,
+        totalAmount: r.totalAmount,
+        paidAmount: r.paidAmount,
+        source: r.source,
+        specialRequests: r.specialRequests,
+        notes: r.notes,
+      },
+    });
+    resMap[r.id] = res.id;
+  }
+  console.log(`✅ ${resDefs.length} reservations seeded`);
+
+  // ─── Folio Items ──────────────────────────────────────────────────────────
+  type FolioDef = {
+    reservationId: string;
+    description: string;
+    amount: number;
+    quantity: number;
+    category: string;
+    createdAt: Date;
+  };
+
+  const folioDefs: FolioDef[] = [
+    // RES-1 (Room 101, Chidi Okeke — 3 nights, partial payment)
+    {
+      reservationId: 'seed-res-1',
+      description: 'Room charge — Standard (1 night)',
+      amount: 45000,
+      quantity: 1,
+      category: 'ROOM',
+      createdAt: d(-1),
+    },
+    {
+      reservationId: 'seed-res-1',
+      description: 'Room charge — Standard (1 night)',
+      amount: 45000,
+      quantity: 1,
+      category: 'ROOM',
+      createdAt: d(0),
+    },
+    {
+      reservationId: 'seed-res-1',
+      description: 'Room service — Jollof Rice & Chicken',
+      amount: 8500,
+      quantity: 1,
+      category: 'FOOD',
+      createdAt: d(0),
+    },
+    {
+      reservationId: 'seed-res-1',
+      description: 'Mini bar — water x4, Coke x2',
+      amount: 3200,
+      quantity: 1,
+      category: 'MISC',
+      createdAt: d(0),
+    },
+    {
+      reservationId: 'seed-res-1',
+      description: 'Deposit payment',
+      amount: -45000,
+      quantity: 1,
+      category: 'MISC',
+      createdAt: d(-1),
+    },
+
+    // RES-2 (Room 102, Amina Yusuf — VIP, 7 nights)
+    {
+      reservationId: 'seed-res-2',
+      description: 'Room charge — Deluxe (1 night)',
+      amount: 65000,
+      quantity: 1,
+      category: 'ROOM',
+      createdAt: d(-3),
+    },
+    {
+      reservationId: 'seed-res-2',
+      description: 'Room charge — Deluxe (1 night)',
+      amount: 65000,
+      quantity: 1,
+      category: 'ROOM',
+      createdAt: d(-2),
+    },
+    {
+      reservationId: 'seed-res-2',
+      description: 'Room charge — Deluxe (1 night)',
+      amount: 65000,
+      quantity: 1,
+      category: 'ROOM',
+      createdAt: d(-1),
+    },
+    {
+      reservationId: 'seed-res-2',
+      description: 'Spa — Deep tissue massage (60 min)',
+      amount: 35000,
+      quantity: 1,
+      category: 'SPA',
+      createdAt: d(-2),
+    },
+    {
+      reservationId: 'seed-res-2',
+      description: 'Laundry service — 3 items',
+      amount: 7500,
+      quantity: 1,
+      category: 'LAUNDRY',
+      createdAt: d(-1),
+    },
+    {
+      reservationId: 'seed-res-2',
+      description: 'Room service — Breakfast',
+      amount: 12000,
+      quantity: 1,
+      category: 'FOOD',
+      createdAt: d(0),
+    },
+    {
+      reservationId: 'seed-res-2',
+      description: 'Advance payment',
+      amount: -195000,
+      quantity: 1,
+      category: 'MISC',
+      createdAt: d(-3),
+    },
+
+    // RES-4 (Room 203, Ngozi Adeyemi — corporate, 5 nights)
+    {
+      reservationId: 'seed-res-4',
+      description: 'Room charge — Suite (1 night)',
+      amount: 120000,
+      quantity: 1,
+      category: 'ROOM',
+      createdAt: d(-2),
+    },
+    {
+      reservationId: 'seed-res-4',
+      description: 'Room charge — Suite (1 night)',
+      amount: 120000,
+      quantity: 1,
+      category: 'ROOM',
+      createdAt: d(-1),
+    },
+    {
+      reservationId: 'seed-res-4',
+      description: 'Conference room hire — 4 hours',
+      amount: 45000,
+      quantity: 1,
+      category: 'MISC',
+      createdAt: d(-1),
+    },
+    {
+      reservationId: 'seed-res-4',
+      description: 'Room service — Working lunch x2',
+      amount: 24000,
+      quantity: 1,
+      category: 'FOOD',
+      createdAt: d(0),
+    },
+    {
+      reservationId: 'seed-res-4',
+      description: 'Airport transfer — outbound',
+      amount: 18000,
+      quantity: 1,
+      category: 'MISC',
+      createdAt: d(-2),
+    },
+    {
+      reservationId: 'seed-res-4',
+      description: 'Advance payment',
+      amount: -240000,
+      quantity: 1,
+      category: 'MISC',
+      createdAt: d(-2),
+    },
+
+    // RES-6 (Room 302, Fatima Ibrahim — 3 nights, unpaid)
+    {
+      reservationId: 'seed-res-6',
+      description: 'Room charge — Suite (1 night)',
+      amount: 120000,
+      quantity: 1,
+      category: 'ROOM',
+      createdAt: d(-1),
+    },
+    {
+      reservationId: 'seed-res-6',
+      description: 'Mini bar — Heineken x4, Sprite x2',
+      amount: 9600,
+      quantity: 1,
+      category: 'MISC',
+      createdAt: d(-1),
+    },
+    {
+      reservationId: 'seed-res-6',
+      description: 'Room service — Pepper soup',
+      amount: 6500,
+      quantity: 1,
+      category: 'FOOD',
+      createdAt: d(0),
+    },
+
+    // RES-8 (Room 103, Kemi Oladele — VIP return, 3 nights)
+    {
+      reservationId: 'seed-res-8',
+      description: 'Room charge — Deluxe (1 night)',
+      amount: 65000,
+      quantity: 1,
+      category: 'ROOM',
+      createdAt: d(-2),
+    },
+    {
+      reservationId: 'seed-res-8',
+      description: 'Room charge — Deluxe (1 night)',
+      amount: 65000,
+      quantity: 1,
+      category: 'ROOM',
+      createdAt: d(-1),
+    },
+    {
+      reservationId: 'seed-res-8',
+      description: 'Complimentary welcome fruit basket',
+      amount: 0,
+      quantity: 1,
+      category: 'MISC',
+      createdAt: d(-2),
+    },
+    {
+      reservationId: 'seed-res-8',
+      description: 'Spa — Facial treatment',
+      amount: 25000,
+      quantity: 1,
+      category: 'SPA',
+      createdAt: d(-1),
+    },
+    {
+      reservationId: 'seed-res-8',
+      description: 'Advance payment',
+      amount: -65000,
+      quantity: 1,
+      category: 'MISC',
+      createdAt: d(-2),
+    },
+  ];
+
+  for (const f of folioDefs) {
+    if (!resMap[f.reservationId]) continue;
+    await prisma.folioItem.create({
+      data: {
+        hotelId: hotel.id,
+        reservationId: resMap[f.reservationId],
+        description: f.description,
+        amount: f.amount,
+        quantity: f.quantity,
+        category: f.category,
+        createdAt: f.createdAt,
+      },
+    });
+  }
+  console.log(`✅ ${folioDefs.length} folio items seeded`);
+
+  // ─── Invoice + Payment for checked-out guest (RES-7) ─────────────────────
+  if (resMap['seed-res-7']) {
+    const inv = await prisma.invoice.upsert({
+      where: { invoiceNo: 'INV-2026-0001' },
+      update: {},
+      create: {
+        hotelId: hotel.id,
+        reservationId: resMap['seed-res-7'],
+        invoiceNo: 'INV-2026-0001',
+        issuedAt: d(-1),
+        subtotal: 1304348,
+        tax: 95652,
+        discount: 0,
+        total: 1400000,
+        paymentStatus: 'PAID',
+        notes: 'Settled at checkout',
+      },
+    });
+    const existingPayment = await prisma.payment.findUnique({ where: { id: 'seed-payment-1' } });
+    if (!existingPayment) {
+      await prisma.payment.create({
+        data: {
+          id: 'seed-payment-1',
+          hotelId: hotel.id,
+          invoiceId: inv.id,
+          amount: 1400000,
+          method: 'CARD',
+          reference: 'TXN-GTBANK-20260312',
+          paidAt: d(-1),
+          note: 'Visa card — approved',
+        },
+      });
+    }
+    console.log('✅ Invoice + payment seeded for checkout guest');
+  }
+
+  // ─── Company ──────────────────────────────────────────────────────────────
+  const company = await prisma.company.upsert({
+    where: { hotelId_name: { hotelId: hotel.id, name: 'Adeyemi & Associates Ltd' } },
+    update: {},
+    create: {
+      id: 'seed-company-1',
+      hotelId: hotel.id,
+      name: 'Adeyemi & Associates Ltd',
+      email: 'accounts@adeyemi-associates.ng',
+      phone: '+234 1 234 5678',
+      address: '25 Broad Street, Lagos Island',
+      taxId: 'TIN-20240012345',
+      contactName: 'Mrs Chioma Adeyemi',
+      notes: 'Preferred corporate client — NET 30 payment terms',
+    },
+  });
+  console.log('✅ Company seeded');
+
+  // ─── Group Booking ────────────────────────────────────────────────────────
+  const groupBooking = await prisma.groupBooking.upsert({
+    where: { groupNo: 'GRP-2026-001' },
+    update: {},
+    create: {
+      id: 'seed-group-1',
+      hotelId: hotel.id,
+      groupNo: 'GRP-2026-001',
+      name: 'Nwosu Family Reunion',
+      notes: '12 guests, 4 rooms, wedding weekend — 15 Mar to 17 Mar',
+    },
+  });
+  console.log('✅ Group booking seeded');
+
+  // ─── Update reservations with company / group / bookingType ───────────────
+  // RES-4 (Ngozi Adeyemi, Room 203) → company booking
+  if (resMap['seed-res-4']) {
+    await prisma.reservation.update({
+      where: { id: resMap['seed-res-4'] },
+      data: { companyId: company.id, bookingType: 'COMPANY' },
+    });
+  }
+
+  // RES-3 (Emeka Nwosu, Room 201) → group booking + family
+  if (resMap['seed-res-3']) {
+    await prisma.reservation.update({
+      where: { id: resMap['seed-res-3'] },
+      data: { groupBookingId: groupBooking.id, bookingType: 'FAMILY' },
+    });
+  }
+
+  // RES-2 (Amina Yusuf, Room 102) → 2 adults
+  if (resMap['seed-res-2']) {
+    await prisma.reservation.update({
+      where: { id: resMap['seed-res-2'] },
+      data: { adults: 2, bookingType: 'INDIVIDUAL' },
+    });
+  }
+  console.log('✅ Reservations updated with company/group/bookingType');
+
+  // ─── ReservationGuest rows ────────────────────────────────────────────────
+  // Wire up primary guests for all reservations
+  const primaryGuestLinks = [
+    { resId: 'seed-res-1', guestId: 'seed-guest-1', role: 'PRIMARY' },
+    { resId: 'seed-res-2', guestId: 'seed-guest-2', role: 'PRIMARY' },
+    { resId: 'seed-res-3', guestId: 'seed-guest-3', role: 'PRIMARY' },
+    { resId: 'seed-res-4', guestId: 'seed-guest-4', role: 'PRIMARY' },
+    { resId: 'seed-res-5', guestId: 'seed-guest-5', role: 'PRIMARY' },
+    { resId: 'seed-res-6', guestId: 'seed-guest-6', role: 'PRIMARY' },
+    { resId: 'seed-res-7', guestId: 'seed-guest-7', role: 'PRIMARY' },
+    { resId: 'seed-res-8', guestId: 'seed-guest-8', role: 'PRIMARY' },
+  ];
+
+  // RES-2: Amina Yusuf + an additional adult (Chidi Okeke is in another room
+  // so reuse guest-1 as her companion for demo purposes)
+  const additionalGuestLinks = [
+    { resId: 'seed-res-2', guestId: 'seed-guest-5', role: 'ADDITIONAL' }, // companion guest
+    { resId: 'seed-res-3', guestId: 'seed-guest-6', role: 'ADDITIONAL' }, // spouse in family room
+  ];
+
+  const allLinks = [...primaryGuestLinks, ...additionalGuestLinks];
+  let rgCount = 0;
+  for (const link of allLinks) {
+    if (!resMap[link.resId] || !guestMap[link.guestId]) continue;
+    await prisma.reservationGuest.upsert({
+      where: {
+        reservationId_guestId: {
+          reservationId: resMap[link.resId],
+          guestId: guestMap[link.guestId],
+        },
+      },
+      update: {},
+      create: {
+        reservationId: resMap[link.resId],
+        guestId: guestMap[link.guestId],
+        role: link.role as any,
+      },
+    });
+    rgCount++;
+  }
+  console.log(`✅ ${rgCount} reservation-guest links seeded`);
 
   console.log('\n🏨 Seed complete!');
   console.log('─────────────────────────────────────');

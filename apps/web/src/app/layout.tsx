@@ -4,6 +4,7 @@ import { Inter } from 'next/font/google';
 import { Figtree } from 'next/font/google';
 import { cn } from '@/lib/utils';
 import { Toaster } from 'sonner';
+import { ReactQueryProvider } from '@/components/providers/ReactQueryProvider';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-sans' });
 
@@ -28,8 +29,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       suppressHydrationWarning={true}
     >
       <body>
-        <Toaster richColors position="top-right" closeButton />
-        {children}
+        <ReactQueryProvider>
+          <Toaster richColors position="top-right" closeButton />
+          {children}
+        </ReactQueryProvider>
       </body>
     </html>
   );

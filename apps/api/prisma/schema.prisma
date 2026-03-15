@@ -26,6 +26,7 @@ enum RoomStatus {
   MAINTENANCE
   OUT_OF_ORDER
   RESERVED
+  HOUSEKEEPING
 }
 
 enum RoomType {
@@ -95,6 +96,20 @@ enum LeaveType {
   PATERNITY
 }
 
+enum GuestRole {
+  PRIMARY    // the person who made the booking
+  ADDITIONAL // other adult guests
+  CHILD      // minors, no ID required
+}
+
+enum BookingType {
+  INDIVIDUAL // 1 or 2 guests, single room
+  FAMILY     // adults + children, single room
+  COMPANY    // billed to a company account
+  GROUP      // multiple rooms under one booking
+}
+
+
 // ─── HOTEL ────────────────────────────────────────────────────────────────────
 
 model Hotel {
@@ -105,6 +120,7 @@ model Hotel {
   city      String
   country   String
   phone     String
+  phoneNormalized  String?
   email     String
   logo      String?
   currency  String   @default("NGN")
@@ -112,6 +128,7 @@ model Hotel {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  floors           Floor[]
   rooms            Room[]
   staff            Staff[]
   guests           Guest[]
@@ -121,6 +138,8 @@ model Hotel {
   posProducts      PosProduct[]
   inventoryItems   InventoryItem[]
   housekeepingTasks HousekeepingTask[]
+  companies     Company[]
+  groupBookings GroupBooking[]
 }
 
 // ─── USERS & AUTH ─────────────────────────────────────────────────────────────
@@ -163,6 +182,7 @@ model Staff {
   firstName    String
   lastName     String
   phone        String?
+  phoneNormalized  String?
   avatar       String?
   department   String
   position     String
@@ -212,13 +232,33 @@ model Leave {
   @@index([hotelId])
 }
 
+// ─── FLOORS ───────────────────────────────────────────────────────────────────
+
+model Floor {
+  id          String   @id @default(uuid())
+  hotelId     String
+  name        String   // "Ground Floor", "Outside Block A", "Rooftop", "Basement"
+  level       Int      // sort order — negative for basements (e.g. -1)
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  hotel Hotel  @relation(fields: [hotelId], references: [id])
+  rooms Room[]
+
+  @@unique([hotelId, name])
+  @@unique([hotelId, level])
+  @@index([hotelId])
+}
+
+
 // ─── ROOMS ────────────────────────────────────────────────────────────────────
 
 model Room {
   id          String     @id @default(uuid())
   hotelId     String
   number      String
-  floor       Int
+  floorId     String?
   type        RoomType
   status      RoomStatus @default(AVAILABLE)
   baseRate    Decimal
@@ -230,12 +270,57 @@ model Room {
   updatedAt   DateTime   @updatedAt
 
   hotel             Hotel              @relation(fields: [hotelId], references: [id])
+  floor             Floor?             @relation(fields: [floorId], references: [id])
   reservations      Reservation[]
   housekeepingTasks HousekeepingTask[]
 
   @@unique([hotelId, number])
   @@index([hotelId, status])
+  @@index([hotelId, floorId])
 }
+
+// ─── COMPANIES ────────────────────────────────────────────────────────────────
+
+model Company {
+  id          String   @id @default(uuid())
+  hotelId     String
+  name        String
+  email       String?
+  phone       String?
+  phoneNormalized  String?
+  address     String?
+  taxId       String?  // for invoicing
+  contactName String?  // primary billing contact
+  notes       String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  hotel        Hotel         @relation(fields: [hotelId], references: [id])
+  reservations Reservation[]
+
+  @@unique([hotelId, name])
+  @@index([hotelId])
+}
+
+// ─── GROUP BOOKINGS ───────────────────────────────────────────────────────────
+
+model GroupBooking {
+  id        String   @id @default(uuid())
+  hotelId   String
+  groupNo   String   @unique  // GRP-2026-001
+  name      String            // "Dangote Wedding Party", "NNPC Conference"
+  companyId String?           // optional — who is paying
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  hotel        Hotel         @relation(fields: [hotelId], references: [id])
+  reservations Reservation[]
+
+  @@index([hotelId])
+}
+
 
 // ─── GUESTS ───────────────────────────────────────────────────────────────────
 
@@ -246,21 +331,26 @@ model Guest {
   lastName    String
   email       String?
   phone       String
+  phoneNormalized  String?
+
   nationality String?
   idType      String?   // PASSPORT, NATIONAL_ID, DRIVERS_LICENSE
   idNumber    String?
   dateOfBirth DateTime?
   address     String?
   notes       String?
+  stayType String?   // FULL_TIME, SHORT_TIME
   isVip       Boolean   @default(false)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
   hotel        Hotel         @relation(fields: [hotelId], references: [id])
   reservations Reservation[]
+  reservationGuests  ReservationGuest[] // all reservations this guest appears on
 
   @@index([hotelId])
   @@index([hotelId, email])
+  @@unique([hotelId, phoneNormalized])
 }
 
 // ─── RESERVATIONS ─────────────────────────────────────────────────────────────
@@ -270,6 +360,11 @@ model Reservation {
   hotelId         String
   guestId         String
   roomId          String
+
+  companyId       String? 
+  groupBookingId  String?
+  bookingType     BookingType @default(INDIVIDUAL)
+
   reservationNo   String            @unique
   checkIn         DateTime
   checkOut        DateTime
@@ -288,11 +383,33 @@ model Reservation {
   hotel      Hotel       @relation(fields: [hotelId], references: [id])
   guest      Guest       @relation(fields: [guestId], references: [id])
   room       Room        @relation(fields: [roomId], references: [id])
+  company      Company?           @relation(fields: [companyId], references: [id])
+  groupBooking GroupBooking?      @relation(fields: [groupBookingId], references: [id])
+  guests       ReservationGuest[] // full guest list including primary
   invoices   Invoice[]
   folioItems FolioItem[]
 
   @@index([hotelId, status])
   @@index([hotelId, checkIn, checkOut])
+  @@index([hotelId, companyId])
+  @@index([hotelId, groupBookingId])
+}
+
+// ─── RESERVATION GUESTS (many guests per reservation) ─────────────────────────
+
+model ReservationGuest {
+  id            String    @id @default(uuid())
+  reservationId String
+  guestId       String
+  role          GuestRole @default(ADDITIONAL)
+  addedAt       DateTime  @default(now()) // audit — when was this guest added/changed
+
+  reservation Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  guest       Guest       @relation(fields: [guestId], references: [id])
+
+  @@unique([reservationId, guestId]) // a guest can only appear once per reservation
+  @@index([reservationId])
+  @@index([guestId])
 }
 
 // ─── FINANCE ──────────────────────────────────────────────────────────────────
