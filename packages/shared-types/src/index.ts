@@ -19,6 +19,7 @@ export type RoomStatus =
   | 'RESERVED'
   | 'HOUSEKEEPING'
   | 'MAINTENANCE'
+  | 'DIRTY'
   | 'OUT_OF_ORDER';
 
 export type RoomType = 'STANDARD' | 'DELUXE' | 'SUITE' | 'PRESIDENTIAL' | 'FAMILY' | 'EXECUTIVE';

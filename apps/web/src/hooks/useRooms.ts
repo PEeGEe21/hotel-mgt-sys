@@ -14,7 +14,17 @@ export type ApiRoom = {
   floor?: { id: string; name: string; level: number };
   type: RoomType;
   status: RoomStatus;
+  capacity?: number;
+  beds?: string;
   baseRate: number;
+  currentGuest?: string;
+  guestId?: string;
+  checkIn?: string;
+  checkOut?: string;
+  reservationId?: string;
+  housekeeper?: string;
+  lastCleaned?: string;
+  notes?: string;
   maxGuests: number;
   description: string | null;
   amenities: string[];

@@ -27,7 +27,6 @@ import {
   ALL_AMENITIES,
   type RoomStatus,
   type RoomType,
-  type Room,
 } from '@/lib/rooms-data';
 import { useDebounce } from '@/hooks/useDebounce';
 import { ApiRoom, useCreateRoom, useRooms } from '@/hooks/useRooms';
@@ -46,7 +45,7 @@ import AddRoomModal from './_components/AddRoomModal';
 const amenityIcons: Record<string, any> = { WiFi: Wifi, AC: Wind, TV: Tv, 'Mini Bar': Coffee };
 
 // ─── Room Card (grid) ──────────────────────────────────────────────────────────
-function RoomCard({ room, onClick }: { room: Room; onClick: () => void }) {
+function RoomCard({ room, onClick }: { room: ApiRoom; onClick: () => void }) {
   const s = STATUS_CONFIG[room.status];
   const t = TYPE_CONFIG[room.type];
   return (
@@ -62,16 +61,16 @@ function RoomCard({ room, onClick }: { room: Room; onClick: () => void }) {
           <p className={`text-xs font-medium ${t?.color ?? ''}`}>{t?.label ?? ''}</p>
         </div>
         <span
-          className={`text-xs px-2 py-1 rounded-full font-medium flex items-center gap-1.5 ${s.bg} ${s.color} border ${s.border}`}
+          className={`text-xs px-2 py-1 rounded-full font-medium flex items-center gap-1.5 ${s?.bg} ${s?.color} border ${s?.border}`}
         >
-          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${s.dot}`} />
-          {s.label}
+          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${s?.dot}`} />
+          {s?.label}
         </span>
       </div>
       <div className="space-y-1 mb-3">
         <p className="text-xs text-slate-500 flex items-center gap-1.5">
           <BedDouble size={11} className="text-slate-600" />
-          {room.beds}
+          {room.beds ?? '—'}
         </p>
         {room.currentGuest && (
           <p className="text-xs text-slate-400 flex items-center gap-1.5">
@@ -105,7 +104,7 @@ function RoomCard({ room, onClick }: { room: Room; onClick: () => void }) {
 }
 
 // ─── Room Row (list) ───────────────────────────────────────────────────────────
-function RoomRow({ room, onClick }: { room: Room; onClick: () => void }) {
+function RoomRow({ room, onClick }: { room: ApiRoom; onClick: () => void }) {
   const s = STATUS_CONFIG[room.status];
   const t = TYPE_CONFIG[room.type];
   return (
@@ -180,8 +179,6 @@ export default function RoomsPage() {
     .filter((fl) => floorFilter === 'ALL' || fl.id === floorFilter)
     .map((fl) => ({ floor: fl, rooms: rooms.filter((r) => r.floorId === fl.id) }))
     .filter((g) => g.rooms.length > 0);
-  const handleCloseAdd = useCallback(() => setShowAdd(false), []);
-  const handleAddRoom = useCallback((room: Room) => createRoom.mutate(room as any), [createRoom]);
 
   if (isLoading)
     return (
@@ -196,8 +193,6 @@ export default function RoomsPage() {
         <p className="text-red-400 text-sm">Failed to load rooms. Check your connection.</p>
       </div>
     );
-
-  // console.log(byFloor, allFloors, 'allFloors');
 
   return (
     <>
@@ -220,7 +215,7 @@ export default function RoomsPage() {
         </div>
 
         {/* Status strip */}
-        <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
+        <div className="grid grid-cols-3 md:grid-cols-7 gap-2">
           {ALL_ROOM_STATUSES.map((status) => {
             const count = rooms.filter((r) => r.status === status).length;
             const s = STATUS_CONFIG[status];

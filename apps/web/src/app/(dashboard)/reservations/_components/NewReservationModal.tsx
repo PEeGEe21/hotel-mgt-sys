@@ -13,13 +13,16 @@ import {
   Search,
   AlertCircle,
   Star,
+  Plus,
+  UserPlus,
 } from 'lucide-react';
 import {
   useAvailableRooms,
   useCreateReservation,
   type AvailableRoom,
 } from '@/hooks/useReservations';
-import { useGuests } from '@/hooks/useGuests';
+import { useGuests, useCreateGuest } from '@/hooks/useGuests';
+import { AsYouType, parsePhoneNumberFromString } from 'libphonenumber-js';
 import { TYPE_CONFIG } from '@/lib/rooms-data';
 import { useDebounce } from '@/hooks/useDebounce';
 
@@ -42,6 +45,7 @@ interface Props {
 
 export default function NewReservationModal({ isOpen, onClose, prefillGuest, prefillRoom }: Props) {
   const createReservation = useCreateReservation();
+  const createGuest = useCreateGuest();
 
   const [step, setStep] = useState(1);
   const [form, setForm] = useState({
@@ -62,6 +66,15 @@ export default function NewReservationModal({ isOpen, onClose, prefillGuest, pre
   const [selectedRoom, setSelectedRoom] = useState<AvailableRoom | null>(null);
   const [mounted, setMounted] = useState(false);
   const [error, setError] = useState('');
+  const [showInlineCreate, setShowInlineCreate] = useState(false);
+  const [newGuest, setNewGuest] = useState({
+    firstName: '',
+    lastName: '',
+    phone: '',
+    email: '',
+    isVip: false,
+  });
+  const [createError, setCreateError] = useState('');
 
   useEffect(() => {
     setMounted(true);
@@ -86,6 +99,9 @@ export default function NewReservationModal({ isOpen, onClose, prefillGuest, pre
       setGuestSearch(prefillGuest ? `${prefillGuest.firstName} ${prefillGuest.lastName}` : '');
       setSelectedGuest(prefillGuest ?? null);
       setSelectedRoom(null);
+      setShowInlineCreate(false);
+      setNewGuest({ firstName: '', lastName: '', phone: '', email: '', isVip: false });
+      setCreateError('');
     }
   }, [isOpen]);
 
@@ -122,6 +138,35 @@ export default function NewReservationModal({ isOpen, onClose, prefillGuest, pre
 
   const canStep2 = !!form.guestId;
   const canStep3 = !!form.roomId && nights > 0;
+
+  const handleCreateGuest = async () => {
+    if (!newGuest.firstName.trim()) return setCreateError('First name is required.');
+    if (!newGuest.phone.trim()) return setCreateError('Phone is required.');
+    const parsed = parsePhoneNumberFromString(newGuest.phone, 'NG');
+    if (!parsed?.isValid()) return setCreateError('Enter a valid phone number.');
+    setCreateError('');
+    try {
+      const created = await createGuest.mutateAsync({
+        firstName: newGuest.firstName.trim(),
+        lastName: newGuest.lastName.trim(),
+        phone: parsed.formatInternational(),
+        email: newGuest.email || undefined,
+        isVip: newGuest.isVip,
+      });
+      setSelectedGuest(created);
+      setGuestSearch(`${created.firstName} ${created.lastName}`);
+      setForm((f) => ({ ...f, guestId: created.id }));
+      setShowInlineCreate(false);
+    } catch (e: any) {
+      const data = e?.response?.data;
+      // Duplicate guest — offer to select existing
+      if (data?.guestId) {
+        setCreateError(`Guest already exists: ${data.name}`);
+      } else {
+        setCreateError(data?.message ?? 'Could not create guest.');
+      }
+    }
+  };
 
   const handleSubmit = async () => {
     setError('');
@@ -208,6 +253,7 @@ export default function NewReservationModal({ isOpen, onClose, prefillGuest, pre
                         setGuestSearch(e.target.value);
                         if (form.guestId) setForm((f) => ({ ...f, guestId: '' }));
                         setSelectedGuest(null);
+                        setShowInlineCreate(false);
                       }}
                       placeholder="Name, phone or email…"
                       className="bg-transparent text-sm text-slate-200 placeholder:text-slate-600 outline-none flex-1"
@@ -216,40 +262,189 @@ export default function NewReservationModal({ isOpen, onClose, prefillGuest, pre
                     {selectedGuest && <Check size={14} className="text-emerald-400 shrink-0" />}
                   </div>
 
-                  {/* Dropdown */}
-                  {guestSearch && !form.guestId && guests.length > 0 && (
+                  {/* Results dropdown */}
+                  {debouncedGuest && !form.guestId && (
                     <div className="absolute top-full left-0 right-0 mt-1 bg-[#161b27] border border-[#1e2536] rounded-xl shadow-xl z-10 overflow-hidden">
-                      {guests.map((g) => (
+                      {guests.length > 0 ? (
+                        <>
+                          {guests.map((g) => (
+                            <button
+                              key={g.id}
+                              onClick={() => {
+                                setSelectedGuest(g);
+                                setGuestSearch(`${g.firstName} ${g.lastName}`);
+                                setForm((f) => ({ ...f, guestId: g.id }));
+                                setShowInlineCreate(false);
+                              }}
+                              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/[0.04] transition-colors text-left border-b border-[#1e2536] last:border-0"
+                            >
+                              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500/30 to-violet-500/30 border border-white/10 flex items-center justify-center text-xs font-bold text-white shrink-0">
+                                {g.firstName[0]}
+                                {g.lastName[0]}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <p className="text-sm font-medium text-slate-200">
+                                    {g.firstName} {g.lastName}
+                                  </p>
+                                  {g.isVip && (
+                                    <Star size={10} className="text-amber-400 fill-amber-400" />
+                                  )}
+                                </div>
+                                <p className="text-xs text-slate-500">{g.phone}</p>
+                              </div>
+                            </button>
+                          ))}
+                          {/* Always offer to create new even when results exist */}
+                          <button
+                            onClick={() => {
+                              const parts = guestSearch.trim().split(' ');
+                              setNewGuest((g) => ({
+                                ...g,
+                                firstName: parts[0] ?? '',
+                                lastName: parts.slice(1).join(' ') ?? '',
+                              }));
+                              setShowInlineCreate(true);
+                            }}
+                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/[0.04] transition-colors text-left text-slate-500 hover:text-slate-300 border-t border-[#1e2536]"
+                          >
+                            <UserPlus size={14} />
+                            <span className="text-xs">Create new guest "{guestSearch}"</span>
+                          </button>
+                        </>
+                      ) : (
+                        /* No results */
                         <button
-                          key={g.id}
                           onClick={() => {
-                            setSelectedGuest(g);
-                            setGuestSearch(`${g.firstName} ${g.lastName}`);
-                            setForm((f) => ({ ...f, guestId: g.id }));
+                            const parts = guestSearch.trim().split(' ');
+                            setNewGuest((g) => ({
+                              ...g,
+                              firstName: parts[0] ?? '',
+                              lastName: parts.slice(1).join(' ') ?? '',
+                            }));
+                            setShowInlineCreate(true);
                           }}
-                          className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/[0.04] transition-colors text-left border-b border-[#1e2536] last:border-0"
+                          className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/[0.04] transition-colors text-left"
                         >
-                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500/30 to-violet-500/30 border border-white/10 flex items-center justify-center text-xs font-bold text-white shrink-0">
-                            {g.firstName[0]}
-                            {g.lastName[0]}
+                          <div className="w-8 h-8 rounded-full bg-[#0f1117] border border-dashed border-[#1e2536] flex items-center justify-center shrink-0">
+                            <Plus size={14} className="text-blue-400" />
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-1.5">
-                              <p className="text-sm font-medium text-slate-200">
-                                {g.firstName} {g.lastName}
-                              </p>
-                              {g.isVip && (
-                                <Star size={10} className="text-amber-400 fill-amber-400" />
-                              )}
-                            </div>
-                            <p className="text-xs text-slate-500">{g.phone}</p>
+                          <div>
+                            <p className="text-sm font-medium text-blue-400">
+                              Create "{guestSearch}"
+                            </p>
+                            <p className="text-xs text-slate-500">No existing guest found</p>
                           </div>
                         </button>
-                      ))}
+                      )}
                     </div>
                   )}
                 </div>
               </div>
+
+              {/* ── Inline guest create form ── */}
+              {showInlineCreate && !form.guestId && (
+                <div className="bg-[#0f1117] border border-blue-500/20 rounded-xl p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold text-blue-400 flex items-center gap-1.5">
+                      <UserPlus size={13} /> New Guest
+                    </p>
+                    <button
+                      onClick={() => {
+                        setShowInlineCreate(false);
+                        setCreateError('');
+                      }}
+                      className="text-slate-600 hover:text-slate-400 transition-colors"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] text-slate-500 uppercase tracking-wider mb-1 block">
+                        First Name *
+                      </label>
+                      <input
+                        value={newGuest.firstName}
+                        onChange={(e) => setNewGuest((g) => ({ ...g, firstName: e.target.value }))}
+                        placeholder="Chidi"
+                        className="w-full bg-[#161b27] border border-[#1e2536] rounded-lg px-3 py-2 text-sm text-slate-200 placeholder:text-slate-600 outline-none focus:border-blue-500 transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-slate-500 uppercase tracking-wider mb-1 block">
+                        Last Name
+                      </label>
+                      <input
+                        value={newGuest.lastName}
+                        onChange={(e) => setNewGuest((g) => ({ ...g, lastName: e.target.value }))}
+                        placeholder="Okeke"
+                        className="w-full bg-[#161b27] border border-[#1e2536] rounded-lg px-3 py-2 text-sm text-slate-200 placeholder:text-slate-600 outline-none focus:border-blue-500 transition-colors"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] text-slate-500 uppercase tracking-wider mb-1 block">
+                        Phone *
+                      </label>
+                      <input
+                        value={newGuest.phone}
+                        onChange={(e) => {
+                          setNewGuest((g) => ({
+                            ...g,
+                            phone: new AsYouType('NG').input(e.target.value),
+                          }));
+                          if (createError) setCreateError('');
+                        }}
+                        placeholder="+234 802 111 2233"
+                        className="w-full bg-[#161b27] border border-[#1e2536] rounded-lg px-3 py-2 text-sm text-slate-200 placeholder:text-slate-600 outline-none focus:border-blue-500 transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-slate-500 uppercase tracking-wider mb-1 block">
+                        Email
+                      </label>
+                      <input
+                        type="email"
+                        value={newGuest.email}
+                        onChange={(e) => setNewGuest((g) => ({ ...g, email: e.target.value }))}
+                        placeholder="guest@email.com"
+                        className="w-full bg-[#161b27] border border-[#1e2536] rounded-lg px-3 py-2 text-sm text-slate-200 placeholder:text-slate-600 outline-none focus:border-blue-500 transition-colors"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <button
+                        type="button"
+                        onClick={() => setNewGuest((g) => ({ ...g, isVip: !g.isVip }))}
+                        className={`w-7 h-7 rounded-lg border flex items-center justify-center transition-colors ${newGuest.isVip ? 'bg-amber-500/20 border-amber-500/40 text-amber-400' : 'border-[#1e2536] text-slate-600 hover:border-slate-500'}`}
+                      >
+                        <Star size={12} className={newGuest.isVip ? 'fill-amber-400' : ''} />
+                      </button>
+                      <span className="text-xs text-slate-400">VIP</span>
+                    </label>
+                    <button
+                      onClick={handleCreateGuest}
+                      disabled={createGuest.isPending}
+                      className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-semibold transition-colors"
+                    >
+                      {createGuest.isPending ? (
+                        <Loader2 size={12} className="animate-spin" />
+                      ) : (
+                        <Check size={12} />
+                      )}
+                      Create & Select
+                    </button>
+                  </div>
+                  {createError && (
+                    <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+                      {createError}
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* Selected guest preview */}
               {selectedGuest && (

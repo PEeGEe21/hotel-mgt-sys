@@ -300,10 +300,10 @@ export default function RoomDetailPage() {
                     Room {room.number}
                   </h1>
                   <span
-                    className={`text-xs px-2.5 py-1 rounded-full font-medium flex items-center gap-1.5 border ${s.bg} ${s.color} ${s.border}`}
+                    className={`text-xs px-2.5 py-1 rounded-full font-medium flex items-center gap-1.5 border ${s?.bg} ${s?.color} ${s?.border}`}
                   >
-                    <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
-                    {s.label}
+                    <span className={`w-1.5 h-1.5 rounded-full ${s?.dot}`} />
+                    {s?.label}
                   </span>
                   {guest?.isVip && (
                     <span className="text-xs px-2 py-1 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30 font-medium">
@@ -564,7 +564,7 @@ export default function RoomDetailPage() {
                     <div>
                       <p className="text-sm font-semibold text-slate-400">No active guest</p>
                       <p className="text-xs text-slate-600 mt-0.5">
-                        Room is {s.label.toLowerCase()}
+                        Room is {s?.label.toLowerCase()}
                       </p>
                     </div>
                   </div>

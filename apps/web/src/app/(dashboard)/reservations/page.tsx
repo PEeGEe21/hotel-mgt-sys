@@ -378,7 +378,7 @@ export default function ReservationsPage() {
                           className="border-b border-[#1e2536] last:border-0 hover:bg-white/[0.02] transition-colors cursor-pointer"
                         >
                           <td className="px-4 py-3 text-xs text-slate-600">
-                            {(page - 1) * 20 + index + 1}
+                            {(page - 1) * limit + index + 1}
                           </td>
                           <td className="px-4 py-3 text-xs text-slate-500 font-mono whitespace-nowrap">
                             {r.reservationNo}
@@ -390,7 +390,7 @@ export default function ReservationsPage() {
                                 {r.guest?.lastName?.[0]}
                               </div>
                               <div>
-                                <p className="text-sm font-medium text-slate-200">
+                                <p className="text-sm font-medium text-slate-200 capitalize">
                                   {r.guest?.firstName} {r.guest?.lastName}
                                 </p>
                                 {r.company && (
