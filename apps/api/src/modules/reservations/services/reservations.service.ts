@@ -148,7 +148,7 @@ export class ReservationsService {
     const where: any = {
       hotelId,
       id: { notIn: occupiedIds },
-      status: { notIn: [RoomStatus.MAINTENANCE, RoomStatus.OUT_OF_ORDER] },
+      status: { notIn: [RoomStatus.MAINTENANCE, RoomStatus.OUT_OF_ORDER, RoomStatus.DIRTY] },
     };
     if (dto.type) where.type = dto.type;
     if (dto.minGuests) where.maxGuests = { gte: dto.minGuests };

@@ -25,6 +25,7 @@ import { useGuests, useCreateGuest } from '@/hooks/useGuests';
 import { AsYouType, parsePhoneNumberFromString } from 'libphonenumber-js';
 import { TYPE_CONFIG } from '@/lib/rooms-data';
 import { useDebounce } from '@/hooks/useDebounce';
+import { Dialog, DialogContent, DialogOverlay, DialogTitle } from '@/components/ui/dialog';
 
 const SOURCES = ['DIRECT', 'BOOKING.COM', 'EXPEDIA', 'AIRBNB', 'WALK_IN', 'PHONE', 'OTHER'];
 
@@ -184,7 +185,7 @@ export default function NewReservationModal({ isOpen, onClose, prefillGuest, pre
   if (!mounted || !isOpen) return null;
 
   const inputCls =
-    'w-full bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 outline-none focus:border-blue-500 transition-colors';
+    'h-12 w-full bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 outline-none focus:border-blue-500 transition-colors';
   const Label = ({ children }: { children: React.ReactNode }) => (
     <label className="text-xs text-slate-500 uppercase tracking-wider mb-1.5 block">
       {children}
@@ -198,12 +199,17 @@ export default function NewReservationModal({ isOpen, onClose, prefillGuest, pre
   ];
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogOverlay className="bg-black/70 backdrop-blur-sm" />
 
-      <div className="relative bg-[#161b27] border border-[#1e2536] rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden">
+      <DialogContent
+        showCloseButton={false}
+        onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
+        className="bg-[#161b27] border border-[#1e2536] rounded-2xl w-full max-w-xl sm:max-w-2xl shadow-2xl overflow-hidden"
+      >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-[#1e2536]">
+        <DialogTitle className="flex items-center justify-between pb-4 border-b border-[#1e2536]">
           <div>
             <h2 className="text-base font-bold text-white">New Reservation</h2>
             <p className="text-xs text-slate-500 mt-0.5">Step {step} of 3</p>
@@ -214,14 +220,14 @@ export default function NewReservationModal({ isOpen, onClose, prefillGuest, pre
           >
             <X size={18} />
           </button>
-        </div>
+        </DialogTitle>
 
         {/* Step indicators */}
-        <div className="flex px-6 pt-4 pb-2 gap-2">
+        <div className="flex pt-2 pb-2 gap-2">
           {STEPS.map(({ n, label }) => (
             <div key={n} className="flex items-center gap-2 flex-1">
               <div
-                className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 transition-all ${step > n ? 'bg-emerald-500 text-white' : step === n ? 'bg-blue-600 text-white' : 'bg-[#0f1117] border border-[#1e2536] text-slate-500'}`}
+                className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 transition-all border ${step > n ? 'bg-emerald-500 border-emerald-500 text-white' : step === n ? 'bg-blue-600 border-blue-600 text-white' : 'bg-[#0f1117] border-[#1e2536] text-slate-500'}`}
               >
                 {step > n ? <Check size={12} /> : n}
               </div>
@@ -238,10 +244,10 @@ export default function NewReservationModal({ isOpen, onClose, prefillGuest, pre
         </div>
 
         {/* Body */}
-        <div className="px-6 py-5 space-y-4 min-h-[300px] max-h-[55vh] overflow-y-auto">
+        <div className="py-5 space-y-4 min-h-[250px] max-h-[55vh] h-full overflow-y-auto">
           {/* ── Step 1: Guest ── */}
           {step === 1 && (
-            <div className="space-y-4">
+            <div className="space-y-4 flex flex-col justify-between h-full">
               <div>
                 <Label>Search Guest</Label>
                 <div className="relative">
@@ -263,7 +269,7 @@ export default function NewReservationModal({ isOpen, onClose, prefillGuest, pre
                   </div>
 
                   {/* Results dropdown */}
-                  {debouncedGuest && !form.guestId && (
+                  {debouncedGuest && !form.guestId && !showInlineCreate && (
                     <div className="absolute top-full left-0 right-0 mt-1 bg-[#161b27] border border-[#1e2536] rounded-xl shadow-xl z-10 overflow-hidden">
                       {guests.length > 0 ? (
                         <>
@@ -470,7 +476,7 @@ export default function NewReservationModal({ isOpen, onClose, prefillGuest, pre
                 </div>
               )}
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-3 gap-4 mt-auto">
                 <div>
                   <Label>Adults</Label>
                   <input
@@ -679,7 +685,7 @@ export default function NewReservationModal({ isOpen, onClose, prefillGuest, pre
         </div>
 
         {/* Footer */}
-        <div className="flex gap-3 px-6 py-4 border-t border-[#1e2536]">
+        <div className="flex gap-3 py-4 border-t border-[#1e2536]">
           {step > 1 && (
             <button
               onClick={() => setStep((s) => s - 1)}
@@ -718,8 +724,8 @@ export default function NewReservationModal({ isOpen, onClose, prefillGuest, pre
             </button>
           )}
         </div>
-      </div>
-    </div>,
+      </DialogContent>
+    </Dialog>,
     document.body,
   );
 }
