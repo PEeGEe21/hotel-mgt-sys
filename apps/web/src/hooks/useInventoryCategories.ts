@@ -35,6 +35,8 @@ export function useCreateInventoryCategory() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['inventory-categories'] });
       qc.invalidateQueries({ queryKey: ['inventory'] });
+      qc.invalidateQueries({ queryKey: ['inventory-list'] });
+      qc.invalidateQueries({ queryKey: ['inventory-simple'] });
       openToast('success', 'Category created');
     },
     onError: (e: any) => openToast('error', e?.response?.data?.message ?? 'Create failed'),
@@ -48,6 +50,8 @@ export function useUpdateInventoryCategory(id: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['inventory-categories'] });
       qc.invalidateQueries({ queryKey: ['inventory'] });
+      qc.invalidateQueries({ queryKey: ['inventory-list'] });
+      qc.invalidateQueries({ queryKey: ['inventory-simple'] });
       openToast('success', 'Category updated');
     },
     onError: (e: any) => openToast('error', e?.response?.data?.message ?? 'Update failed'),
@@ -61,6 +65,8 @@ export function useDeleteInventoryCategory() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['inventory-categories'] });
       qc.invalidateQueries({ queryKey: ['inventory'] });
+      qc.invalidateQueries({ queryKey: ['inventory-list'] });
+      qc.invalidateQueries({ queryKey: ['inventory-simple'] });
       openToast('success', 'Category deleted');
     },
     onError: (e: any) => openToast('error', e?.response?.data?.message ?? 'Delete failed'),

@@ -172,6 +172,108 @@ async function main() {
   }
   console.log(`✅ ${seedSuppliers.length} suppliers seeded`);
 
+  // ─── Inventory Items ─────────────────────────────────────────────────────
+  const seedInventoryItems = [
+    {
+      name: 'Sparkling Water',
+      sku: 'BV-101',
+      category: 'Soft Drinks',
+      description: 'Premium bottled sparkling water',
+      unit: 'crate (24)',
+      quantity: 64,
+      minStock: 80,
+      costPerUnit: 8,
+      sellPrice: 12,
+      supplier: 'Soft Bev Ltd',
+      location: 'Main Store',
+    },
+    {
+      name: 'House Red Wine',
+      sku: 'BV-214',
+      category: 'Wine',
+      description: 'House red wine - 750ml',
+      unit: 'bottle',
+      quantity: 18,
+      minStock: 30,
+      costPerUnit: 12,
+      sellPrice: 30,
+      supplier: 'Metro Drinks',
+      location: 'Bar Storage',
+    },
+    {
+      name: 'Classic Burger',
+      sku: 'KT-188',
+      category: 'Food',
+      description: 'Grilled beef burger with fries',
+      unit: 'portion',
+      quantity: 16,
+      minStock: 25,
+      costPerUnit: 4.5,
+      sellPrice: 12,
+      supplier: 'Fresh Foods Co',
+      location: 'Kitchen',
+    },
+    {
+      name: 'Caesar Salad',
+      sku: 'KT-164',
+      category: 'Food',
+      description: 'Romaine lettuce with caesar dressing',
+      unit: 'portion',
+      quantity: 9,
+      minStock: 15,
+      costPerUnit: 3.8,
+      sellPrice: 9,
+      supplier: 'Fresh Foods Co',
+      location: 'Kitchen',
+    },
+    {
+      name: 'Spa Oil Set',
+      sku: 'RT-221',
+      category: 'Cocktails',
+      description: 'Signature spa oil set',
+      unit: 'bottle',
+      quantity: 7,
+      minStock: 12,
+      costPerUnit: 6,
+      sellPrice: 18,
+      supplier: 'Metro Drinks',
+      location: 'Spa Store',
+    },
+  ];
+
+  for (const item of seedInventoryItems) {
+    await prisma.inventoryItem.upsert({
+      where: { hotelId_sku: { hotelId: hotel.id, sku: item.sku } },
+      update: {
+        name: item.name,
+        category: item.category,
+        unit: item.unit,
+        quantity: item.quantity,
+        minStock: item.minStock,
+        costPerUnit: item.costPerUnit,
+        sellPrice: item.sellPrice ?? null,
+        description: item.description ?? null,
+        supplier: item.supplier,
+        location: item.location,
+      },
+      create: {
+        hotelId: hotel.id,
+        name: item.name,
+        sku: item.sku,
+        category: item.category,
+        unit: item.unit,
+        quantity: item.quantity,
+        minStock: item.minStock,
+        costPerUnit: item.costPerUnit,
+        sellPrice: item.sellPrice ?? null,
+        description: item.description ?? null,
+        supplier: item.supplier,
+        location: item.location,
+      },
+    });
+  }
+  console.log(`✅ ${seedInventoryItems.length} inventory items seeded`);
+
   // ─── Shift Templates ──────────────────────────────────────────────────────
   const seedShifts = [
     {
@@ -322,7 +424,7 @@ async function main() {
     employeeCode: string;
   }> = [
     {
-      email: 'admin@example.com',
+      email: 'admin@hotel.com',
       password: 'password',
       role: Role.ADMIN,
       firstName: 'Chukwuemeka',
@@ -592,6 +694,65 @@ async function main() {
     });
   }
   console.log(`✅ ${Object.keys(rolePermissions).length} role permissions seeded`);
+
+  // ─── POS Terminals ───────────────────────────────────────────────────────
+  const seedTerminals = [
+    {
+      id: 'term-bar-01',
+      name: 'Bar Terminal 01',
+      location: 'Main Bar',
+      group: 'Bar',
+      device: 'Tablet',
+      status: 'Online',
+    },
+    {
+      id: 'term-bar-02',
+      name: 'Bar Terminal 02',
+      location: 'Rooftop Bar',
+      group: 'Bar',
+      device: 'Tablet',
+      status: 'Online',
+    },
+    {
+      id: 'term-kitchen-01',
+      name: 'Kitchen Terminal 01',
+      location: 'Main Kitchen',
+      group: 'Kitchen',
+      device: 'Desktop',
+      status: 'Online',
+    },
+    {
+      id: 'term-front-01',
+      name: 'Front Desk POS',
+      location: 'Lobby',
+      group: 'Front Desk',
+      device: 'Desktop',
+      status: 'Online',
+    },
+  ];
+
+  for (const t of seedTerminals) {
+    await prisma.posTerminal.upsert({
+      where: { id: t.id },
+      update: {
+        name: t.name,
+        location: t.location,
+        group: t.group,
+        device: t.device,
+        status: t.status,
+      },
+      create: {
+        id: t.id,
+        hotelId: hotel.id,
+        name: t.name,
+        location: t.location,
+        group: t.group,
+        device: t.device,
+        status: t.status,
+      },
+    });
+  }
+  console.log(`✅ ${seedTerminals.length} POS terminals seeded`);
 
   // ─── Floors ───────────────────────────────────────────────────────────────
   const floorDefs = [

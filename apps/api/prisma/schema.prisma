@@ -153,6 +153,7 @@ model Hotel {
   facilities       Facility[]
   posOrders        PosOrder[]
   posProducts      PosProduct[]
+  posTerminals     PosTerminal[]
   inventoryItems   InventoryItem[]
   housekeepingTasks HousekeepingTask[]
   companies     Company[]
@@ -261,6 +262,7 @@ model Staff {
   attendance Attendance[]
   leaves     Leave[]
   tasks      HousekeepingTask[]
+  posTerminals PosTerminal[]
 }
 
 model Attendance {
@@ -692,6 +694,25 @@ model PosProduct {
   @@unique([hotelId, sku])
 }
 
+model PosTerminal {
+  id        String   @id @default(uuid())
+  hotelId   String
+  staffId   String?
+  name      String
+  location  String
+  group     String
+  device    String
+  status    String   @default("Online")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  hotel Hotel @relation(fields: [hotelId], references: [id])
+  staff Staff? @relation(fields: [staffId], references: [id])
+
+  @@index([hotelId])
+  @@index([staffId])
+}
+
 // ─── INVENTORY ────────────────────────────────────────────────────────────────
 
 model InventoryItem {
@@ -700,10 +721,12 @@ model InventoryItem {
   name        String
   sku         String
   category    String
+  description String?
   unit        String
   quantity    Decimal
   minStock    Decimal  @default(0)
   costPerUnit Decimal
+  sellPrice   Decimal?
   supplier    String?
   location    String?
   createdAt   DateTime @default(now())

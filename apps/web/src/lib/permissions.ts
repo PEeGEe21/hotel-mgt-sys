@@ -49,6 +49,7 @@ export type Permission =
   | 'create:pos'
   | 'void:pos'
   | 'discount:pos'
+  | 'manage:pos'
   // Inventory
   | 'view:inventory'
   | 'create:inventory'
@@ -252,6 +253,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'view:hr',
     'manage:hr',
     'manage:permissions',
+    'manage:pos'
   ],
 
   ADMIN: [
@@ -301,6 +303,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'view:hr',
     'manage:hr',
     'manage:permissions',
+    'manage:pos'
   ],
 
   MANAGER: [
@@ -367,9 +370,9 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'clock:self',
   ],
 
-  CASHIER: ['view:dashboard', 'view:pos', 'create:pos', 'void:pos', 'view:finance', 'clock:self'],
+  CASHIER: ['view:dashboard', 'view:pos', 'create:pos', 'void:pos', 'manage:pos', 'view:finance', 'clock:self'],
 
-  BARTENDER: ['view:dashboard', 'view:pos', 'create:pos', 'view:inventory', 'clock:self'],
+  BARTENDER: ['view:dashboard', 'view:pos', 'create:pos', 'view:inventory', 'clock:self', 'manage:pos'],
 
   STAFF: ['view:dashboard', 'clock:self'],
 };

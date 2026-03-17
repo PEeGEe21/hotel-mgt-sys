@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ArrowUpRight,
   CalendarDays,
@@ -16,40 +16,17 @@ import {
   Wallet,
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  useCreatePosTerminal,
+  useDeletePosTerminal,
+  usePosTerminals,
+  useRenamePosTerminalGroup,
+  useUpdatePosTerminal,
+} from '@/hooks/usePosTerminals';
+import { useUserAccounts } from '@/hooks/useUserAccounts';
+import { useInventoryItems } from '@/hooks/useInventoryItems';
 
-const terminalGroups = [
-  {
-    label: 'Bar',
-    terminals: [
-      { id: 'bar-01', name: 'Bar Terminal 01', status: 'Online', location: 'Main Bar', device: 'Tablet', staff: 'Mariam Mensah' },
-      { id: 'bar-02', name: 'Bar Terminal 02', status: 'Online', location: 'Rooftop Bar', device: 'Tablet', staff: 'Lina Park' },
-    ],
-  },
-  {
-    label: 'Kitchen',
-    terminals: [
-      { id: 'kitchen-01', name: 'Kitchen Terminal 01', status: 'Online', location: 'Main Kitchen', device: 'Desktop', staff: 'Tomi Ogun' },
-      { id: 'kitchen-02', name: 'Kitchen Terminal 02', status: 'Offline', location: 'Pastry Station', device: 'Desktop', staff: '—' },
-    ],
-  },
-  {
-    label: 'Other Locations',
-    terminals: [
-      { id: 'front-01', name: 'Front Desk POS', status: 'Online', location: 'Lobby', device: 'Desktop', staff: 'Ada Ibekwe' },
-      { id: 'pool-01', name: 'Pool Service POS', status: 'Online', location: 'Pool Deck', device: 'Tablet', staff: 'Lina Park' },
-      { id: 'spa-01', name: 'Spa Retail POS', status: 'Online', location: 'Wellness Spa', device: 'Tablet', staff: 'Rafael Silva' },
-    ],
-  },
-];
-
-const staffOptions = [
-  'Ada Ibekwe',
-  'Tomi Ogun',
-  'Mariam Mensah',
-  'Lina Park',
-  'Rafael Silva',
-  '—',
-];
+const defaultGroups = ['Bar', 'Kitchen', 'Front Desk', 'Pool', 'Spa', 'Other Locations'];
 
 const sales = [
   { id: 'S-12041', time: '09:14 AM', date: '2026-03-12', terminal: 'Bar Terminal 01', staff: 'Mariam Mensah', payment: 'Cash', total: 84.5, status: 'Completed' },
@@ -65,14 +42,6 @@ const retirement = [
   { id: 'R-2303', item: 'Spa Oil Set', qty: 1, reason: 'Damaged', approvedBy: 'Rafael Silva', date: '2026-03-11' },
 ];
 
-const inventory = [
-  { name: 'Sparkling Water', sku: 'BV-101', category: 'Beverage', stock: 64, par: 80 },
-  { name: 'House Red Wine', sku: 'BV-214', category: 'Beverage', stock: 18, par: 30 },
-  { name: 'Classic Burger', sku: 'KT-188', category: 'Kitchen', stock: 16, par: 25 },
-  { name: 'Caesar Salad', sku: 'KT-164', category: 'Kitchen', stock: 9, par: 15 },
-  { name: 'Spa Oil Set', sku: 'RT-221', category: 'Retail', stock: 7, par: 12 },
-];
-
 const statusBadge: Record<string, string> = {
   Online: 'bg-emerald-500/15 text-emerald-400',
   Offline: 'bg-red-500/15 text-red-400',
@@ -81,20 +50,119 @@ const statusBadge: Record<string, string> = {
 };
 
 export default function PosPage() {
-  const [groups, setGroups] = useState(terminalGroups);
   const [query, setQuery] = useState('');
   const [dateFrom, setDateFrom] = useState('2026-03-10');
   const [dateTo, setDateTo] = useState('2026-03-12');
   const [showAdd, setShowAdd] = useState(false);
-  const [assignTarget, setAssignTarget] = useState<{ groupIndex: number; terminalId: string } | null>(null);
+  const [assignTarget, setAssignTarget] = useState<string | null>(null);
+  const [assignForm, setAssignForm] = useState({
+    device: 'Desktop',
+    status: 'Online',
+    staffId: '' as string | '',
+    group: 'Bar',
+  });
   const [newTerminal, setNewTerminal] = useState({
     name: '',
     location: '',
     group: 'Bar',
     device: 'Tablet',
     status: 'Online',
-    staff: staffOptions[0],
+    staffId: '' as string | '',
   });
+  const [groupOrder, setGroupOrder] = useState<string[]>([]);
+  const { data: terminals = [], isLoading: terminalsLoading } = usePosTerminals();
+  const { data: inventoryItems = [], isLoading: inventoryLoading } = useInventoryItems();
+  const createTerminal = useCreatePosTerminal();
+  const updateTerminal = useUpdatePosTerminal(assignTarget ?? '');
+  const deleteTerminal = useDeletePosTerminal();
+  const renameGroup = useRenamePosTerminalGroup();
+  const { data: users = [] } = useUserAccounts();
+
+  const staffOptions = useMemo(
+    () =>
+      users
+        .filter((u) => u.staffId)
+        .map((u) => ({ id: u.staffId as string, name: u.staffName })),
+    [users],
+  );
+
+  const grouped = useMemo(() => {
+    const map: Record<string, typeof terminals> = {};
+    terminals.forEach((t) => {
+      const key = t.group?.trim() || 'Other Locations';
+      if (!map[key]) map[key] = [];
+      map[key].push(t);
+    });
+    const entries = Object.entries(map).map(([label, items]) => ({
+      label,
+      terminals: items,
+    }));
+    const existing = new Set(entries.map((e) => e.label));
+    defaultGroups.forEach((g) => {
+      if (!existing.has(g)) entries.push({ label: g, terminals: [] });
+    });
+    return entries;
+  }, [terminals]);
+
+  useEffect(() => {
+    const saved = typeof window !== 'undefined' ? localStorage.getItem('pos-group-order') : null;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) setGroupOrder(parsed);
+      } catch {
+        setGroupOrder([]);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (grouped.length === 0) return;
+    setGroupOrder((prev) => {
+      const labels = grouped.map((g) => g.label);
+      const next = [
+        ...prev.filter((label) => labels.includes(label)),
+        ...labels.filter((label) => !prev.includes(label)),
+      ];
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('pos-group-order', JSON.stringify(next));
+      }
+      return next;
+    });
+  }, [grouped]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && groupOrder.length > 0) {
+      localStorage.setItem('pos-group-order', JSON.stringify(groupOrder));
+    }
+  }, [groupOrder]);
+
+  const orderedGroups = useMemo(() => {
+    if (groupOrder.length === 0) return grouped;
+    const order = new Map(groupOrder.map((label, index) => [label, index]));
+    return [...grouped].sort(
+      (a, b) => (order.get(a.label) ?? 999) - (order.get(b.label) ?? 999),
+    );
+  }, [groupOrder, grouped]);
+
+  const moveGroup = (label: string, direction: 'up' | 'down') => {
+    setGroupOrder((prev) => {
+      const index = prev.indexOf(label);
+      if (index === -1) return prev;
+      const swapIndex = direction === 'up' ? index - 1 : index + 1;
+      if (swapIndex < 0 || swapIndex >= prev.length) return prev;
+      const next = [...prev];
+      [next[index], next[swapIndex]] = [next[swapIndex], next[index]];
+      return next;
+    });
+  };
+
+  const handleRenameGroup = async (label: string) => {
+    const next = prompt('Rename group', label);
+    if (!next || !next.trim() || next.trim() === label) return;
+    await renameGroup.mutateAsync({ from: label, to: next.trim() });
+    setGroupOrder((prev) => prev.map((item) => (item === label ? next.trim() : item)));
+  };
 
   const filteredSales = useMemo(() => {
     return sales.filter(sale => {
@@ -106,47 +174,24 @@ export default function PosPage() {
     });
   }, [query, dateFrom, dateTo]);
 
-  const updateTerminal = (groupIndex: number, terminalId: string, updates: Partial<(typeof terminalGroups)[number]['terminals'][number]>) => {
-    setGroups(current =>
-      current.map((group, idx) => {
-        if (idx !== groupIndex) return group;
-        return {
-          ...group,
-          terminals: group.terminals.map(t => (t.id === terminalId ? { ...t, ...updates } : t)),
-        };
-      }),
-    );
-  };
-
-  const handleAddTerminal = () => {
+  const handleAddTerminal = async () => {
     if (!newTerminal.name.trim() || !newTerminal.location.trim()) return;
-    setGroups(current =>
-      current.map(group => {
-        if (group.label !== newTerminal.group) return group;
-        return {
-          ...group,
-          terminals: [
-            ...group.terminals,
-            {
-              id: `${newTerminal.group.toLowerCase().replace(/\s+/g, '-')}-${group.terminals.length + 1}`,
-              name: newTerminal.name,
-              status: newTerminal.status,
-              location: newTerminal.location,
-              device: newTerminal.device,
-              staff: newTerminal.staff,
-            },
-          ],
-        };
-      }),
-    );
+    await createTerminal.mutateAsync({
+      name: newTerminal.name,
+      location: newTerminal.location,
+      group: newTerminal.group,
+      device: newTerminal.device,
+      status: newTerminal.status,
+      staffId: newTerminal.staffId || null,
+    });
     setShowAdd(false);
     setNewTerminal({
       name: '',
       location: '',
-      group: 'Bar',
+      group: orderedGroups[0]?.label ?? 'Bar',
       device: 'Tablet',
       status: 'Online',
-      staff: staffOptions[0],
+      staffId: '',
     });
   };
 
@@ -276,9 +321,39 @@ export default function PosPage() {
               </button>
             </div>
             <div className="space-y-4">
-              {groups.map((group, groupIndex) => (
+              {terminalsLoading && (
+                <p className="text-xs text-slate-500">Loading terminals...</p>
+              )}
+              {!terminalsLoading && terminals.length === 0 && (
+                <div className="rounded-xl border border-dashed border-[#2b3348] bg-[#0f1117] px-4 py-6 text-center text-xs text-slate-500">
+                  No terminals yet. Click “Add Terminal” to set up your first POS station.
+                </div>
+              )}
+              {!terminalsLoading && terminals.length > 0 && orderedGroups.map((group) => (
                 <div key={group.label}>
-                  <p className="text-xs text-slate-500 uppercase tracking-widest mb-2">{group.label}</p>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs text-slate-500 uppercase tracking-widest">{group.label}</p>
+                    <div className="flex items-center gap-2 text-[11px] text-slate-500">
+                      <button
+                        onClick={() => moveGroup(group.label, 'up')}
+                        className="rounded border border-[#1e2536] px-2 py-1 hover:text-slate-200"
+                      >
+                        Up
+                      </button>
+                      <button
+                        onClick={() => moveGroup(group.label, 'down')}
+                        className="rounded border border-[#1e2536] px-2 py-1 hover:text-slate-200"
+                      >
+                        Down
+                      </button>
+                      <button
+                        onClick={() => handleRenameGroup(group.label)}
+                        className="rounded border border-[#1e2536] px-2 py-1 hover:text-slate-200"
+                      >
+                        Rename
+                      </button>
+                    </div>
+                  </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {group.terminals.map(terminal => (
                       <div key={terminal.id} className="bg-[#0f1117] border border-[#1e2536] rounded-xl p-4">
@@ -298,11 +373,19 @@ export default function PosPage() {
                           </div>
                           <div className="flex items-center justify-between">
                             <span>Assigned Staff</span>
-                            <span className="text-slate-200">{terminal.staff}</span>
+                            <span className="text-slate-200">{terminal.staffName ?? '—'}</span>
                           </div>
                         </div>
                         <button
-                          onClick={() => setAssignTarget({ groupIndex, terminalId: terminal.id })}
+                          onClick={() => {
+                            setAssignTarget(terminal.id);
+                            setAssignForm({
+                              device: terminal.device,
+                              status: terminal.status,
+                              staffId: terminal.staffId ?? '',
+                              group: terminal.group,
+                            });
+                          }}
                           className="mt-3 text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
                         >
                           Manage assignment <ArrowUpRight size={12} />
@@ -333,13 +416,21 @@ export default function PosPage() {
                 <span className="text-right">Par Level</span>
               </div>
               <div className="divide-y divide-[#1e2536]">
-                {inventory.map(item => (
-                  <div key={item.sku} className="grid grid-cols-5 px-4 py-3 text-xs text-slate-300">
+                {inventoryLoading && (
+                  <div className="px-4 py-3 text-xs text-slate-500">Loading inventory...</div>
+                )}
+                {!inventoryLoading && inventoryItems.length === 0 && (
+                  <div className="px-4 py-3 text-xs text-slate-500">No inventory items yet.</div>
+                )}
+                {!inventoryLoading && inventoryItems.map(item => (
+                  <div key={item.id} className="grid grid-cols-5 px-4 py-3 text-xs text-slate-300">
                     <span className="text-slate-200 font-medium">{item.name}</span>
-                    <span>{item.sku}</span>
+                    <span>{item.uniqueId || item.sku}</span>
                     <span>{item.category}</span>
-                    <span className={item.stock < item.par ? 'text-amber-400' : ''}>{item.stock}</span>
-                    <span className="text-right text-slate-400">{item.par}</span>
+                    <span className={item.quantity < item.minStock ? 'text-amber-400' : ''}>
+                      {item.quantity}
+                    </span>
+                    <span className="text-right text-slate-400">{item.minStock}</span>
                   </div>
                 ))}
               </div>
@@ -461,7 +552,7 @@ export default function PosPage() {
                     onChange={e => setNewTerminal(prev => ({ ...prev, group: e.target.value }))}
                     className="w-full mt-2 bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-2 text-sm text-slate-200"
                   >
-                    {groups.map(group => (
+                    {orderedGroups.map(group => (
                       <option key={group.label} value={group.label}>{group.label}</option>
                     ))}
                   </select>
@@ -495,12 +586,13 @@ export default function PosPage() {
                 <div>
                   <label className="text-xs text-slate-500 uppercase tracking-widest">Assigned Staff</label>
                   <select
-                    value={newTerminal.staff}
-                    onChange={e => setNewTerminal(prev => ({ ...prev, staff: e.target.value }))}
+                    value={newTerminal.staffId}
+                    onChange={e => setNewTerminal(prev => ({ ...prev, staffId: e.target.value }))}
                     className="w-full mt-2 bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-2 text-sm text-slate-200"
                   >
+                    <option value="">Unassigned</option>
                     {staffOptions.map(option => (
-                      <option key={option} value={option}>{option}</option>
+                      <option key={option.id} value={option.id}>{option.name}</option>
                     ))}
                   </select>
                 </div>
@@ -536,10 +628,22 @@ export default function PosPage() {
             </div>
             <div className="px-6 py-5 space-y-4">
               <div>
+                <label className="text-xs text-slate-500 uppercase tracking-widest">Group</label>
+                <select
+                  onChange={e => setAssignForm(prev => ({ ...prev, group: e.target.value }))}
+                  value={assignForm.group}
+                  className="w-full mt-2 bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-2 text-sm text-slate-200"
+                >
+                  {orderedGroups.map(group => (
+                    <option key={group.label} value={group.label}>{group.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
                 <label className="text-xs text-slate-500 uppercase tracking-widest">Device</label>
                 <select
-                  onChange={e => updateTerminal(assignTarget.groupIndex, assignTarget.terminalId, { device: e.target.value })}
-                  value={groups[assignTarget.groupIndex].terminals.find(t => t.id === assignTarget.terminalId)?.device}
+                  onChange={e => setAssignForm(prev => ({ ...prev, device: e.target.value }))}
+                  value={assignForm.device}
                   className="w-full mt-2 bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-2 text-sm text-slate-200"
                 >
                   {['Desktop', 'Tablet', 'Mobile'].map(device => (
@@ -550,8 +654,8 @@ export default function PosPage() {
               <div>
                 <label className="text-xs text-slate-500 uppercase tracking-widest">Status</label>
                 <select
-                  onChange={e => updateTerminal(assignTarget.groupIndex, assignTarget.terminalId, { status: e.target.value })}
-                  value={groups[assignTarget.groupIndex].terminals.find(t => t.id === assignTarget.terminalId)?.status}
+                  onChange={e => setAssignForm(prev => ({ ...prev, status: e.target.value }))}
+                  value={assignForm.status}
                   className="w-full mt-2 bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-2 text-sm text-slate-200"
                 >
                   {['Online', 'Offline'].map(status => (
@@ -562,22 +666,42 @@ export default function PosPage() {
               <div>
                 <label className="text-xs text-slate-500 uppercase tracking-widest">Assigned Staff</label>
                 <select
-                  onChange={e => updateTerminal(assignTarget.groupIndex, assignTarget.terminalId, { staff: e.target.value })}
-                  value={groups[assignTarget.groupIndex].terminals.find(t => t.id === assignTarget.terminalId)?.staff}
+                  onChange={e => setAssignForm(prev => ({ ...prev, staffId: e.target.value }))}
+                  value={assignForm.staffId}
                   className="w-full mt-2 bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-2 text-sm text-slate-200"
                 >
+                  <option value="">Unassigned</option>
                   {staffOptions.map(option => (
-                    <option key={option} value={option}>{option}</option>
+                    <option key={option.id} value={option.id}>{option.name}</option>
                   ))}
                 </select>
               </div>
             </div>
             <div className="px-6 py-4 border-t border-[#1e2536] flex gap-3">
               <button
-                onClick={() => setAssignTarget(null)}
+                onClick={async () => {
+                  if (!assignTarget) return;
+                  if (!confirm('Delete this terminal?')) return;
+                  await deleteTerminal.mutateAsync(assignTarget);
+                  setAssignTarget(null);
+                }}
+                className="flex-1 bg-white/5 hover:bg-red-500/10 text-red-400 rounded-lg py-2.5 text-sm font-medium transition-colors border border-transparent hover:border-red-500/40"
+              >
+                Delete
+              </button>
+              <button
+                onClick={async () => {
+                  await updateTerminal.mutateAsync({
+                    device: assignForm.device,
+                    status: assignForm.status,
+                    staffId: assignForm.staffId || null,
+                    group: assignForm.group,
+                  });
+                  setAssignTarget(null);
+                }}
                 className="flex-1 bg-blue-600 hover:bg-blue-500 text-white rounded-lg py-2.5 text-sm font-semibold transition-colors"
               >
-                Done
+                Save
               </button>
             </div>
           </div>
