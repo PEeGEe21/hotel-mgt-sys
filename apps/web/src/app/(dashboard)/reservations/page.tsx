@@ -19,6 +19,7 @@ import { useReservations, type ApiReservation } from '@/hooks/useReservations';
 import { useDebounce } from '@/hooks/useDebounce';
 import Pagination from '@/components/ui/pagination';
 import NewReservationModal from './_components/NewReservationModal';
+import { usePermissions } from '@/hooks/usePermissions';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmtMoney(n: number) {
@@ -189,6 +190,7 @@ export default function ReservationsPage() {
   const [page, setPage] = useState(1);
   const [showNew, setShowNew] = useState(false);
   const [limit, setLimit] = useState(20);
+  const { can } = usePermissions();
 
   const debouncedSearch = useDebounce(search, 400);
   const resetPage = () => setPage(1);
@@ -221,12 +223,14 @@ export default function ReservationsPage() {
                 ` · ${stats.arrivals} arrival${stats.arrivals !== 1 ? 's' : ''} · ${stats.departures} departure${stats.departures !== 1 ? 's' : ''} today`}
             </p>
           </div>
-          <button
-            onClick={() => setShowNew(true)}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
-          >
-            <Plus size={15} /> New Reservation
-          </button>
+          {can('create:reservations') && (
+            <button
+              onClick={() => setShowNew(true)}
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
+            >
+              <Plus size={15} /> New Reservation
+            </button>
+          )}
         </div>
 
         {/* Today's stats */}

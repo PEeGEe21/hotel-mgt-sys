@@ -55,7 +55,21 @@ export type ApiReservation = {
     category: string;
     createdAt: string;
   }[];
-  invoices?: any[];
+  invoices?: {
+    id: string;
+    invoiceNo: string;
+    total: number;
+    paymentStatus: PaymentStatus;
+    issuedAt: string;
+    payments?: {
+      id: string;
+      amount: number;
+      method: string;
+      reference?: string | null;
+      paidAt: string;
+      note?: string | null;
+    }[];
+  }[];
   _count?: { folioItems: number };
 };
 
@@ -185,9 +199,29 @@ export function useUpdateReservation(id: string) {
     ) => api.put(`/reservations/${id}`, dto).then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['reservations'] });
+      qc.invalidateQueries({ queryKey: ['reservations', id] });
       openToast('success', 'Reservation updated');
     },
     onError: (e: any) => openToast('error', e?.response?.data?.message ?? 'Update failed'),
+  });
+}
+
+export function useRecordReservationPayment(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: {
+      amount: number;
+      method: string;
+      reference?: string;
+      note?: string;
+      paidAt?: string;
+    }) => api.post(`/reservations/${id}/payments`, dto).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['reservations'] });
+      qc.invalidateQueries({ queryKey: ['reservations', id] });
+      openToast('success', 'Payment recorded');
+    },
+    onError: (e: any) => openToast('error', e?.response?.data?.message ?? 'Payment failed'),
   });
 }
 

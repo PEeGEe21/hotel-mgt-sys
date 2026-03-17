@@ -31,11 +31,13 @@ import { createPortal } from 'react-dom';
 import { STATUS_CONFIG, SOURCE_COLORS, type ReservationStatus } from '@/lib/reservations-data';
 import {
   useReservation,
+  useRecordReservationPayment,
   useCheckIn,
   useCheckOut,
   useCancelReservation,
   useNoShow,
   useAddFolioItem,
+  type ApiReservation,
 } from '@/hooks/useReservations';
 import { useReservationFolioItems } from '@/hooks/useFolioItems';
 
@@ -213,6 +215,177 @@ function AddFolioModal({ reservationId, onClose }: { reservationId: string; onCl
   );
 }
 
+// ─── Record Payment Modal ─────────────────────────────────────────────────────
+function RecordPaymentModal({
+  reservation,
+  onClose,
+}: {
+  reservation: ApiReservation;
+  onClose: () => void;
+}) {
+  const recordPayment = useRecordReservationPayment(reservation.id);
+  const balance = Number(reservation.totalAmount) - Number(reservation.paidAmount);
+  const [form, setForm] = useState({
+    amount: balance > 0 ? String(balance) : '',
+    method: 'Cash',
+    reference: '',
+    date: new Date().toISOString().slice(0, 10),
+    notes: '',
+  });
+  const [error, setError] = useState('');
+
+  const inputCls =
+    'w-full bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 outline-none focus:border-emerald-500 transition-colors';
+
+  const handleSave = async () => {
+    const amountValue = Number(form.amount);
+    if (!amountValue || amountValue <= 0) return setError('Amount is required.');
+    if (amountValue > balance) return setError('Amount exceeds outstanding balance.');
+    setError('');
+    const receiptWindow = window.open('', 'receipt', 'width=420,height=620');
+    try {
+      const result = await recordPayment.mutateAsync({
+        amount: amountValue,
+        method: form.method,
+        reference: form.reference.trim() || undefined,
+        note: form.notes.trim() || undefined,
+        paidAt: form.date,
+      });
+      onClose();
+      if (receiptWindow) {
+        const paymentId = result?.payment?.id ?? result?.id;
+        if (paymentId) {
+          receiptWindow.location.href = `/api/proxy/reservations/${reservation.id}/payments/${paymentId}/receipt`;
+        } else {
+          receiptWindow.close();
+        }
+      }
+    } catch (e: any) {
+      if (receiptWindow) receiptWindow.close();
+      setError(e?.response?.data?.message ?? 'Failed to record payment.');
+    }
+  };
+
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-[#161b27] border border-[#1e2536] rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden">
+        <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-[#1e2536]">
+          <h2 className="text-base font-bold text-white">Record Payment</h2>
+          <button onClick={onClose} className="text-slate-500 hover:text-slate-300">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="px-5 py-4 space-y-4">
+          <div className="flex items-center justify-between bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-2.5">
+            <div>
+              <p className="text-xs text-slate-500 uppercase tracking-wider">Outstanding</p>
+              <p className="text-sm text-slate-200 font-semibold">{fmtMoney(balance)}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-slate-500 uppercase tracking-wider">Paid</p>
+              <p className="text-sm text-emerald-400 font-semibold">
+                {fmtMoney(Number(reservation.paidAmount))}
+              </p>
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-slate-500 uppercase tracking-wider mb-1.5 block">
+              Amount (₦)
+            </label>
+            <input
+              type="number"
+              min={0}
+              value={form.amount}
+              onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
+              placeholder="5000"
+              className={inputCls}
+              autoFocus
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-slate-500 uppercase tracking-wider mb-1.5 block">
+                Method
+              </label>
+              <select
+                value={form.method}
+                onChange={(e) => setForm((f) => ({ ...f, method: e.target.value }))}
+                className={inputCls}
+              >
+                {['Cash', 'Card', 'Transfer', 'POS', 'Mobile'].map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 uppercase tracking-wider mb-1.5 block">
+                Date
+              </label>
+              <input
+                type="date"
+                value={form.date}
+                onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
+                className={inputCls}
+              />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-slate-500 uppercase tracking-wider mb-1.5 block">
+              Reference (optional)
+            </label>
+            <input
+              value={form.reference}
+              onChange={(e) => setForm((f) => ({ ...f, reference: e.target.value }))}
+              placeholder="e.g. POS-2210"
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className="text-xs text-slate-500 uppercase tracking-wider mb-1.5 block">
+              Notes (optional)
+            </label>
+            <textarea
+              value={form.notes}
+              onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+              placeholder="Any extra notes for this payment"
+              className={`${inputCls} min-h-[70px]`}
+            />
+          </div>
+          {error && (
+            <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+              {error}
+            </p>
+          )}
+        </div>
+        <div className="flex gap-3 px-5 pb-5">
+          <button
+            onClick={onClose}
+            className="flex-1 px-4 py-2.5 rounded-lg border border-[#1e2536] text-slate-400 text-sm hover:text-white transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={recordPayment.isPending}
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-sm font-semibold transition-colors"
+          >
+            {recordPayment.isPending ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <Check size={14} />
+            )}
+            Record & Print
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 // ─── Tab ──────────────────────────────────────────────────────────────────────
 function Tab({
   label,
@@ -259,6 +432,7 @@ export default function ReservationDetailPage() {
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('overview');
   const [showFolio, setShowFolio] = useState(false);
+  const [showPayment, setShowPayment] = useState(false);
 
   if (isLoading)
     return (
@@ -285,6 +459,14 @@ export default function ReservationDetailPage() {
   const folioItems = folioPages?.pages.flatMap((p) => p.items) ?? [];
   const folioTotal = folioItems.reduce((s, f) => s + Number(f.amount), 0);
   const s = STATUS_CONFIG[res.status];
+  const payments =
+    res.invoices?.flatMap((inv) =>
+      inv.payments?.map((p) => ({ ...p, invoiceNo: inv.invoiceNo })) ?? [],
+    ) ?? [];
+  const latestPayment =
+    payments.length > 0
+      ? payments.slice().sort((a, b) => new Date(b.paidAt).getTime() - new Date(a.paidAt).getTime())[0]
+      : null;
 
   // Timeline from reservation events (derived from available data)
   const timeline = [
@@ -613,8 +795,25 @@ export default function ReservationDetailPage() {
                 </div>
               </div>
               {balance > 0 && (
-                <button className="mt-4 w-full bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/20 text-emerald-400 rounded-lg py-2 text-sm font-semibold transition-colors">
+                <button
+                  onClick={() => setShowPayment(true)}
+                  className="mt-4 w-full bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/20 text-emerald-400 rounded-lg py-2 text-sm font-semibold transition-colors"
+                >
                   + Record Payment
+                </button>
+              )}
+              {latestPayment && (
+                <button
+                  onClick={() =>
+                    window.open(
+                      `/api/proxy/reservations/${res.id}/payments/${latestPayment.id}/receipt`,
+                      'receipt',
+                      'width=420,height=620',
+                    )
+                  }
+                  className="mt-3 w-full border border-[#1e2536] text-slate-300 hover:text-white rounded-lg py-2 text-xs font-medium transition-colors"
+                >
+                  Reprint Last Receipt
                 </button>
               )}
             </div>
@@ -803,6 +1002,7 @@ export default function ReservationDetailPage() {
       )}
 
       {showFolio && <AddFolioModal reservationId={resId} onClose={() => setShowFolio(false)} />}
+      {showPayment && <RecordPaymentModal reservation={res} onClose={() => setShowPayment(false)} />}
     </div>
   );
 }

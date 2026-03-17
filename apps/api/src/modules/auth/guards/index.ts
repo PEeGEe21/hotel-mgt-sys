@@ -2,9 +2,13 @@ import { Injectable, CanActivate, ExecutionContext, ForbiddenException, SetMetad
 import { AuthGuard } from '@nestjs/passport';
 import { Reflector } from '@nestjs/core';
 import { Role } from '@prisma/client';
+import { PermissionsGuard } from './permissions.guard';
 
 export const ROLES_KEY = 'roles';
 export const Roles = (...roles: Role[]) => SetMetadata(ROLES_KEY, roles);
+
+export const PERMISSIONS_KEY = 'permissions';
+export const Permissions = (...perms: string[]) => SetMetadata(PERMISSIONS_KEY, perms);
 
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {}
@@ -32,3 +36,5 @@ export class RolesGuard implements CanActivate {
     return true;
   }
 }
+
+export { PermissionsGuard };

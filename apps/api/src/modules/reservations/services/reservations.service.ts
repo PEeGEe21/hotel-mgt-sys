@@ -12,6 +12,11 @@ import { ReservationFilterDto } from '../dtos/reservation-filter.dto';
 import { AvailabilityDto } from '../dtos/availability.dto';
 import { CreateReservationDto } from '../dtos/create-reservation.dto';
 import { UpdateReservationDto } from '../dtos/update-reservation.dto';
+import { RecordPaymentDto } from '../dtos/record-payment.dto';
+import * as path from 'path';
+import { readFile } from 'fs/promises';
+import * as handlebars from 'handlebars';
+import { compileTemplate } from 'src/common/utils/compile-template.utils';
 
 // ─── Service ──────────────────────────────────────────────────────────────────
 
@@ -406,4 +411,181 @@ export class ReservationsService {
 
     return { items, nextCursor };
   }
+
+  // ── Payments ───────────────────────────────────────────────────────────────
+  private async ensureReservationInvoice(tx: any, hotelId: string, reservation: any) {
+    let invoice = await tx.invoice.findFirst({
+      where: { hotelId, reservationId: reservation.id },
+      orderBy: { issuedAt: 'desc' },
+    });
+    if (invoice) return invoice;
+
+    const base = `INV-${reservation.reservationNo}`;
+    let invoiceNo = base;
+    let attempt = 1;
+    while (await tx.invoice.findUnique({ where: { invoiceNo } })) {
+      attempt += 1;
+      if (attempt > 50) throw new ConflictException('Could not generate a unique invoice number.');
+      invoiceNo = `${base}-${attempt}`;
+    }
+
+    invoice = await tx.invoice.create({
+      data: {
+        hotelId,
+        reservationId: reservation.id,
+        invoiceNo,
+        issuedAt: new Date(),
+        subtotal: reservation.totalAmount,
+        tax: 0,
+        discount: 0,
+        total: reservation.totalAmount,
+        paymentStatus: PaymentStatus.UNPAID,
+        notes: reservation.notes ?? undefined,
+      },
+    });
+    return invoice;
+  }
+
+  async recordPayment(hotelId: string, reservationId: string, dto: RecordPaymentDto) {
+    return this.prisma.$transaction(async (tx) => {
+      const reservation = await tx.reservation.findFirst({
+        where: { id: reservationId, hotelId },
+        include: { guest: true, room: true },
+      });
+      if (!reservation) throw new NotFoundException('Reservation not found.');
+
+      const paidAgg = await tx.payment.aggregate({
+        where: { invoice: { reservationId, hotelId } },
+        _sum: { amount: true },
+      });
+      const alreadyPaid = Number(paidAgg._sum.amount ?? 0);
+      const balance = Number(reservation.totalAmount) - alreadyPaid;
+      if (dto.amount > balance)
+        throw new BadRequestException('Amount exceeds outstanding balance.');
+
+      const invoice = await this.ensureReservationInvoice(tx, hotelId, reservation);
+      const payment = await tx.payment.create({
+        data: {
+          hotelId,
+          invoiceId: invoice.id,
+          amount: dto.amount,
+          method: dto.method,
+          reference: dto.reference,
+          note: dto.note,
+          paidAt: dto.paidAt ? new Date(dto.paidAt) : new Date(),
+        },
+      });
+
+      const invoicePaidAgg = await tx.payment.aggregate({
+        where: { invoiceId: invoice.id },
+        _sum: { amount: true },
+      });
+      const invoicePaid = Number(invoicePaidAgg._sum.amount ?? 0);
+      const invoiceStatus =
+        invoicePaid >= Number(invoice.total)
+          ? PaymentStatus.PAID
+          : invoicePaid > 0
+            ? PaymentStatus.PARTIAL
+            : PaymentStatus.UNPAID;
+      await tx.invoice.update({
+        where: { id: invoice.id },
+        data: { paymentStatus: invoiceStatus },
+      });
+
+      const totalPaidAgg = await tx.payment.aggregate({
+        where: { invoice: { reservationId, hotelId } },
+        _sum: { amount: true },
+      });
+      const totalPaid = Number(totalPaidAgg._sum.amount ?? 0);
+      const resPaymentStatus =
+        totalPaid >= Number(reservation.totalAmount)
+          ? PaymentStatus.PAID
+          : totalPaid > 0
+            ? PaymentStatus.PARTIAL
+            : PaymentStatus.UNPAID;
+
+      const updatedReservation = await tx.reservation.update({
+        where: { id: reservation.id },
+        data: { paidAmount: totalPaid, paymentStatus: resPaymentStatus },
+        include: RESERVATION_INCLUDE as any,
+      });
+
+      return { payment, reservation: updatedReservation };
+    });
+  }
+
+  async getPaymentReceiptHtml(hotelId: string, reservationId: string, paymentId: string) {
+    const payment = await this.prisma.payment.findFirst({
+      where: { id: paymentId, invoice: { reservationId, hotelId } },
+      include: {
+        invoice: {
+          include: {
+            reservation: {
+              include: { guest: true, room: true },
+            },
+          },
+        },
+      },
+    });
+    if (!payment) throw new NotFoundException('Payment not found.');
+
+    const reservation = payment.invoice.reservation;
+    const guestName =
+      `${reservation?.guest?.firstName ?? ''} ${reservation?.guest?.lastName ?? ''}`.trim();
+    const paidAt = payment.paidAt.toLocaleDateString('en-NG', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
+    const printedAt = new Date().toLocaleString('en-NG', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+
+    const html = await compileTemplate('payment-receipt', {
+      reservationNo: reservation?.reservationNo ?? '—',
+      receiptId: payment.id ?? '—',
+      guestName,
+      roomNumber: reservation?.room?.number ?? '—',
+      stayRange: `${reservation?.checkIn ? fmtDate(reservation.checkIn) : '—'} → ${
+        reservation?.checkOut ? fmtDate(reservation.checkOut) : '—'
+      }`,
+      paidAt,
+      paymentMethod: payment.method ?? '—',
+      paymentReference: payment.reference ?? '',
+      paymentNote: payment.note ?? '',
+      amount: fmtMoney(Number(payment.amount)),
+      printedAt,
+    });
+
+    return html;
+  }
+}
+
+function fmtMoney(n: number) {
+  return new Intl.NumberFormat('en-NG', {
+    style: 'currency',
+    currency: 'NGN',
+    maximumFractionDigits: 0,
+  }).format(n);
+}
+
+function fmtDate(value: Date) {
+  return new Date(value).toLocaleDateString('en-NG', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }

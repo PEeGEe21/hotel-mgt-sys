@@ -10,6 +10,16 @@ export type AuthUser = {
   id: string;
   email: string;
   name: string;
+  username?: string | null;
+  phone?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  employeeCode?: string | null;
+  attendancePinSet?: boolean;
+  joinDate?: string | null;
+  lastLoginAt?: string | null;
+  avatar?: string | null;
+  rolePermissions?: string[];
   role: string;
   department: string | null;
   position: string | null;

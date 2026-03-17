@@ -8,12 +8,14 @@ import {
   HttpCode,
   HttpStatus,
   Query,
+  Patch,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { AuthService } from '../services/auth.service';
 import { JwtAuthGuard, LocalAuthGuard } from '../guards/index';
 import { RefreshDto } from '../dtos/refresh.dto';
 import { LogoutDto } from '../dtos/logout.dto';
+import { UpdateMeDto } from '../dtos/update-me.dto';
 
 // ─── Controller ────────────────────────────────────────────────────────────────
 @ApiTags('Auth')
@@ -66,5 +68,21 @@ export class AuthController {
   @ApiOperation({ summary: 'Get current user profile' })
   getMe(@Request() req: any) {
     return this.authService.getMe(req.user.sub);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Patch('me')
+  @ApiOperation({ summary: 'Update current user profile' })
+  updateMe(@Request() req: any, @Body() dto: UpdateMeDto) {
+    return this.authService.updateMe(req.user.sub, dto);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Patch('me/attendance-pin/reset')
+  @ApiOperation({ summary: 'Reset current user attendance PIN' })
+  resetAttendancePin(@Request() req: any) {
+    return this.authService.resetAttendancePin(req.user.sub);
   }
 }

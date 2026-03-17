@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Shield,
   Search,
@@ -24,6 +24,7 @@ import {
   type Role,
   type Permission,
 } from '@/lib/permissions';
+import { useUpdateUserPermissions, useUserAccounts } from '@/hooks/useUserAccounts';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -40,90 +41,20 @@ type StaffUser = {
   denies: Permission[];
 };
 
-// ─── Seed users ───────────────────────────────────────────────────────────────
-
-const staffUsers: StaffUser[] = [
-  {
-    id: 'u1',
-    name: 'Blessing Adeyemi',
-    role: 'MANAGER',
-    department: 'Management',
-    position: 'Hotel Manager',
-    email: 'blessing.a@hotel.com',
-    grants: [],
-    denies: [],
-  },
-  {
-    id: 'u2',
-    name: 'Chidi Nwosu',
-    role: 'RECEPTIONIST',
-    department: 'Front Desk',
-    position: 'Head Receptionist',
-    email: 'chidi.n@hotel.com',
-    grants: ['delete:guests', 'discount:pos'],
-    denies: [],
-  },
-  {
-    id: 'u3',
-    name: 'Ngozi Eze',
-    role: 'RECEPTIONIST',
-    department: 'Front Desk',
-    position: 'Receptionist',
-    email: 'ngozi.e@hotel.com',
-    grants: [],
-    denies: ['create:guests', 'checkout:reservations'],
-  },
-  {
-    id: 'u4',
-    name: 'Emeka Obi',
-    role: 'HOUSEKEEPING',
-    department: 'Housekeeping',
-    position: 'Head Housekeeper',
-    email: 'emeka.o@hotel.com',
-    grants: ['view:inventory'],
-    denies: [],
-  },
-  {
-    id: 'u5',
-    name: 'Tunde Bakare',
-    role: 'BARTENDER',
-    department: 'Bar',
-    position: 'Head Bartender',
-    email: 'tunde.b@hotel.com',
-    grants: ['void:pos', 'discount:pos'],
-    denies: [],
-  },
-  {
-    id: 'u6',
-    name: 'Kemi Adebayo',
-    role: 'CASHIER',
-    department: 'Finance',
-    position: 'Cashier',
-    email: 'kemi.a@hotel.com',
-    grants: [],
-    denies: ['void:pos'],
-  },
-  {
-    id: 'u7',
-    name: 'Adaeze Okafor',
-    role: 'HOUSEKEEPING',
-    department: 'Housekeeping',
-    position: 'Housekeeper',
-    email: 'adaeze.o@hotel.com',
-    grants: [],
-    denies: [],
-  },
-  {
-    id: 'u8',
-    name: 'Yetunde Aina',
-    role: 'STAFF',
-    department: 'Maintenance',
-    position: 'Maintenance Tech',
-    email: 'yetunde.a@hotel.com',
-    grants: ['view:facilities'],
-    denies: [],
-  },
-];
+// ─── Helpers ────────────────────────────────────────────────────────────────
+const toRole = (value: string): Role =>
+  ([
+    'SUPER_ADMIN',
+    'ADMIN',
+    'MANAGER',
+    'RECEPTIONIST',
+    'HOUSEKEEPING',
+    'CASHIER',
+    'BARTENDER',
+    'STAFF',
+  ] as Role[]).includes(value as Role)
+    ? (value as Role)
+    : 'STAFF';
 
 const ROLE_COLORS: Record<Role, string> = {
   SUPER_ADMIN: 'text-red-400 bg-red-500/15 border-red-500/30',
@@ -231,7 +162,7 @@ function PermissionEditor({
   onClose,
 }: {
   user: StaffUser;
-  onSave: (id: string, grants: Permission[], denies: Permission[]) => void;
+  onSave: (id: string, grants: Permission[], denies: Permission[]) => Promise<void>;
   onClose: () => void;
 }) {
   const [grants, setGrants] = useState<Permission[]>(user.grants);
@@ -268,10 +199,12 @@ function PermissionEditor({
 
   const handleSave = async () => {
     setSaving(true);
-    await new Promise((r) => setTimeout(r, 500));
-    onSave(user.id, grants, denies);
-    setSaving(false);
-    setSaved(true);
+    try {
+      await onSave(user.id, grants, denies);
+      setSaved(true);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const effective = resolvePermissions(user.role, { grants, denies });
@@ -466,12 +399,35 @@ function PermissionEditor({
 
 // ─── Main page ─────────────────────────────────────────────────────────────────
 export default function UserPermissionsPage() {
-  const [users, setUsers] = useState<StaffUser[]>(staffUsers);
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<Role | 'ALL'>('ALL');
   const [selected, setSelected] = useState<StaffUser | null>(null);
+  const { data, isLoading } = useUserAccounts(search);
+  const updatePermissions = useUpdateUserPermissions(selected?.id ?? '');
+
+  const users = useMemo<StaffUser[]>(() => {
+    return (
+      data?.map((u) => ({
+        id: u.id,
+        name: u.staffName ?? u.email,
+        role: toRole(u.role),
+        department: u.department ?? '—',
+        position: u.position ?? '—',
+        email: u.email,
+        grants: (u.permissionGrants ?? []) as Permission[],
+        denies: (u.permissionDenies ?? []) as Permission[],
+      })) ?? []
+    );
+  }, [data]);
 
   const roles = [...new Set(users.map((u) => u.role))] as Role[];
+
+  useEffect(() => {
+    if (selected) {
+      const fresh = users.find((u) => u.id === selected.id);
+      if (fresh) setSelected(fresh);
+    }
+  }, [users, selected?.id]);
 
   const filtered = useMemo(
     () =>
@@ -485,8 +441,8 @@ export default function UserPermissionsPage() {
     [users, search, roleFilter],
   );
 
-  const handleSave = (id: string, grants: Permission[], denies: Permission[]) => {
-    setUsers((us) => us.map((u) => (u.id === id ? { ...u, grants, denies } : u)));
+  const handleSave = async (id: string, grants: Permission[], denies: Permission[]) => {
+    await updatePermissions.mutateAsync({ grants, denies });
     setSelected((u) => (u?.id === id ? { ...u, grants, denies } : u));
   };
 
@@ -502,7 +458,7 @@ export default function UserPermissionsPage() {
             <div>
               <h1 className="text-xl font-bold text-white tracking-tight">User Permissions</h1>
               <p className="text-slate-500 text-xs mt-0.5">
-                {users.length} users · per-user overrides
+                {isLoading ? 'Loading users...' : `${users.length} users · per-user overrides`}
               </p>
             </div>
           </div>
@@ -590,7 +546,9 @@ export default function UserPermissionsPage() {
           {filtered.length === 0 && (
             <div className="py-12 text-center">
               <Users size={28} className="text-slate-700 mx-auto mb-2" />
-              <p className="text-slate-500 text-sm">No users found</p>
+              <p className="text-slate-500 text-sm">
+                {isLoading ? 'Loading users...' : 'No users found'}
+              </p>
             </div>
           )}
         </div>

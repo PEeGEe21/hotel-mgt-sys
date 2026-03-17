@@ -3,8 +3,13 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Plus, Pencil, Trash2, X, Check, Package } from 'lucide-react';
-
-type Category = { id: string; name: string; description: string; color: string; itemCount: number };
+import {
+  useCreateInventoryCategory,
+  useDeleteInventoryCategory,
+  useInventoryCategories,
+  useUpdateInventoryCategory,
+  type InventoryCategory,
+} from '@/hooks/useInventoryCategories';
 
 const colorOptions = [
   'bg-blue-500',
@@ -19,59 +24,14 @@ const colorOptions = [
   'bg-indigo-500',
 ];
 
-const initCategories: Category[] = [
-  {
-    id: 'c1',
-    name: 'Spirits',
-    description: 'Whiskey, vodka, gin, rum, brandy',
-    color: 'bg-amber-500',
-    itemCount: 8,
-  },
-  {
-    id: 'c2',
-    name: 'Beer',
-    description: 'Lager, stout, ale, cider',
-    color: 'bg-orange-500',
-    itemCount: 6,
-  },
-  {
-    id: 'c3',
-    name: 'Wine',
-    description: 'Red, white, rosé, sparkling',
-    color: 'bg-red-500',
-    itemCount: 5,
-  },
-  {
-    id: 'c4',
-    name: 'Cocktails',
-    description: 'Mixes, syrups, bitters',
-    color: 'bg-pink-500',
-    itemCount: 4,
-  },
-  {
-    id: 'c5',
-    name: 'Soft Drinks',
-    description: 'Juices, sodas, water, energy drinks',
-    color: 'bg-sky-500',
-    itemCount: 7,
-  },
-  {
-    id: 'c6',
-    name: 'Food',
-    description: 'Snacks, bar bites, kitchen items',
-    color: 'bg-emerald-500',
-    itemCount: 6,
-  },
-];
-
 function CategoryModal({
   cat,
   onClose,
   onSave,
 }: {
-  cat?: Category;
+  cat?: InventoryCategory;
   onClose: () => void;
-  onSave: (d: Omit<Category, 'id' | 'itemCount'>) => void;
+  onSave: (d: Omit<InventoryCategory, 'id' | 'itemCount'>) => void;
 }) {
   const [name, setName] = useState(cat?.name ?? '');
   const [description, setDescription] = useState(cat?.description ?? '');
@@ -160,19 +120,33 @@ function CategoryModal({
 
 export default function CategoriesPage() {
   const router = useRouter();
-  const [categories, setCategories] = useState<Category[]>(initCategories);
-  const [modal, setModal] = useState<{ open: boolean; cat?: Category }>({ open: false });
+  const [modal, setModal] = useState<{ open: boolean; cat?: InventoryCategory }>({ open: false });
+  const { data: categories = [], isLoading } = useInventoryCategories();
+  const createCategory = useCreateInventoryCategory();
+  const updateCategory = useUpdateInventoryCategory(modal.cat?.id ?? '');
+  const deleteCategory = useDeleteInventoryCategory();
 
-  const save = (data: Omit<Category, 'id' | 'itemCount'>) => {
-    if (modal.cat) {
-      setCategories((c) => c.map((x) => (x.id === modal.cat!.id ? { ...x, ...data } : x)));
-    } else {
-      setCategories((c) => [...c, { ...data, id: Date.now().toString(), itemCount: 0 }]);
+  const save = async (data: Omit<InventoryCategory, 'id' | 'itemCount'>) => {
+    try {
+      if (modal.cat) {
+        await updateCategory.mutateAsync(data);
+      } else {
+        await createCategory.mutateAsync(data);
+      }
+      setModal({ open: false });
+    } catch {
+      // handled by toast
     }
-    setModal({ open: false });
   };
 
-  const remove = (id: string) => setCategories((c) => c.filter((x) => x.id !== id));
+  const remove = async (id: string) => {
+    if (!confirm('Delete this category?')) return;
+    try {
+      await deleteCategory.mutateAsync(id);
+    } catch {
+      // handled by toast
+    }
+  };
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -199,44 +173,50 @@ export default function CategoriesPage() {
 
       <div className="bg-[#161b27] border border-[#1e2536] rounded-xl overflow-hidden">
         <div className="divide-y divide-[#1e2536]">
-          {categories.map((cat) => (
-            <div
-              key={cat.id}
-              className="flex items-center justify-between px-5 py-4 hover:bg-white/[0.02] transition-colors"
-            >
-              <div className="flex items-center gap-4">
-                <div
-                  className={`w-10 h-10 rounded-xl ${cat.color} flex items-center justify-center shrink-0`}
-                >
-                  <Package size={16} className="text-white" />
+          {isLoading ? (
+            <div className="px-5 py-10 text-center text-slate-500 text-sm">Loading categories…</div>
+          ) : categories.length === 0 ? (
+            <div className="px-5 py-10 text-center text-slate-500 text-sm">No categories yet</div>
+          ) : (
+            categories.map((cat) => (
+              <div
+                key={cat.id}
+                className="flex items-center justify-between px-5 py-4 hover:bg-white/[0.02] transition-colors"
+              >
+                <div className="flex items-center gap-4">
+                  <div
+                    className={`w-10 h-10 rounded-xl ${cat.color} flex items-center justify-center shrink-0`}
+                  >
+                    <Package size={16} className="text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-200">{cat.name}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">{cat.description}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-semibold text-slate-200">{cat.name}</p>
-                  <p className="text-xs text-slate-500 mt-0.5">{cat.description}</p>
+                <div className="flex items-center gap-4">
+                  <div className="text-right hidden sm:block">
+                    <p className="text-sm font-bold text-white">{cat.itemCount}</p>
+                    <p className="text-xs text-slate-500">items</p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setModal({ open: true, cat })}
+                      className="p-2 rounded-lg text-slate-500 hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
+                    >
+                      <Pencil size={14} />
+                    </button>
+                    <button
+                      onClick={() => remove(cat.id)}
+                      className="p-2 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 </div>
               </div>
-              <div className="flex items-center gap-4">
-                <div className="text-right hidden sm:block">
-                  <p className="text-sm font-bold text-white">{cat.itemCount}</p>
-                  <p className="text-xs text-slate-500">items</p>
-                </div>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => setModal({ open: true, cat })}
-                    className="p-2 rounded-lg text-slate-500 hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
-                  >
-                    <Pencil size={14} />
-                  </button>
-                  <button
-                    onClick={() => remove(cat.id)}
-                    className="p-2 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </div>
 

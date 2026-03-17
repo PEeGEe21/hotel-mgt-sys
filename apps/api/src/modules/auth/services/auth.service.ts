@@ -4,6 +4,9 @@ import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { Role } from '@prisma/client';
+import { DEFAULT_ROLE_PERMISSIONS } from '../../../common/constants/role-permissions';
+import { UpdateMeDto } from '../dtos/update-me.dto';
 
 @Injectable()
 export class AuthService {
@@ -44,10 +47,12 @@ export class AuthService {
       data: { lastLoginAt: new Date() },
     });
 
+    const rolePermissions = await this.getRolePermissions(user.staff?.hotelId, user.role);
+
     return {
       accessToken,
       refreshToken,
-      user: this.sanitizeUser(user),
+      user: { ...this.sanitizeUser(user), rolePermissions },
       hotel: this.sanitizeHotel(user.staff?.hotel),
     };
   }
@@ -103,10 +108,86 @@ export class AuthService {
       include: { staff: { include: { hotel: true } } },
     });
     if (!user) throw new UnauthorizedException('User not found.');
+    const rolePermissions = await this.getRolePermissions(user.staff?.hotelId, user.role);
     return {
-      user: this.sanitizeUser(user),
+      user: { ...this.sanitizeUser(user), rolePermissions },
       hotel: this.sanitizeHotel(user.staff?.hotel),
     };
+  }
+
+  // ─── Update current user profile ─────────────────────────────────────────
+  async updateMe(userId: string, dto: UpdateMeDto) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { staff: true },
+    });
+    if (!user) throw new UnauthorizedException('User not found.');
+
+    if (dto.email && dto.email !== user.email) {
+      const exists = await this.prisma.user.findUnique({ where: { email: dto.email } });
+      if (exists) throw new BadRequestException('Email already in use.');
+    }
+
+    const staffUpdates: any = {};
+    if (dto.name) {
+      const parts = dto.name.trim().split(/\s+/).filter(Boolean);
+      if (parts.length >= 1) staffUpdates.firstName = parts[0];
+      if (parts.length >= 2) staffUpdates.lastName = parts.slice(1).join(' ');
+    }
+    if (dto.phone !== undefined) staffUpdates.phone = dto.phone;
+    if (dto.avatar !== undefined) staffUpdates.avatar = dto.avatar;
+
+    await this.prisma.$transaction(async (tx) => {
+      if (dto.email && dto.email !== user.email) {
+        await tx.user.update({
+          where: { id: user.id },
+          data: { email: dto.email },
+        });
+      }
+
+      if (user.staff && Object.keys(staffUpdates).length) {
+        await tx.staff.update({
+          where: { id: user.staff.id },
+          data: staffUpdates,
+        });
+      }
+    });
+
+    const updated = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { staff: { include: { hotel: true } } },
+    });
+
+    if (!updated) throw new UnauthorizedException('User not found.');
+    const rolePermissions = await this.getRolePermissions(updated.staff?.hotelId, updated.role);
+    return {
+      user: { ...this.sanitizeUser(updated), rolePermissions },
+      hotel: this.sanitizeHotel(updated.staff?.hotel),
+    };
+  }
+
+  // ─── Reset attendance PIN (current user) ─────────────────────────────────
+  async resetAttendancePin(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { staff: true },
+    });
+    if (!user || !user.staff) throw new UnauthorizedException('User not found.');
+
+    const pin = String(Math.floor(1000 + Math.random() * 9000));
+    const pinHash = await bcrypt.hash(pin, 12);
+
+    await this.prisma.staff.update({
+      where: { id: user.staff.id },
+      data: {
+        pinHash,
+        pinUpdatedAt: new Date(),
+        pinLastUsedAt: null,
+        pinFailedAttempts: 0,
+      },
+    });
+
+    return { pin };
   }
 
   // ─── Helpers ───────────────────────────────────────────────────────────────
@@ -157,22 +238,54 @@ export class AuthService {
       country: resolved.country,
       domain: resolved.domain,
       logo: resolved.logo ?? null,
+      geofenceEnabled: resolved.geofenceEnabled ?? false,
+      geofenceRadiusMeters: resolved.geofenceRadiusMeters ?? 0,
+      attendancePinRequired: resolved.attendancePinRequired ?? false,
+      attendanceKioskEnabled: resolved.attendanceKioskEnabled ?? true,
+      attendancePersonalEnabled: resolved.attendancePersonalEnabled ?? true,
     };
   }
 
   private sanitizeUser(user: any) {
+    const staff = user.staff;
+    const fullName = staff ? `${staff.firstName} ${staff.lastName}`.trim() : user.email;
+    const username = user.email?.includes('@') ? user.email.split('@')[0] : user.email;
+
     return {
       id: user.id,
       email: user.email,
-      name: user.staff ? `${user.staff.firstName} ${user.staff.lastName}` : user.email,
+      name: fullName,
+      username,
       role: user.role,
-      department: user.staff?.department ?? null,
-      position: user.staff?.position ?? null,
+      department: staff?.department ?? null,
+      position: staff?.position ?? null,
+      phone: staff?.phone ?? null,
+      firstName: staff?.firstName ?? null,
+      lastName: staff?.lastName ?? null,
+      employeeCode: staff?.employeeCode ?? null,
+      attendancePinSet: !!staff?.pinHash,
+      joinDate: staff?.hireDate ?? null,
+      lastLoginAt: user.lastLoginAt ?? null,
+      avatar: staff?.avatar ?? null,
       permissionOverrides: {
         grants: user.permissionGrants ?? [],
         denies: user.permissionDenies ?? [],
       },
     };
+  }
+
+  private async getRolePermissions(hotelId: string | undefined, role: Role): Promise<string[]> {
+    if (!hotelId) return DEFAULT_ROLE_PERMISSIONS[role] ?? [];
+    const existing = await this.prisma.rolePermission.findUnique({
+      where: { hotelId_role: { hotelId, role } },
+    });
+    if (existing) return existing.permissions ?? [];
+
+    const defaults = DEFAULT_ROLE_PERMISSIONS[role] ?? [];
+    await this.prisma.rolePermission.create({
+      data: { hotelId, role, permissions: defaults },
+    });
+    return defaults;
   }
 
   private sanitizeHotel(hotel: any) {
@@ -188,6 +301,11 @@ export class AuthService {
       logo: hotel.logo ?? null,
       email: hotel.email,
       phone: hotel.phone,
+      geofenceEnabled: hotel.geofenceEnabled ?? false,
+      geofenceRadiusMeters: hotel.geofenceRadiusMeters ?? 0,
+      attendancePinRequired: hotel.attendancePinRequired ?? false,
+      attendanceKioskEnabled: hotel.attendanceKioskEnabled ?? true,
+      attendancePersonalEnabled: hotel.attendancePersonalEnabled ?? true,
     };
   }
 }

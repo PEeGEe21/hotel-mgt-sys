@@ -3,19 +3,13 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Plus, Pencil, Trash2, X, Truck, Phone, Mail, MapPin } from 'lucide-react';
-
-type Supplier = {
-  id: string; name: string; contact: string; phone: string;
-  email: string; address: string; categories: string[]; notes?: string;
-};
-
-const initSuppliers: Supplier[] = [
-  { id: 'sup1', name: 'Metro Drinks', contact: 'Olu Adeyinka', phone: '+234 801 555 0001', email: 'olu@metrodrinks.ng', address: 'Lagos, Nigeria', categories: ['Spirits', 'Cocktails', 'Wine'] },
-  { id: 'sup2', name: 'BrewCo Nigeria', contact: 'Emeka Osu', phone: '+234 802 555 0002', email: 'emeka@brewco.ng', address: 'Onitsha, Nigeria', categories: ['Beer'] },
-  { id: 'sup3', name: 'Soft Bev Ltd', contact: 'Taiwo Adeleke', phone: '+234 803 555 0003', email: 'taiwo@softbev.ng', address: 'Ibadan, Nigeria', categories: ['Soft Drinks'] },
-  { id: 'sup4', name: 'Fresh Foods Co', contact: 'Chioma Nwachukwu', phone: '+234 804 555 0004', email: 'chioma@freshfoods.ng', address: 'Port Harcourt, Nigeria', categories: ['Food'], notes: 'Delivers every Mon & Thu morning' },
-  { id: 'sup5', name: 'Vineyard Plus', contact: 'David Okonkwo', phone: '+234 805 555 0005', email: 'david@vineyardplus.ng', address: 'Abuja, Nigeria', categories: ['Wine'] },
-];
+import {
+  useCreateSupplier,
+  useDeleteSupplier,
+  useSuppliers,
+  useUpdateSupplier,
+  type Supplier,
+} from '@/hooks/useSuppliers';
 
 const allCategories = ['Spirits', 'Beer', 'Wine', 'Cocktails', 'Soft Drinks', 'Food'];
 
@@ -91,16 +85,32 @@ function SupplierModal({ supplier, onClose, onSave }: {
 
 export default function SuppliersPage() {
   const router = useRouter();
-  const [suppliers, setSuppliers] = useState<Supplier[]>(initSuppliers);
   const [modal, setModal] = useState<{ open: boolean; supplier?: Supplier }>({ open: false });
+  const { data: suppliers = [], isLoading } = useSuppliers();
+  const createSupplier = useCreateSupplier();
+  const updateSupplier = useUpdateSupplier(modal.supplier?.id ?? '');
+  const deleteSupplier = useDeleteSupplier();
 
-  const save = (data: Omit<Supplier, 'id'>) => {
-    if (modal.supplier) {
-      setSuppliers(s => s.map(x => x.id === modal.supplier!.id ? { ...x, ...data } : x));
-    } else {
-      setSuppliers(s => [...s, { ...data, id: Date.now().toString() }]);
+  const save = async (data: Omit<Supplier, 'id'>) => {
+    try {
+      if (modal.supplier) {
+        await updateSupplier.mutateAsync(data);
+      } else {
+        await createSupplier.mutateAsync(data);
+      }
+      setModal({ open: false });
+    } catch {
+      // handled by toast
     }
-    setModal({ open: false });
+  };
+
+  const remove = async (id: string) => {
+    if (!confirm('Delete this supplier?')) return;
+    try {
+      await deleteSupplier.mutateAsync(id);
+    } catch {
+      // handled by toast
+    }
   };
 
   return (
@@ -123,43 +133,53 @@ export default function SuppliersPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {suppliers.map(sup => (
-          <div key={sup.id} className="bg-[#161b27] border border-[#1e2536] rounded-xl p-5 hover:border-slate-600 transition-colors">
-            <div className="flex items-start justify-between mb-3">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-orange-500/15 border border-orange-500/20 flex items-center justify-center shrink-0">
-                  <Truck size={16} className="text-orange-400" />
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-slate-200">{sup.name}</p>
-                  <p className="text-xs text-slate-500">{sup.contact}</p>
-                </div>
-              </div>
-              <div className="flex gap-1">
-                <button onClick={() => setModal({ open: true, supplier: sup })}
-                  className="p-1.5 rounded-lg text-slate-500 hover:text-blue-400 hover:bg-blue-500/10 transition-colors"><Pencil size={13} /></button>
-                <button onClick={() => setSuppliers(s => s.filter(x => x.id !== sup.id))}
-                  className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"><Trash2 size={13} /></button>
-              </div>
-            </div>
-
-            <div className="space-y-1.5 mb-3">
-              <p className="text-xs text-slate-500 flex items-center gap-1.5"><Phone size={10} />{sup.phone}</p>
-              <p className="text-xs text-slate-500 flex items-center gap-1.5"><Mail size={10} />{sup.email}</p>
-              <p className="text-xs text-slate-500 flex items-center gap-1.5"><MapPin size={10} />{sup.address}</p>
-            </div>
-
-            <div className="flex flex-wrap gap-1.5">
-              {sup.categories.map(cat => (
-                <span key={cat} className="text-xs bg-[#0f1117] border border-[#1e2536] text-slate-400 px-2 py-0.5 rounded-md">{cat}</span>
-              ))}
-            </div>
-
-            {sup.notes && (
-              <p className="text-xs text-amber-400/70 mt-2 bg-amber-500/5 border border-amber-500/10 rounded-lg px-3 py-2">{sup.notes}</p>
-            )}
+        {isLoading ? (
+          <div className="bg-[#161b27] border border-[#1e2536] rounded-xl p-5 text-slate-500 text-sm">
+            Loading suppliers…
           </div>
-        ))}
+        ) : suppliers.length === 0 ? (
+          <div className="bg-[#161b27] border border-[#1e2536] rounded-xl p-5 text-slate-500 text-sm">
+            No suppliers yet
+          </div>
+        ) : (
+          suppliers.map(sup => (
+            <div key={sup.id} className="bg-[#161b27] border border-[#1e2536] rounded-xl p-5 hover:border-slate-600 transition-colors">
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-orange-500/15 border border-orange-500/20 flex items-center justify-center shrink-0">
+                    <Truck size={16} className="text-orange-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-slate-200">{sup.name}</p>
+                    <p className="text-xs text-slate-500">{sup.contact}</p>
+                  </div>
+                </div>
+                <div className="flex gap-1">
+                  <button onClick={() => setModal({ open: true, supplier: sup })}
+                    className="p-1.5 rounded-lg text-slate-500 hover:text-blue-400 hover:bg-blue-500/10 transition-colors"><Pencil size={13} /></button>
+                  <button onClick={() => remove(sup.id)}
+                    className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"><Trash2 size={13} /></button>
+                </div>
+              </div>
+
+              <div className="space-y-1.5 mb-3">
+                <p className="text-xs text-slate-500 flex items-center gap-1.5"><Phone size={10} />{sup.phone}</p>
+                <p className="text-xs text-slate-500 flex items-center gap-1.5"><Mail size={10} />{sup.email}</p>
+                <p className="text-xs text-slate-500 flex items-center gap-1.5"><MapPin size={10} />{sup.address}</p>
+              </div>
+
+              <div className="flex flex-wrap gap-1.5">
+                {sup.categories.map(cat => (
+                  <span key={cat} className="text-xs bg-[#0f1117] border border-[#1e2536] text-slate-400 px-2 py-0.5 rounded-md">{cat}</span>
+                ))}
+              </div>
+
+              {sup.notes && (
+                <p className="text-xs text-amber-400/70 mt-2 bg-amber-500/5 border border-amber-500/10 rounded-lg px-3 py-2">{sup.notes}</p>
+              )}
+            </div>
+          ))
+        )}
       </div>
 
       {modal.open && <SupplierModal supplier={modal.supplier} onClose={() => setModal({ open: false })} onSave={save} />}

@@ -1,99 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Shield, Check, X, Info } from 'lucide-react';
-import { ROLE_PERMISSIONS, type Role, type Permission } from '@/lib/permissions';
-
-// Group permissions for display
-const permissionGroups: { label: string; perms: { key: Permission; label: string }[] }[] = [
-  {
-    label: 'Dashboard',
-    perms: [{ key: 'view:dashboard', label: 'View Dashboard' }],
-  },
-  {
-    label: 'Rooms',
-    perms: [
-      { key: 'view:rooms', label: 'View Rooms' },
-      { key: 'manage:rooms', label: 'Manage Rooms' },
-    ],
-  },
-  {
-    label: 'Reservations',
-    perms: [
-      { key: 'view:reservations', label: 'View Reservations' },
-      { key: 'manage:reservations', label: 'Manage Reservations' },
-    ],
-  },
-  {
-    label: 'Guests',
-    perms: [
-      { key: 'view:guests', label: 'View Guests' },
-      { key: 'manage:guests', label: 'Manage Guests' },
-    ],
-  },
-  {
-    label: 'Staff',
-    perms: [
-      { key: 'view:staff', label: 'View Staff' },
-      { key: 'manage:staff', label: 'Manage Staff' },
-    ],
-  },
-  {
-    label: 'Attendance',
-    perms: [
-      { key: 'view:attendance', label: 'View All Attendance' },
-      { key: 'manage:attendance', label: 'Manage Attendance' },
-      { key: 'clock:self', label: 'Clock In/Out (Self)' },
-    ],
-  },
-  {
-    label: 'POS / Store',
-    perms: [
-      { key: 'view:pos', label: 'View POS' },
-      { key: 'manage:pos', label: 'Manage POS' },
-    ],
-  },
-  {
-    label: 'Inventory',
-    perms: [
-      { key: 'view:inventory', label: 'View Inventory' },
-      { key: 'manage:inventory', label: 'Manage Inventory' },
-    ],
-  },
-  {
-    label: 'Housekeeping',
-    perms: [
-      { key: 'view:housekeeping', label: 'View Housekeeping' },
-      { key: 'manage:housekeeping', label: 'Manage Housekeeping' },
-    ],
-  },
-  {
-    label: 'Finance',
-    perms: [
-      { key: 'view:finance', label: 'View Finance' },
-      { key: 'manage:finance', label: 'Manage Finance' },
-    ],
-  },
-  {
-    label: 'Reports',
-    perms: [{ key: 'view:reports', label: 'View Reports' }],
-  },
-  {
-    label: 'Facilities',
-    perms: [
-      { key: 'view:facilities', label: 'View Facilities' },
-      { key: 'manage:facilities', label: 'Manage Facilities' },
-    ],
-  },
-  {
-    label: 'Settings',
-    perms: [
-      { key: 'view:settings', label: 'View Settings' },
-      { key: 'manage:settings', label: 'Manage Settings' },
-    ],
-  },
-];
+import { ROLE_PERMISSIONS, PERMISSION_GROUPS, type Role, type Permission } from '@/lib/permissions';
+import { useRolePermissions, useUpdateRolePermissions } from '@/hooks/useRolePermissions';
 
 const roles: { key: Role; label: string; locked?: boolean }[] = [
   { key: 'SUPER_ADMIN', label: 'Super Admin', locked: true },
@@ -119,8 +30,19 @@ const roleColors: Record<Role, string> = {
 
 export default function RolesPage() {
   const router = useRouter();
+  const { data, isLoading } = useRolePermissions();
+  const updateRoles = useUpdateRolePermissions();
   const [matrix, setMatrix] = useState<Record<Role, Permission[]>>({ ...ROLE_PERMISSIONS });
   const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    if (!data) return;
+    const next: Record<Role, Permission[]> = { ...ROLE_PERMISSIONS };
+    data.forEach((r) => {
+      next[r.role] = r.permissions;
+    });
+    setMatrix(next);
+  }, [data]);
 
   const toggle = (role: Role, perm: Permission) => {
     const locked = roles.find((r) => r.key === role)?.locked;
@@ -136,9 +58,16 @@ export default function RolesPage() {
   const has = (role: Role, perm: Permission) => matrix[role].includes(perm);
 
   const handleSave = () => {
-    // In production: POST to /api/v1/settings/permissions
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+    const payload = roles
+      .filter((r) => !r.locked)
+      .map((r) => ({ role: r.key, permissions: matrix[r.key] }));
+
+    updateRoles.mutate(payload, {
+      onSuccess: () => {
+        setSaved(true);
+        setTimeout(() => setSaved(false), 3000);
+      },
+    });
   };
 
   return (
@@ -158,9 +87,12 @@ export default function RolesPage() {
         </div>
         <button
           onClick={handleSave}
+          disabled={updateRoles.isPending}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${saved ? 'bg-emerald-600 text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}
         >
-          {saved ? (
+          {updateRoles.isPending ? (
+            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+          ) : saved ? (
             <>
               <Check size={14} /> Saved!
             </>
@@ -180,18 +112,29 @@ export default function RolesPage() {
         </p>
       </div>
 
+      <div className="flex items-start gap-3 bg-blue-500/10 border border-blue-500/20 rounded-xl px-4 py-3">
+        <Info size={15} className="text-blue-400 shrink-0 mt-0.5" />
+        <p className="text-sm text-blue-300">
+          These are baseline permissions per role. You can still grant or deny specific users in
+          HR → Permissions.
+        </p>
+      </div>
+
       {/* Matrix table */}
-      <div className="bg-[#161b27] border border-[#1e2536] rounded-xl overflow-x-auto">
+      <div className="bg-[#161b27] border border-[#1e2536] rounded-xl overflow-x-auto max-h-[70vh]">
+        {isLoading && (
+          <div className="px-5 py-3 text-sm text-slate-500">Loading role permissions...</div>
+        )}
         <table className="w-full min-w-[900px]">
-          <thead className="border-b border-[#1e2536] bg-[#0f1117]/50">
+          <thead className="border-b border-[#1e2536] bg-[#0f1117]/95 sticky top-0 z-10 backdrop-blur">
             <tr>
-              <th className="text-xs text-slate-500 uppercase tracking-wider font-medium px-5 py-4 text-left w-48">
+              <th className="text-xs text-slate-500 uppercase tracking-wider font-medium px-5 py-4 text-left w-48 sticky top-0 bg-[#0f1117]/95">
                 Permission
               </th>
               {roles.map((r) => (
                 <th
                   key={r.key}
-                  className="text-xs font-semibold px-3 py-4 text-center min-w-[90px]"
+                  className="text-xs font-semibold px-3 py-4 text-center min-w-[90px] sticky top-0 bg-[#0f1117]/95"
                 >
                   <div className="flex flex-col items-center gap-1">
                     <Shield size={13} className={roleColors[r.key]} />
@@ -207,8 +150,8 @@ export default function RolesPage() {
             </tr>
           </thead>
           <tbody>
-            {permissionGroups.map((group) => (
-              <>
+            {PERMISSION_GROUPS.map((group) => (
+              <Fragment key={group.key}>
                 {/* Group header */}
                 <tr
                   key={`group-${group.label}`}
@@ -221,7 +164,7 @@ export default function RolesPage() {
                   </td>
                 </tr>
                 {/* Permission rows */}
-                {group.perms.map(({ key, label }) => (
+                {group.permissions.map(({ key, label }) => (
                   <tr
                     key={key}
                     className="border-b border-[#1e2536] last:border-0 hover:bg-white/[0.01] transition-colors"
@@ -256,7 +199,7 @@ export default function RolesPage() {
                     })}
                   </tr>
                 ))}
-              </>
+              </Fragment>
             ))}
           </tbody>
         </table>

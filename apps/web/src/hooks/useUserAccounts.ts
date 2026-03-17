@@ -1,0 +1,121 @@
+'use client';
+
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import api from '@/lib/api';
+import openToast from '@/components/ToastComponent';
+
+export type UserAccount = {
+  id: string;
+  staffId: string | null;
+  staffName: string;
+  firstName: string | null;
+  lastName: string | null;
+  employeeCode: string | null;
+  username: string;
+  email: string;
+  role: string;
+  status: 'Active' | 'Suspended' | 'Pending';
+  lastLogin: string | null;
+  createdAt: string;
+  department: string | null;
+  position: string | null;
+  permissionGrants: string[];
+  permissionDenies: string[];
+};
+
+export type UserAccountInput = {
+  email: string;
+  password: string;
+  role: string;
+  firstName: string;
+  lastName: string;
+  department: string;
+  position: string;
+  employeeCode: string;
+  phone?: string;
+};
+
+export type UserAccountUpdate = Partial<{
+  email: string;
+  role: string;
+  isActive: boolean;
+  firstName: string;
+  lastName: string;
+  department: string;
+  position: string;
+  employeeCode: string;
+  phone: string;
+}>;
+
+export function useUserAccounts(search?: string) {
+  return useQuery<UserAccount[]>({
+    queryKey: ['user-accounts', search],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (search) params.set('search', search);
+      const { data } = await api.get(`/users?${params}`);
+      return data;
+    },
+  });
+}
+
+export function useCreateUserAccount() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: UserAccountInput) => api.post('/users', dto).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['user-accounts'] });
+      openToast('success', 'Account created');
+    },
+    onError: (e: any) => openToast('error', e?.response?.data?.message ?? 'Create failed'),
+  });
+}
+
+export function useUpdateUserAccount(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: UserAccountUpdate) => api.patch(`/users/${id}`, dto).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['user-accounts'] });
+      openToast('success', 'Account updated');
+    },
+    onError: (e: any) => openToast('error', e?.response?.data?.message ?? 'Update failed'),
+  });
+}
+
+export function useResetUserPassword(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (password: string) => api.patch(`/users/${id}/reset-password`, { password }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['user-accounts'] });
+      openToast('success', 'Password reset');
+    },
+    onError: (e: any) => openToast('error', e?.response?.data?.message ?? 'Reset failed'),
+  });
+}
+
+export function useDeleteUserAccount() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete(`/users/${id}`).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['user-accounts'] });
+      openToast('success', 'Account disabled');
+    },
+    onError: (e: any) => openToast('error', e?.response?.data?.message ?? 'Delete failed'),
+  });
+}
+
+export function useUpdateUserPermissions(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: { grants: string[]; denies: string[] }) =>
+      api.patch(`/users/${id}/permissions`, dto).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['user-accounts'] });
+      openToast('success', 'Permissions updated');
+    },
+    onError: (e: any) => openToast('error', e?.response?.data?.message ?? 'Update failed'),
+  });
+}

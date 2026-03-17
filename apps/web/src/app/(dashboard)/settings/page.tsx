@@ -83,9 +83,9 @@ const sections = [
     bg: 'bg-pink-500/10 border-pink-500/20',
   },
   {
-    label: 'User Accounts',
+    label: 'User Account',
     description: 'Create logins and assign roles to staff',
-    href: '/settings/users',
+    href: '/profile',
     icon: Users,
     color: 'text-slate-400',
     bg: 'bg-slate-500/10 border-slate-500/20',

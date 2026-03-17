@@ -15,6 +15,14 @@ import { ReportsModule } from './modules/reports/reports.module';
 import { FacilitiesModule } from './modules/facilities/facilities.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { FloorsModule } from './modules/floors/floors.module';
+import { HotelsModule } from './modules/hotels/hotels.module';
+import { DepartmentsModule } from './modules/departments/departments.module';
+import { InventoryCategoriesModule } from './modules/inventory-categories/inventory-categories.module';
+import { SuppliersModule } from './modules/suppliers/suppliers.module';
+import { ShiftsModule } from './modules/shifts/shifts.module';
+import { RoomTypesModule } from './modules/room-types/room-types.module';
+import { PermissionsModule } from './modules/permissions/permissions.module';
+import { PermissionsGuard } from './modules/auth/guards';
 
 @Module({
   imports: [
@@ -34,6 +42,14 @@ import { FloorsModule } from './modules/floors/floors.module';
     ReportsModule,
     FacilitiesModule,
     FloorsModule,
+    HotelsModule,
+    DepartmentsModule,
+    InventoryCategoriesModule,
+    SuppliersModule,
+    ShiftsModule,
+    RoomTypesModule,
+    PermissionsModule,
   ],
+  providers: [PermissionsGuard],
 })
 export class AppModule {}

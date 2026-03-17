@@ -50,6 +50,7 @@ const nav: NavEntry[] = [
   { label: 'Guests', href: '/guests', icon: Users },
   { label: 'Staff', href: '/staff', icon: UserCheck },
   { label: 'Attendance', href: '/attendance', icon: Clock },
+  { label: 'Clock', href: '/clock', icon: Clock },
   { label: 'POS / Store', href: '/pos', icon: ShoppingCart },
   { label: 'Inventory', href: '/inventory', icon: Package },
   { label: 'Housekeeping', href: '/housekeeping', icon: Sparkles },
@@ -88,7 +89,7 @@ const nav: NavEntry[] = [
     permission: 'view:staff',
     children: [
       { label: 'User Accounts', href: '/hr/accounts', icon: UserCog },
-      { label: 'User Permissions', href: '/hr/permissions', icon: Shield },
+      { label: 'Permissions', href: '/hr/permissions', icon: Shield },
       { label: 'Contracts', href: '/hr/contracts', icon: FileText },
       { label: 'Payroll', href: '/hr/payroll', icon: Receipt },
     ],
@@ -100,7 +101,7 @@ export default function Sidebar() {
   const hotel = useAppStore((s) => s.hotel);
   const logout = useAuthStore((s) => s.logout);
   const hydrated = useHydration();
-  const { canNav, can } = usePermissions();
+  const { canNav, can, ready } = usePermissions();
 
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
     const init: Record<string, boolean> = {};
@@ -154,73 +155,81 @@ export default function Sidebar() {
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-        {nav.map((item) => {
-          if (isGroup(item)) {
+        {!ready && (
+          <div className="space-y-2">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="h-9 rounded-lg bg-[#1e2536] animate-pulse" />
+            ))}
+          </div>
+        )}
+        {ready &&
+          nav.map((item) => {
+            if (isGroup(item)) {
+              if (!canNav(item.href)) return null;
+              const open = !!openGroups[item.href];
+              const groupActive = item.children.some((c) => isActive(c.href));
+              const Icon = item.icon;
+              return (
+                <div key={item.href}>
+                  <button
+                    onClick={() => toggleGroup(item.href)}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ${
+                      groupActive
+                        ? 'bg-blue-600/20 text-blue-400  border-blue-500/20'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+                    }`}
+                  >
+                    <Icon size={16} strokeWidth={groupActive ? 2 : 1.5} />
+                    <span className="flex-1 text-left">{item.label}</span>
+                    <ChevronDown
+                      size={14}
+                      className={`transition-transform duration-200 ${open ? 'rotate-180' : ''} ${groupActive ? 'text-blue-400' : 'text-slate-600'}`}
+                    />
+                  </button>
+                  {open && (
+                    <div className="mt-0.5 ml-3 pl-3 border-l border-[#1e2536] space-y-0.5">
+                      {item.children.map((child) => {
+                        const CIcon = child.icon;
+                        const active = isActive(child.href);
+                        return (
+                          <Link
+                            key={child.href}
+                            href={child.href}
+                            className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-150 ${
+                              active
+                                ? 'bg-blue-600/20 text-blue-400 font-medium'
+                                : 'text-slate-500 hover:text-slate-200 hover:bg-white/5'
+                            }`}
+                          >
+                            <CIcon size={14} strokeWidth={active ? 2 : 1.5} />
+                            {child.label}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
             if (!canNav(item.href)) return null;
-            const open = !!openGroups[item.href];
-            const groupActive = item.children.some((c) => isActive(c.href));
+            const active = isActive(item.href);
             const Icon = item.icon;
             return (
-              <div key={item.href}>
-                <button
-                  onClick={() => toggleGroup(item.href)}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ${
-                    groupActive
-                      ? 'bg-blue-600/20 text-blue-400  border-blue-500/20'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
-                  }`}
-                >
-                  <Icon size={16} strokeWidth={groupActive ? 2 : 1.5} />
-                  <span className="flex-1 text-left">{item.label}</span>
-                  <ChevronDown
-                    size={14}
-                    className={`transition-transform duration-200 ${open ? 'rotate-180' : ''} ${groupActive ? 'text-blue-400' : 'text-slate-600'}`}
-                  />
-                </button>
-                {open && (
-                  <div className="mt-0.5 ml-3 pl-3 border-l border-[#1e2536] space-y-0.5">
-                    {item.children.map((child) => {
-                      const CIcon = child.icon;
-                      const active = isActive(child.href);
-                      return (
-                        <Link
-                          key={child.href}
-                          href={child.href}
-                          className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-150 ${
-                            active
-                              ? 'bg-blue-600/20 text-blue-400 font-medium'
-                              : 'text-slate-500 hover:text-slate-200 hover:bg-white/5'
-                          }`}
-                        >
-                          <CIcon size={14} strokeWidth={active ? 2 : 1.5} />
-                          {child.label}
-                        </Link>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 border ${
+                  active
+                    ? 'bg-blue-600/20 text-blue-400 border-blue-500/20'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-white/5 border-transparent'
+                }`}
+              >
+                <Icon size={16} strokeWidth={active ? 2 : 1.5} />
+                {item.label}
+              </Link>
             );
-          }
-
-          if (!canNav(item.href)) return null;
-          const active = isActive(item.href);
-          const Icon = item.icon;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 border ${
-                active
-                  ? 'bg-blue-600/20 text-blue-400 border-blue-500/20'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-white/5 border-transparent'
-              }`}
-            >
-              <Icon size={16} strokeWidth={active ? 2 : 1.5} />
-              {item.label}
-            </Link>
-          );
-        })}
+          })}
       </nav>
 
       {/* Settings + Logout */}

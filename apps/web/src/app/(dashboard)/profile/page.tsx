@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   User,
   Lock,
@@ -20,25 +20,14 @@ import {
   Camera,
   Check,
   X,
+  Copy,
 } from 'lucide-react';
+import { useMe, useResetAttendancePin, useUpdateMe } from '@/hooks/useMe';
+import { useAuthStore } from '@/store/auth.store';
+import openToast from '@/components/ToastComponent';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 type Tab = 'profile' | 'password' | 'notifications' | 'sessions';
-
-// ─── Mock current user ─────────────────────────────────────────────────────────
-const currentUser = {
-  id: 'a1',
-  name: 'Blessing Adeyemi',
-  username: 'blessing.a',
-  email: 'blessing.a@hotelOS.com',
-  phone: '+234 801 234 5678',
-  role: 'MANAGER',
-  department: 'Management',
-  position: 'Hotel Manager',
-  joinDate: '2022-01-15',
-  lastLogin: '2026-03-12 08:02',
-  avatar: null as string | null,
-};
 
 const activeSessions = [
   {
@@ -76,6 +65,58 @@ const roleColors: Record<string, string> = {
   CASHIER: 'text-amber-400 bg-amber-500/15 border-amber-500/30',
   BARTENDER: 'text-orange-400 bg-orange-500/15 border-orange-500/30',
   STAFF: 'text-slate-400 bg-slate-500/15 border-slate-500/30',
+};
+
+type LiveUser = {
+  id: string;
+  name: string;
+  username: string;
+  email: string;
+  phone: string;
+  role: string;
+  department: string;
+  position: string;
+  employeeCode: string;
+  attendancePinSet: boolean;
+  joinDate: string;
+  lastLogin: string;
+  avatar: string | null;
+};
+
+const emptyUser: LiveUser = {
+  id: '',
+  name: '—',
+  username: '—',
+  email: '—',
+  phone: '',
+  role: 'STAFF',
+  department: '—',
+  position: '—',
+  employeeCode: '—',
+  attendancePinSet: false,
+  joinDate: '—',
+  lastLogin: '—',
+  avatar: null,
+};
+
+const formatDate = (value?: string | Date | null) => {
+  if (!value) return '—';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('en-NG', { year: 'numeric', month: 'short', day: 'numeric' });
+};
+
+const formatDateTime = (value?: string | Date | null) => {
+  if (!value) return '—';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleString('en-NG', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 };
 
 // ─── Shared input ──────────────────────────────────────────────────────────────
@@ -133,7 +174,7 @@ function TabBtn({
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${active ? 'bg-blue-600/20 text-blue-400 border border-blue-500/20' : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'}`}
+      className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium whitespace-nowrap transition-all border ${active ? 'bg-blue-600/20 text-blue-400 border-blue-500/20' : 'text-slate-400 hover:text-slate-200 hover:bg-white/5 border-transparent'}`}
     >
       <Icon size={14} />
       {label}
@@ -142,25 +183,108 @@ function TabBtn({
 }
 
 // ─── Profile Tab ──────────────────────────────────────────────────────────────
-function ProfileTab() {
+function ProfileTab({ user }: { user: LiveUser }) {
   const [form, setForm] = useState({
-    name: currentUser.name,
-    email: currentUser.email,
-    phone: currentUser.phone,
+    name: user.name,
+    email: user.email,
+    phone: user.phone,
   });
-  const [saving, setSaving] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(user.avatar ?? null);
+  const [pinReveal, setPinReveal] = useState<string | null>(null);
+  const [pinCopied, setPinCopied] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const updateMe = useUpdateMe();
+  const resetPin = useResetAttendancePin();
+
+  useEffect(() => {
+    setForm({
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+    });
+    setAvatarPreview(user.avatar ?? null);
+  }, [user.name, user.email, user.phone, user.avatar]);
+
   const initials = form.name
     .split(' ')
+    .filter(Boolean)
     .map((n) => n[0])
     .join('');
 
   const handleSave = async () => {
-    setSaving(true);
-    await new Promise((r) => setTimeout(r, 600));
-    setSaving(false);
-    setToast('Profile updated successfully');
-    setTimeout(() => setToast(null), 3000);
+    try {
+      await updateMe.mutateAsync({
+        name: form.name,
+        email: form.email,
+        phone: form.phone,
+        avatar: avatarPreview,
+      });
+      setToast({ msg: 'Profile updated successfully', type: 'success' });
+      openToast('success', 'Profile updated successfully');
+    } catch (err: any) {
+      const msg = err?.response?.data?.message ?? 'Update failed';
+      setToast({ msg, type: 'error' });
+      openToast('error', msg);
+    } finally {
+      setTimeout(() => setToast(null), 3000);
+    }
+  };
+
+  const handleAvatarClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleAvatarChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setToast({ msg: 'Please select an image file', type: 'error' });
+      openToast('error', 'Please select an image file');
+      setTimeout(() => setToast(null), 3000);
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setToast({ msg: 'Avatar must be under 2MB', type: 'error' });
+      openToast('error', 'Avatar must be under 2MB');
+      setTimeout(() => setToast(null), 3000);
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setAvatarPreview(String(reader.result));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleResetPin = async () => {
+    try {
+      const res = await resetPin.mutateAsync();
+      setPinReveal(res?.pin ?? null);
+      setPinCopied(false);
+      setToast({ msg: 'New PIN generated', type: 'success' });
+      openToast('success', 'New PIN generated');
+    } catch (err: any) {
+      const msg = err?.response?.data?.message ?? 'Failed to reset PIN';
+      setToast({ msg, type: 'error' });
+      openToast('error', msg);
+    } finally {
+      setTimeout(() => setToast(null), 3000);
+    }
+  };
+
+  const handleCopyPin = async () => {
+    if (!pinReveal) return;
+    try {
+      await navigator.clipboard.writeText(pinReveal);
+      setPinCopied(true);
+      setTimeout(() => setPinCopied(false), 2000);
+    } catch {
+      setToast({ msg: 'Copy failed', type: 'error' });
+      openToast('error', 'Failed to copy PIN');
+      setTimeout(() => setToast(null), 3000);
+    }
   };
 
   return (
@@ -172,22 +296,40 @@ function ProfileTab() {
         </p>
         <div className="flex items-center gap-5">
           <div className="relative shrink-0">
-            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-500/40 to-violet-500/40 border-2 border-white/10 flex items-center justify-center text-2xl font-bold text-white">
-              {initials}
-            </div>
-            <button className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-blue-600 border-2 border-[#161b27] flex items-center justify-center hover:bg-blue-500 transition-colors">
+            {avatarPreview ? (
+              <img
+                src={avatarPreview}
+                alt="Profile avatar"
+                className="w-20 h-20 rounded-full border-2 border-white/10 object-cover"
+              />
+            ) : (
+              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-500/40 to-violet-500/40 border-2 border-white/10 flex items-center justify-center text-2xl font-bold text-white">
+                {initials}
+              </div>
+            )}
+            <button
+              onClick={handleAvatarClick}
+              className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-blue-600 border-2 border-[#161b27] flex items-center justify-center hover:bg-blue-500 transition-colors"
+            >
               <Camera size={12} className="text-white" />
             </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleAvatarChange}
+            />
           </div>
           <div>
             <p className="text-sm font-semibold text-white">{form.name}</p>
             <p className="text-xs text-slate-500 mt-0.5">
-              {currentUser.position} · {currentUser.department}
+              {user.position} · {user.department}
             </p>
             <span
-              className={`text-xs px-2.5 py-0.5 rounded-full font-medium border mt-2 inline-block ${roleColors[currentUser.role]}`}
+              className={`text-xs px-2.5 py-0.5 rounded-full font-medium border mt-2 inline-block ${roleColors[user.role] ?? roleColors.STAFF}`}
             >
-              {currentUser.role}
+              {user.role}
             </span>
           </div>
         </div>
@@ -207,7 +349,7 @@ function ProfileTab() {
             />
           </Field>
           <Field label="Username" hint="Username cannot be changed">
-            <div className={disabledCls}>{currentUser.username}</div>
+            <div className={disabledCls}>{user.username}</div>
           </Field>
           <Field label="Email Address">
             <input
@@ -235,10 +377,12 @@ function ProfileTab() {
         </p>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           {[
-            { label: 'Role', value: currentUser.role },
-            { label: 'Department', value: currentUser.department },
-            { label: 'Position', value: currentUser.position },
-            { label: 'Joined', value: currentUser.joinDate },
+            { label: 'Role', value: user.role },
+            { label: 'Department', value: user.department },
+            { label: 'Position', value: user.position },
+            { label: 'Joined', value: user.joinDate },
+            { label: 'Employee Code', value: user.employeeCode },
+            { label: 'Attendance PIN', value: user.attendancePinSet ? 'PIN set' : 'Not set' },
           ].map(({ label, value }) => (
             <div key={label}>
               <p className="text-xs text-slate-600 mb-1">{label}</p>
@@ -246,15 +390,45 @@ function ProfileTab() {
             </div>
           ))}
         </div>
+        <div className="mt-5 flex flex-wrap items-center gap-3">
+          <button
+            onClick={handleResetPin}
+            disabled={resetPin.isPending}
+            className="flex items-center gap-2 text-xs font-semibold px-3 py-2 rounded-lg border border-[#1e2536] bg-[#0f1117] hover:bg-white/5 text-slate-300 transition-colors disabled:opacity-70"
+          >
+            {resetPin.isPending ? (
+              <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : (
+              <Pencil size={12} />
+            )}
+            Reset Attendance PIN
+          </button>
+          <p className="text-xs text-slate-600">
+            This will generate a new PIN. You can only view it once.
+          </p>
+        </div>
+
+        {pinReveal && (
+          <div className="mt-4 bg-[#0f1117] border border-emerald-500/20 rounded-lg p-3 flex items-center gap-3">
+            <div className="text-xs text-emerald-300 font-semibold">New PIN</div>
+            <div className="text-lg font-mono text-emerald-200 tracking-widest">{pinReveal}</div>
+            <button
+              onClick={handleCopyPin}
+              className="ml-auto flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-md border border-emerald-500/30 text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 transition-colors"
+            >
+              <Copy size={12} /> {pinCopied ? 'Copied' : 'Copy'}
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="flex justify-end">
         <button
           onClick={handleSave}
-          disabled={saving}
+          disabled={updateMe.isPending}
           className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-70 text-white px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors"
         >
-          {saving ? (
+          {updateMe.isPending ? (
             <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
           ) : (
             <Save size={14} />
@@ -263,7 +437,7 @@ function ProfileTab() {
         </button>
       </div>
 
-      {toast && <Toast msg={toast} type="success" />}
+      {toast && <Toast msg={toast.msg} type={toast.type} />}
     </div>
   );
 }
@@ -292,15 +466,20 @@ function PasswordTab() {
 
   const handleSave = async () => {
     if (!form.current) return setToast({ msg: 'Enter your current password', type: 'error' });
-    if (form.newPw.length < 8)
+    if (form.newPw.length < 8) {
+      openToast('error', 'Password must be at least 8 characters');
       return setToast({ msg: 'Password must be at least 8 characters', type: 'error' });
-    if (form.newPw !== form.confirm)
+    }
+    if (form.newPw !== form.confirm) {
+      openToast('error', 'Passwords do not match');
       return setToast({ msg: 'Passwords do not match', type: 'error' });
+    }
     setSaving(true);
     await new Promise((r) => setTimeout(r, 700));
     setSaving(false);
     setForm({ current: '', newPw: '', confirm: '' });
     setToast({ msg: 'Password changed successfully', type: 'success' });
+    openToast('success', 'Password changed successfully');
     setTimeout(() => setToast(null), 3000);
   };
 
@@ -537,7 +716,7 @@ function NotificationsTab() {
 }
 
 // ─── Sessions Tab ─────────────────────────────────────────────────────────────
-function SessionsTab() {
+function SessionsTab({ lastLogin }: { lastLogin: string }) {
   const [sessions, setSessions] = useState(activeSessions);
 
   const revokeSession = (id: string) =>
@@ -623,9 +802,7 @@ function SessionsTab() {
         </div>
         <div>
           <p className="text-xs text-slate-500">Last successful login</p>
-          <p className="text-sm font-medium text-slate-200">
-            {currentUser.lastLogin} · Lagos, Nigeria
-          </p>
+          <p className="text-sm font-medium text-slate-200">{lastLogin} · Lagos, Nigeria</p>
         </div>
       </div>
     </div>
@@ -635,9 +812,33 @@ function SessionsTab() {
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 export default function MyAccountPage() {
   const [tab, setTab] = useState<Tab>('profile');
+  const { user: storeUser } = useAuthStore();
+  const { data, isLoading } = useMe();
+
+  const currentUser = useMemo<LiveUser>(() => {
+    const u = data?.user ?? storeUser;
+    if (!u) return emptyUser;
+
+    return {
+      id: u.id ?? '',
+      name: u.name ?? '—',
+      username: u.username ?? (u.email?.includes('@') ? u.email.split('@')[0] : (u.email ?? '—')),
+      email: u.email ?? '—',
+      phone: u.phone ?? '',
+      role: u.role ?? 'STAFF',
+      department: u.department ?? '—',
+      position: u.position ?? '—',
+      employeeCode: u.employeeCode ?? '—',
+      attendancePinSet: u.attendancePinSet ?? false,
+      joinDate: formatDate(u.joinDate),
+      lastLogin: formatDateTime(u.lastLoginAt),
+      avatar: u.avatar ?? null,
+    };
+  }, [data?.user, storeUser]);
 
   const initials = currentUser.name
     .split(' ')
+    .filter(Boolean)
     .map((n) => n[0])
     .join('');
 
@@ -645,19 +846,29 @@ export default function MyAccountPage() {
     <div className="space-y-6 max-w-3xl">
       {/* Header */}
       <div className="flex items-center gap-4">
-        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500/40 to-violet-500/40 border border-white/10 flex items-center justify-center text-xl font-bold text-white shrink-0">
-          {initials}
-        </div>
+        {currentUser?.avatar ? (
+          <img
+            src={currentUser.avatar}
+            alt="User Avatar"
+            className="w-14 h-14 rounded-full object-cover"
+          />
+        ) : (
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500/40 to-violet-500/40 border border-white/10 flex items-center justify-center text-xl font-bold text-white shrink-0">
+            {initials}
+          </div>
+        )}
+
         <div>
           <h1 className="text-2xl font-bold text-white tracking-tight">{currentUser.name}</h1>
           <div className="flex items-center gap-2 mt-0.5 flex-wrap">
             <p className="text-slate-500 text-sm">{currentUser.position}</p>
             <span className="text-slate-700">·</span>
             <span
-              className={`text-xs px-2 py-0.5 rounded-full font-medium border ${roleColors[currentUser.role]}`}
+              className={`text-xs px-2 py-0.5 rounded-full font-medium border ${roleColors[currentUser.role] ?? roleColors.STAFF}`}
             >
               {currentUser.role}
             </span>
+            {isLoading && <span className="text-xs text-slate-600">Loading...</span>}
           </div>
         </div>
       </div>
@@ -695,10 +906,10 @@ export default function MyAccountPage() {
       </div>
 
       {/* Tab content */}
-      {tab === 'profile' && <ProfileTab />}
+      {tab === 'profile' && <ProfileTab user={currentUser} />}
       {tab === 'password' && <PasswordTab />}
       {tab === 'notifications' && <NotificationsTab />}
-      {tab === 'sessions' && <SessionsTab />}
+      {tab === 'sessions' && <SessionsTab lastLogin={currentUser.lastLogin} />}
     </div>
   );
 }

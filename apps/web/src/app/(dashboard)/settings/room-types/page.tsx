@@ -3,18 +3,13 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Plus, Pencil, Trash2, X, BedDouble, Check } from 'lucide-react';
-
-type RoomType = {
-  id: string;
-  name: string;
-  description: string;
-  baseRate: number;
-  capacity: number;
-  beds: string;
-  amenities: string[];
-  color: string;
-  count: number;
-};
+import {
+  useCreateRoomType,
+  useDeleteRoomType,
+  useRoomTypes,
+  useUpdateRoomType,
+  type RoomTypeConfig,
+} from '@/hooks/useRoomTypes';
 
 const colorOptions = [
   'bg-blue-500',
@@ -38,83 +33,14 @@ const allAmenities = [
   'Bathtub',
 ];
 
-const initRoomTypes: RoomType[] = [
-  {
-    id: 'rt1',
-    name: 'Standard',
-    description: 'Comfortable room with essential amenities',
-    baseRate: 150,
-    capacity: 2,
-    beds: '1 Queen',
-    amenities: ['WiFi', 'AC', 'TV'],
-    color: 'bg-slate-500',
-    count: 12,
-  },
-  {
-    id: 'rt2',
-    name: 'Deluxe',
-    description: 'Spacious room with premium furnishings',
-    baseRate: 220,
-    capacity: 2,
-    beds: '1 King',
-    amenities: ['WiFi', 'AC', 'TV', 'Mini Bar', 'Safe'],
-    color: 'bg-blue-500',
-    count: 8,
-  },
-  {
-    id: 'rt3',
-    name: 'Suite',
-    description: 'Luxurious suite with separate living area',
-    baseRate: 380,
-    capacity: 3,
-    beds: '1 King + Sofa',
-    amenities: ['WiFi', 'AC', 'TV', 'Mini Bar', 'Balcony', 'Jacuzzi', 'Safe'],
-    color: 'bg-violet-500',
-    count: 6,
-  },
-  {
-    id: 'rt4',
-    name: 'Presidential',
-    description: 'Ultimate luxury with panoramic views',
-    baseRate: 800,
-    capacity: 4,
-    beds: '2 King',
-    amenities: [
-      'WiFi',
-      'AC',
-      'TV',
-      'Mini Bar',
-      'Balcony',
-      'Sea View',
-      'Jacuzzi',
-      'Kitchen',
-      'Safe',
-      'Bathtub',
-    ],
-    color: 'bg-amber-500',
-    count: 2,
-  },
-  {
-    id: 'rt5',
-    name: 'Family',
-    description: 'Large room designed for families',
-    baseRate: 280,
-    capacity: 5,
-    beds: '1 King + 2 Single',
-    amenities: ['WiFi', 'AC', 'TV', 'Safe'],
-    color: 'bg-emerald-500',
-    count: 4,
-  },
-];
-
 function RoomTypeModal({
   rt,
   onClose,
   onSave,
 }: {
-  rt?: RoomType;
+  rt?: RoomTypeConfig;
   onClose: () => void;
-  onSave: (d: Omit<RoomType, 'id' | 'count'>) => void;
+  onSave: (d: Omit<RoomTypeConfig, 'id' | 'count'>) => void;
 }) {
   const [form, setForm] = useState({
     name: rt?.name ?? '',
@@ -257,16 +183,32 @@ function RoomTypeModal({
 
 export default function RoomTypesPage() {
   const router = useRouter();
-  const [roomTypes, setRoomTypes] = useState<RoomType[]>(initRoomTypes);
-  const [modal, setModal] = useState<{ open: boolean; rt?: RoomType }>({ open: false });
+  const [modal, setModal] = useState<{ open: boolean; rt?: RoomTypeConfig }>({ open: false });
+  const { data: roomTypes = [], isLoading } = useRoomTypes();
+  const createRoomType = useCreateRoomType();
+  const updateRoomType = useUpdateRoomType(modal.rt?.id ?? '');
+  const deleteRoomType = useDeleteRoomType();
 
-  const save = (data: Omit<RoomType, 'id' | 'count'>) => {
-    if (modal.rt) {
-      setRoomTypes((r) => r.map((x) => (x.id === modal.rt!.id ? { ...x, ...data } : x)));
-    } else {
-      setRoomTypes((r) => [...r, { ...data, id: Date.now().toString(), count: 0 }]);
+  const save = async (data: Omit<RoomTypeConfig, 'id' | 'count'>) => {
+    try {
+      if (modal.rt) {
+        await updateRoomType.mutateAsync(data);
+      } else {
+        await createRoomType.mutateAsync(data);
+      }
+      setModal({ open: false });
+    } catch {
+      // handled by toast
     }
-    setModal({ open: false });
+  };
+
+  const remove = async (id: string) => {
+    if (!confirm('Delete this room type?')) return;
+    try {
+      await deleteRoomType.mutateAsync(id);
+    } catch {
+      // handled by toast
+    }
   };
 
   return (
@@ -293,11 +235,20 @@ export default function RoomTypesPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {roomTypes.map((rt) => (
-          <div
-            key={rt.id}
-            className="bg-[#161b27] border border-[#1e2536] hover:border-slate-600 rounded-xl p-5 transition-colors"
-          >
+        {isLoading ? (
+          <div className="bg-[#161b27] border border-[#1e2536] rounded-xl p-5 text-slate-500 text-sm">
+            Loading room types…
+          </div>
+        ) : roomTypes.length === 0 ? (
+          <div className="bg-[#161b27] border border-[#1e2536] rounded-xl p-5 text-slate-500 text-sm">
+            No room types yet
+          </div>
+        ) : (
+          roomTypes.map((rt) => (
+            <div
+              key={rt.id}
+              className="bg-[#161b27] border border-[#1e2536] hover:border-slate-600 rounded-xl p-5 transition-colors"
+            >
             <div className="flex items-start justify-between mb-3">
               <div className="flex items-center gap-3">
                 <div
@@ -318,7 +269,7 @@ export default function RoomTypesPage() {
                   <Pencil size={13} />
                 </button>
                 <button
-                  onClick={() => setRoomTypes((r) => r.filter((x) => x.id !== rt.id))}
+                  onClick={() => remove(rt.id)}
                   className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
                 >
                   <Trash2 size={13} />
@@ -352,7 +303,8 @@ export default function RoomTypesPage() {
               ))}
             </div>
           </div>
-        ))}
+        ))
+        )}
       </div>
 
       {modal.open && (

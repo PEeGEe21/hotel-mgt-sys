@@ -25,6 +25,291 @@ async function main() {
   });
   console.log(`✅ Hotel: ${hotel.name}`);
 
+  // ─── Departments ──────────────────────────────────────────────────────────
+  const seedDepartments = [
+    {
+      name: 'Management',
+      description: 'Hotel leadership and administration',
+      color: 'bg-blue-500',
+    },
+    {
+      name: 'Operations',
+      description: 'Day-to-day hotel operations',
+      color: 'bg-violet-500',
+    },
+    {
+      name: 'Front Desk',
+      description: 'Guest check-in, check-out and reception',
+      color: 'bg-amber-500',
+    },
+    {
+      name: 'Housekeeping',
+      description: 'Room cleaning and maintenance',
+      color: 'bg-emerald-500',
+    },
+    {
+      name: 'Finance',
+      description: 'Billing, cashier and financial operations',
+      color: 'bg-orange-500',
+    },
+    {
+      name: 'Security',
+      description: 'Hotel security and safety',
+      color: 'bg-red-500',
+    },
+    {
+      name: 'Maintenance',
+      description: 'Repairs and technical operations',
+      color: 'bg-slate-500',
+    },
+    {
+      name: 'Bar',
+      description: 'Bar operations and beverage service',
+      color: 'bg-pink-500',
+    },
+  ];
+
+  for (const dept of seedDepartments) {
+    await prisma.department.upsert({
+      where: { hotelId_name: { hotelId: hotel.id, name: dept.name } },
+      update: {
+        description: dept.description,
+        color: dept.color,
+      },
+      create: {
+        hotelId: hotel.id,
+        name: dept.name,
+        description: dept.description,
+        color: dept.color,
+      },
+    });
+  }
+  console.log(`✅ ${seedDepartments.length} departments seeded`);
+
+  // ─── Inventory Categories ─────────────────────────────────────────────────
+  const seedCategories = [
+    { name: 'Spirits', description: 'Whiskey, vodka, gin, rum, brandy', color: 'bg-amber-500' },
+    { name: 'Beer', description: 'Lager, stout, ale, cider', color: 'bg-orange-500' },
+    { name: 'Wine', description: 'Red, white, rosé, sparkling', color: 'bg-red-500' },
+    { name: 'Cocktails', description: 'Mixes, syrups, bitters', color: 'bg-pink-500' },
+    { name: 'Soft Drinks', description: 'Juices, sodas, water, energy drinks', color: 'bg-sky-500' },
+    { name: 'Food', description: 'Snacks, bar bites, kitchen items', color: 'bg-emerald-500' },
+  ];
+
+  for (const cat of seedCategories) {
+    await prisma.inventoryCategory.upsert({
+      where: { hotelId_name: { hotelId: hotel.id, name: cat.name } },
+      update: { description: cat.description, color: cat.color },
+      create: {
+        hotelId: hotel.id,
+        name: cat.name,
+        description: cat.description,
+        color: cat.color,
+      },
+    });
+  }
+  console.log(`✅ ${seedCategories.length} inventory categories seeded`);
+
+  // ─── Suppliers ───────────────────────────────────────────────────────────
+  const seedSuppliers = [
+    {
+      name: 'Metro Drinks',
+      contact: 'Olu Adeyinka',
+      phone: '+234 801 555 0001',
+      email: 'olu@metrodrinks.ng',
+      address: 'Lagos, Nigeria',
+      categories: ['Spirits', 'Cocktails', 'Wine'],
+    },
+    {
+      name: 'BrewCo Nigeria',
+      contact: 'Emeka Osu',
+      phone: '+234 802 555 0002',
+      email: 'emeka@brewco.ng',
+      address: 'Onitsha, Nigeria',
+      categories: ['Beer'],
+    },
+    {
+      name: 'Soft Bev Ltd',
+      contact: 'Taiwo Adeleke',
+      phone: '+234 803 555 0003',
+      email: 'taiwo@softbev.ng',
+      address: 'Ibadan, Nigeria',
+      categories: ['Soft Drinks'],
+    },
+    {
+      name: 'Fresh Foods Co',
+      contact: 'Chioma Nwachukwu',
+      phone: '+234 804 555 0004',
+      email: 'chioma@freshfoods.ng',
+      address: 'Port Harcourt, Nigeria',
+      categories: ['Food'],
+      notes: 'Delivers every Mon & Thu morning',
+    },
+  ];
+
+  for (const sup of seedSuppliers) {
+    await prisma.supplier.upsert({
+      where: { hotelId_name: { hotelId: hotel.id, name: sup.name } },
+      update: {
+        contact: sup.contact,
+        phone: sup.phone,
+        email: sup.email,
+        address: sup.address,
+        notes: sup.notes ?? null,
+        categories: sup.categories ?? [],
+      },
+      create: {
+        hotelId: hotel.id,
+        name: sup.name,
+        contact: sup.contact,
+        phone: sup.phone,
+        email: sup.email,
+        address: sup.address,
+        notes: sup.notes ?? null,
+        categories: sup.categories ?? [],
+      },
+    });
+  }
+  console.log(`✅ ${seedSuppliers.length} suppliers seeded`);
+
+  // ─── Shift Templates ──────────────────────────────────────────────────────
+  const seedShifts = [
+    {
+      name: 'Morning',
+      startTime: '07:00',
+      endTime: '15:00',
+      days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+      color: 'bg-amber-500',
+    },
+    {
+      name: 'Evening',
+      startTime: '15:00',
+      endTime: '23:00',
+      days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+      color: 'bg-violet-500',
+    },
+    {
+      name: 'Night',
+      startTime: '23:00',
+      endTime: '07:00',
+      days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+      color: 'bg-slate-500',
+    },
+    {
+      name: 'Half Day',
+      startTime: '08:00',
+      endTime: '13:00',
+      days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
+      color: 'bg-emerald-500',
+    },
+  ];
+
+  for (const shift of seedShifts) {
+    await prisma.shiftTemplate.upsert({
+      where: { hotelId_name: { hotelId: hotel.id, name: shift.name } },
+      update: {
+        startTime: shift.startTime,
+        endTime: shift.endTime,
+        days: shift.days,
+        color: shift.color,
+      },
+      create: {
+        hotelId: hotel.id,
+        name: shift.name,
+        startTime: shift.startTime,
+        endTime: shift.endTime,
+        days: shift.days,
+        color: shift.color,
+      },
+    });
+  }
+  console.log(`✅ ${seedShifts.length} shift templates seeded`);
+
+  // ─── Room Type Configs ────────────────────────────────────────────────────
+  const seedRoomTypes = [
+    {
+      name: 'Standard',
+      description: 'Comfortable room with essential amenities',
+      baseRate: 150,
+      capacity: 2,
+      beds: '1 Queen',
+      amenities: ['WiFi', 'AC', 'TV'],
+      color: 'bg-slate-500',
+    },
+    {
+      name: 'Deluxe',
+      description: 'Spacious room with premium furnishings',
+      baseRate: 220,
+      capacity: 2,
+      beds: '1 King',
+      amenities: ['WiFi', 'AC', 'TV', 'Mini Bar', 'Safe'],
+      color: 'bg-blue-500',
+    },
+    {
+      name: 'Suite',
+      description: 'Luxurious suite with separate living area',
+      baseRate: 380,
+      capacity: 3,
+      beds: '1 King + Sofa',
+      amenities: ['WiFi', 'AC', 'TV', 'Mini Bar', 'Balcony', 'Jacuzzi', 'Safe'],
+      color: 'bg-violet-500',
+    },
+    {
+      name: 'Presidential',
+      description: 'Ultimate luxury with panoramic views',
+      baseRate: 800,
+      capacity: 4,
+      beds: '2 King',
+      amenities: [
+        'WiFi',
+        'AC',
+        'TV',
+        'Mini Bar',
+        'Balcony',
+        'Sea View',
+        'Jacuzzi',
+        'Kitchen',
+        'Safe',
+        'Bathtub',
+      ],
+      color: 'bg-amber-500',
+    },
+    {
+      name: 'Family',
+      description: 'Large room designed for families',
+      baseRate: 280,
+      capacity: 5,
+      beds: '1 King + 2 Single',
+      amenities: ['WiFi', 'AC', 'TV', 'Safe'],
+      color: 'bg-emerald-500',
+    },
+  ];
+
+  for (const rt of seedRoomTypes) {
+    await prisma.roomTypeConfig.upsert({
+      where: { hotelId_name: { hotelId: hotel.id, name: rt.name } },
+      update: {
+        description: rt.description,
+        baseRate: rt.baseRate,
+        capacity: rt.capacity,
+        beds: rt.beds,
+        amenities: rt.amenities,
+        color: rt.color,
+      },
+      create: {
+        hotelId: hotel.id,
+        name: rt.name,
+        description: rt.description,
+        baseRate: rt.baseRate,
+        capacity: rt.capacity,
+        beds: rt.beds,
+        amenities: rt.amenities,
+        color: rt.color,
+      },
+    });
+  }
+  console.log(`✅ ${seedRoomTypes.length} room type configs seeded`);
+
   // ─── Users + Staff ────────────────────────────────────────────────────────
   const seedUsers: Array<{
     email: string;
@@ -120,6 +405,193 @@ async function main() {
 
     console.log(`✅ ${u.role}: ${u.email} / ${u.password}`);
   }
+
+  // ─── Role Permissions ────────────────────────────────────────────────────
+  const rolePermissions: Record<Role, string[]> = {
+    [Role.SUPER_ADMIN]: [
+      'view:dashboard',
+      'view:rooms',
+      'create:rooms',
+      'edit:rooms',
+      'delete:rooms',
+      'view:reservations',
+      'create:reservations',
+      'edit:reservations',
+      'delete:reservations',
+      'checkin:reservations',
+      'checkout:reservations',
+      'view:guests',
+      'create:guests',
+      'edit:guests',
+      'delete:guests',
+      'view:staff',
+      'create:staff',
+      'edit:staff',
+      'delete:staff',
+      'view:attendance',
+      'manage:attendance',
+      'clock:self',
+      'view:pos',
+      'create:pos',
+      'void:pos',
+      'discount:pos',
+      'view:inventory',
+      'create:inventory',
+      'edit:inventory',
+      'delete:inventory',
+      'reorder:inventory',
+      'view:housekeeping',
+      'manage:housekeeping',
+      'view:finance',
+      'create:finance',
+      'edit:finance',
+      'delete:finance',
+      'approve:finance',
+      'view:reports',
+      'export:reports',
+      'view:facilities',
+      'manage:facilities',
+      'view:settings',
+      'manage:settings',
+      'view:hr',
+      'manage:hr',
+      'manage:permissions',
+    ],
+    [Role.ADMIN]: [
+      'view:dashboard',
+      'view:rooms',
+      'create:rooms',
+      'edit:rooms',
+      'delete:rooms',
+      'view:reservations',
+      'create:reservations',
+      'edit:reservations',
+      'delete:reservations',
+      'checkin:reservations',
+      'checkout:reservations',
+      'view:guests',
+      'create:guests',
+      'edit:guests',
+      'delete:guests',
+      'view:staff',
+      'create:staff',
+      'edit:staff',
+      'delete:staff',
+      'view:attendance',
+      'manage:attendance',
+      'clock:self',
+      'view:pos',
+      'create:pos',
+      'void:pos',
+      'discount:pos',
+      'view:inventory',
+      'create:inventory',
+      'edit:inventory',
+      'delete:inventory',
+      'reorder:inventory',
+      'view:housekeeping',
+      'manage:housekeeping',
+      'view:finance',
+      'create:finance',
+      'edit:finance',
+      'approve:finance',
+      'view:reports',
+      'export:reports',
+      'view:facilities',
+      'manage:facilities',
+      'view:settings',
+      'manage:settings',
+      'view:hr',
+      'manage:hr',
+      'manage:permissions',
+    ],
+    [Role.MANAGER]: [
+      'view:dashboard',
+      'view:rooms',
+      'edit:rooms',
+      'view:reservations',
+      'create:reservations',
+      'edit:reservations',
+      'checkin:reservations',
+      'checkout:reservations',
+      'view:guests',
+      'create:guests',
+      'edit:guests',
+      'view:staff',
+      'edit:staff',
+      'view:attendance',
+      'manage:attendance',
+      'clock:self',
+      'view:pos',
+      'create:pos',
+      'void:pos',
+      'discount:pos',
+      'view:inventory',
+      'create:inventory',
+      'edit:inventory',
+      'reorder:inventory',
+      'view:housekeeping',
+      'manage:housekeeping',
+      'view:finance',
+      'create:finance',
+      'edit:finance',
+      'view:reports',
+      'export:reports',
+      'view:facilities',
+      'manage:facilities',
+      'view:settings',
+      'view:hr',
+      'manage:hr',
+    ],
+    [Role.RECEPTIONIST]: [
+      'view:dashboard',
+      'view:rooms',
+      'view:reservations',
+      'create:reservations',
+      'edit:reservations',
+      'checkin:reservations',
+      'checkout:reservations',
+      'view:guests',
+      'create:guests',
+      'edit:guests',
+      'clock:self',
+      'view:pos',
+      'create:pos',
+      'view:facilities',
+    ],
+    [Role.HOUSEKEEPING]: [
+      'view:dashboard',
+      'view:rooms',
+      'view:housekeeping',
+      'manage:housekeeping',
+      'clock:self',
+    ],
+    [Role.CASHIER]: [
+      'view:dashboard',
+      'view:pos',
+      'create:pos',
+      'void:pos',
+      'view:finance',
+      'clock:self',
+    ],
+    [Role.BARTENDER]: [
+      'view:dashboard',
+      'view:pos',
+      'create:pos',
+      'view:inventory',
+      'clock:self',
+    ],
+    [Role.STAFF]: ['view:dashboard', 'clock:self'],
+  };
+
+  for (const role of Object.keys(rolePermissions) as Role[]) {
+    await prisma.rolePermission.upsert({
+      where: { hotelId_role: { hotelId: hotel.id, role } },
+      update: { permissions: rolePermissions[role] },
+      create: { hotelId: hotel.id, role, permissions: rolePermissions[role] },
+    });
+  }
+  console.log(`✅ ${Object.keys(rolePermissions).length} role permissions seeded`);
 
   // ─── Floors ───────────────────────────────────────────────────────────────
   const floorDefs = [

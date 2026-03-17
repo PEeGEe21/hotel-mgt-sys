@@ -15,6 +15,11 @@ export type HotelInfo = {
   logo: string | null;
   email: string;
   phone: string;
+  geofenceEnabled?: boolean;
+  geofenceRadiusMeters?: number;
+  attendancePinRequired?: boolean;
+  attendanceKioskEnabled?: boolean;
+  attendancePersonalEnabled?: boolean;
 };
 
 interface AppState {

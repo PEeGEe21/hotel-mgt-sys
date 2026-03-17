@@ -25,7 +25,6 @@ import {
   DrawerTitle,
   DrawerTrigger,
 } from '@/components/ui/drawer';
-import { DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 export default function TaskDrawer({
   isOpen,
@@ -72,13 +71,13 @@ export default function TaskDrawer({
   return createPortal(
     <Drawer open={isOpen} onOpenChange={() => onClose()} direction="right">
       <DrawerOverlay className="bg-black/50 backdrop-blur-sm data-[state=open]:animate-fadeIn" />
-      <DrawerContent
-        className="w-full max-w-xl sm:!max-w-xl bg-[#161b27] border-l border-[#1e2536] h-full flex flex-col"
-      >
-        <DialogHeader className="flex flex-row items-center justify-between px-5 py-4 border-b border-[#1e2536]">
+      <DrawerContent className="w-full max-w-xl sm:!max-w-xl bg-[#161b27] border-l border-[#1e2536] h-full flex flex-col">
+        <DrawerHeader className="flex flex-row items-center justify-between px-5 py-4 border-b border-[#1e2536]">
           <div className="flex items-center gap-2 text-left">
             <Sparkles size={16} className="text-violet-400" />
-            <DialogTitle className="text-base font-bold text-white">Room {task.room.number}</DialogTitle>
+            <DrawerTitle className="text-base font-bold text-white">
+              Room {task.room.number}
+            </DrawerTitle>
             <span className={`text-xs px-2 py-0.5 rounded-full ${tc.bg} ${tc.color}`}>
               {tc.label}
             </span>
@@ -89,7 +88,7 @@ export default function TaskDrawer({
           >
             <X size={18} />
           </button>
-        </DialogHeader>
+        </DrawerHeader>
 
         <div className="flex-1 overflow-y-auto p-5 space-y-5">
           {/* Status */}

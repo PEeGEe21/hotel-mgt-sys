@@ -3,28 +3,17 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Plus, Pencil, Trash2, X, Building2, Check } from 'lucide-react';
-
-type Department = {
-  id: string;
-  name: string;
-  description: string;
-  headCount: number;
-  color: string;
-};
+import {
+  useCreateDepartment,
+  useDeleteDepartment,
+  useDepartments,
+  useUpdateDepartment,
+  type Department,
+} from '@/hooks/useDepartments';
 
 const colorOptions = [
   'bg-blue-500', 'bg-violet-500', 'bg-emerald-500', 'bg-amber-500',
   'bg-orange-500', 'bg-pink-500', 'bg-sky-500', 'bg-red-500', 'bg-slate-500',
-];
-
-const initDepts: Department[] = [
-  { id: 'd1', name: 'Management', description: 'Hotel leadership and administration', headCount: 2, color: 'bg-blue-500' },
-  { id: 'd2', name: 'Front Desk', description: 'Guest check-in, check-out and reception', headCount: 3, color: 'bg-violet-500' },
-  { id: 'd3', name: 'Housekeeping', description: 'Room cleaning and maintenance', headCount: 4, color: 'bg-emerald-500' },
-  { id: 'd4', name: 'Bar', description: 'Bar operations and beverage service', headCount: 2, color: 'bg-amber-500' },
-  { id: 'd5', name: 'Finance', description: 'Billing, cashier and financial operations', headCount: 2, color: 'bg-orange-500' },
-  { id: 'd6', name: 'Security', description: 'Hotel security and safety', headCount: 3, color: 'bg-red-500' },
-  { id: 'd7', name: 'Maintenance', description: 'Repairs and technical operations', headCount: 2, color: 'bg-slate-500' },
 ];
 
 function DeptModal({ dept, onClose, onSave }: {
@@ -78,19 +67,34 @@ function DeptModal({ dept, onClose, onSave }: {
 
 export default function DepartmentsPage() {
   const router = useRouter();
-  const [depts, setDepts] = useState<Department[]>(initDepts);
   const [modal, setModal] = useState<{ open: boolean; dept?: Department }>({ open: false });
 
-  const save = (data: Omit<Department, 'id' | 'headCount'>) => {
-    if (modal.dept) {
-      setDepts(d => d.map(x => x.id === modal.dept!.id ? { ...x, ...data } : x));
-    } else {
-      setDepts(d => [...d, { ...data, id: Date.now().toString(), headCount: 0 }]);
+  const { data: depts = [], isLoading } = useDepartments();
+  const createDepartment = useCreateDepartment();
+  const updateDepartment = useUpdateDepartment(modal.dept?.id ?? '');
+  const deleteDepartment = useDeleteDepartment();
+
+  const save = async (data: Omit<Department, 'id' | 'headCount'>) => {
+    try {
+      if (modal.dept) {
+        await updateDepartment.mutateAsync(data);
+      } else {
+        await createDepartment.mutateAsync(data);
+      }
+      setModal({ open: false });
+    } catch {
+      // handled by toast
     }
-    setModal({ open: false });
   };
 
-  const remove = (id: string) => setDepts(d => d.filter(x => x.id !== id));
+  const remove = async (id: string) => {
+    if (!confirm('Delete this department?')) return;
+    try {
+      await deleteDepartment.mutateAsync(id);
+    } catch {
+      // handled by toast
+    }
+  };
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -113,31 +117,37 @@ export default function DepartmentsPage() {
 
       <div className="bg-[#161b27] border border-[#1e2536] rounded-xl overflow-hidden">
         <div className="divide-y divide-[#1e2536]">
-          {depts.map(dept => (
-            <div key={dept.id} className="flex items-center justify-between px-5 py-4 hover:bg-white/[0.02] transition-colors">
-              <div className="flex items-center gap-4">
-                <div className={`w-10 h-10 rounded-xl ${dept.color} flex items-center justify-center shrink-0`}>
-                  <Building2 size={16} className="text-white" />
+          {isLoading ? (
+            <div className="px-5 py-10 text-center text-slate-500 text-sm">Loading departments…</div>
+          ) : depts.length === 0 ? (
+            <div className="px-5 py-10 text-center text-slate-500 text-sm">No departments yet</div>
+          ) : (
+            depts.map(dept => (
+              <div key={dept.id} className="flex items-center justify-between px-5 py-4 hover:bg-white/[0.02] transition-colors">
+                <div className="flex items-center gap-4">
+                  <div className={`w-10 h-10 rounded-xl ${dept.color} flex items-center justify-center shrink-0`}>
+                    <Building2 size={16} className="text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-200">{dept.name}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">{dept.description}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-semibold text-slate-200">{dept.name}</p>
-                  <p className="text-xs text-slate-500 mt-0.5">{dept.description}</p>
+                <div className="flex items-center gap-4">
+                  <div className="text-right hidden sm:block">
+                    <p className="text-sm font-bold text-white">{dept.headCount}</p>
+                    <p className="text-xs text-slate-500">staff</p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => setModal({ open: true, dept })}
+                      className="p-2 rounded-lg text-slate-500 hover:text-blue-400 hover:bg-blue-500/10 transition-colors"><Pencil size={14} /></button>
+                    <button onClick={() => remove(dept.id)}
+                      className="p-2 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"><Trash2 size={14} /></button>
+                  </div>
                 </div>
               </div>
-              <div className="flex items-center gap-4">
-                <div className="text-right hidden sm:block">
-                  <p className="text-sm font-bold text-white">{dept.headCount}</p>
-                  <p className="text-xs text-slate-500">staff</p>
-                </div>
-                <div className="flex items-center gap-1">
-                  <button onClick={() => setModal({ open: true, dept })}
-                    className="p-2 rounded-lg text-slate-500 hover:text-blue-400 hover:bg-blue-500/10 transition-colors"><Pencil size={14} /></button>
-                  <button onClick={() => remove(dept.id)}
-                    className="p-2 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"><Trash2 size={14} /></button>
-                </div>
-              </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </div>
 

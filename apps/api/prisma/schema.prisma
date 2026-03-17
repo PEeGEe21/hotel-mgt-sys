@@ -16,7 +16,13 @@ enum Role {
   RECEPTIONIST
   HOUSEKEEPING
   CASHIER
+  BARTENDER
   STAFF
+}
+
+enum PermissionChangeTarget {
+  ROLE
+  USER
 }
 
 enum RoomStatus {
@@ -118,13 +124,24 @@ model Hotel {
   domain    String?  @unique
   address   String
   city      String
+  state     String?
   country   String
   phone     String
   phoneNormalized  String?
   email     String
+  website   String?
+  description String?
   logo      String?
   currency  String   @default("NGN")
   timezone  String   @default("Africa/Lagos")
+  taxRate      Decimal? @default(0)
+  latitude     Float?
+  longitude    Float?
+  geofenceEnabled Boolean @default(false)
+  geofenceRadiusMeters Int @default(150)
+  attendancePinRequired Boolean @default(false)
+  attendanceKioskEnabled Boolean @default(true)
+  attendancePersonalEnabled Boolean @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -140,6 +157,13 @@ model Hotel {
   housekeepingTasks HousekeepingTask[]
   companies     Company[]
   groupBookings GroupBooking[]
+  departments   Department[]
+  inventoryCategories InventoryCategory[]
+  suppliers    Supplier[]
+  shiftTemplates ShiftTemplate[]
+  roomTypeConfigs RoomTypeConfig[]
+  rolePermissions RolePermission[]
+  permissionAuditLogs PermissionAuditLog[]
 }
 
 // ─── USERS & AUTH ─────────────────────────────────────────────────────────────
@@ -160,6 +184,8 @@ model User {
 
   staff         Staff?
   refreshTokens RefreshToken[]
+  permissionAuditActor PermissionAuditLog[] @relation("PermissionAuditActor")
+  permissionAuditTarget PermissionAuditLog[] @relation("PermissionAuditTarget")
 }
 
 model RefreshToken {
@@ -170,6 +196,41 @@ model RefreshToken {
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model RolePermission {
+  id          String   @id @default(uuid())
+  hotelId     String
+  role        Role
+  permissions String[] @default([])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  hotel Hotel @relation(fields: [hotelId], references: [id])
+
+  @@unique([hotelId, role])
+  @@index([hotelId])
+}
+
+model PermissionAuditLog {
+  id           String   @id @default(uuid())
+  hotelId      String
+  actorUserId  String
+  targetUserId String?
+  targetRole   Role?
+  targetType   PermissionChangeTarget
+  before       String[] @default([])
+  after        String[] @default([])
+  reason       String?
+  createdAt    DateTime @default(now())
+
+  hotel      Hotel @relation(fields: [hotelId], references: [id])
+  actor      User  @relation("PermissionAuditActor", fields: [actorUserId], references: [id])
+  targetUser User? @relation("PermissionAuditTarget", fields: [targetUserId], references: [id])
+
+  @@index([hotelId])
+  @@index([actorUserId])
+  @@index([targetUserId])
 }
 
 // ─── STAFF ────────────────────────────────────────────────────────────────────
@@ -188,6 +249,10 @@ model Staff {
   position     String
   salary       Decimal  @default(0)
   hireDate     DateTime
+  pinHash      String?
+  pinUpdatedAt DateTime?
+  pinLastUsedAt DateTime?
+  pinFailedAttempts Int @default(0)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -229,6 +294,101 @@ model Leave {
 
   staff Staff @relation(fields: [staffId], references: [id])
 
+  @@index([hotelId])
+}
+
+// ─── DEPARTMENTS ─────────────────────────────────────────────────────────────
+
+model Department {
+  id          String   @id @default(uuid())
+  hotelId     String
+  name        String
+  description String?
+  color       String   @default("bg-blue-500")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  hotel Hotel @relation(fields: [hotelId], references: [id])
+
+  @@unique([hotelId, name])
+  @@index([hotelId])
+}
+
+// ─── INVENTORY CATEGORIES ────────────────────────────────────────────────────
+
+model InventoryCategory {
+  id          String   @id @default(uuid())
+  hotelId     String
+  name        String
+  description String?
+  color       String   @default("bg-blue-500")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  hotel Hotel @relation(fields: [hotelId], references: [id])
+
+  @@unique([hotelId, name])
+  @@index([hotelId])
+}
+
+// ─── SUPPLIERS ──────────────────────────────────────────────────────────────
+
+model Supplier {
+  id          String   @id @default(uuid())
+  hotelId     String
+  name        String
+  contact     String?
+  phone       String?
+  email       String?
+  address     String?
+  notes       String?
+  categories  String[] @default([])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  hotel Hotel @relation(fields: [hotelId], references: [id])
+
+  @@unique([hotelId, name])
+  @@index([hotelId])
+}
+
+// ─── SHIFT TEMPLATES ────────────────────────────────────────────────────────
+
+model ShiftTemplate {
+  id        String   @id @default(uuid())
+  hotelId   String
+  name      String
+  startTime String
+  endTime   String
+  days      String[] @default([])
+  color     String   @default("bg-blue-500")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  hotel Hotel @relation(fields: [hotelId], references: [id])
+
+  @@unique([hotelId, name])
+  @@index([hotelId])
+}
+
+// ─── ROOM TYPE CONFIGS ──────────────────────────────────────────────────────
+
+model RoomTypeConfig {
+  id          String   @id @default(uuid())
+  hotelId     String
+  name        String
+  description String?
+  baseRate    Decimal  @default(0)
+  capacity    Int      @default(1)
+  beds        String   @default("1 Queen")
+  amenities   String[] @default([])
+  color       String   @default("bg-blue-500")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  hotel Hotel @relation(fields: [hotelId], references: [id])
+
+  @@unique([hotelId, name])
   @@index([hotelId])
 }
 

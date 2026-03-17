@@ -382,6 +382,7 @@ export const NAV_PERMISSIONS: Record<string, Permission> = {
   '/guests': 'view:guests',
   '/staff': 'view:staff',
   '/attendance': 'view:attendance',
+  '/clock': 'clock:self',
   '/pos': 'view:pos',
   '/inventory': 'view:inventory',
   '/housekeeping': 'view:housekeeping',
