@@ -154,12 +154,15 @@ model Hotel {
   posOrders        PosOrder[]
   posProducts      PosProduct[]
   posTerminals     PosTerminal[]
+  posTerminalGroups     PosTerminalGroup[]
+  posTables        PosTable[]
   inventoryItems   InventoryItem[]
   housekeepingTasks HousekeepingTask[]
   companies     Company[]
   groupBookings GroupBooking[]
   departments   Department[]
   inventoryCategories InventoryCategory[]
+  posProductCategories PosProductCategory[]
   suppliers    Supplier[]
   shiftTemplates ShiftTemplate[]
   roomTypeConfigs RoomTypeConfig[]
@@ -172,12 +175,14 @@ model Hotel {
 model User {
   id           String    @id @default(uuid())
   email        String    @unique
+  username     String?
   passwordHash String
   role         Role      @default(STAFF)
   isActive     Boolean   @default(true)
   lastLoginAt  DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
+  mustChangePassword Boolean   @default(false)
 
   // Granular permission overrides on top of role defaults
   permissionGrants String[] @default([])
@@ -259,10 +264,12 @@ model Staff {
 
   user       User               @relation(fields: [userId], references: [id])
   hotel      Hotel              @relation(fields: [hotelId], references: [id])
+  operatingTerminals PosTerminal[] @relation("CurrentTerminalStaff")
   attendance Attendance[]
   leaves     Leave[]
   tasks      HousekeepingTask[]
   posTerminals PosTerminal[]
+  posOrders PosOrder[]
 }
 
 model Attendance {
@@ -506,13 +513,12 @@ model Guest {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  hotel        Hotel         @relation(fields: [hotelId], references: [id])
-  reservations Reservation[]
+  hotel              Hotel              @relation(fields: [hotelId], references: [id])
+  reservations       Reservation[]      // reservations where this guest is primary
   reservationGuests  ReservationGuest[] // all reservations this guest appears on
 
   @@index([hotelId])
   @@index([hotelId, email])
-  @@unique([hotelId, phoneNormalized])
 }
 
 // ─── RESERVATIONS ─────────────────────────────────────────────────────────────
@@ -520,14 +526,12 @@ model Guest {
 model Reservation {
   id              String            @id @default(uuid())
   hotelId         String
-  guestId         String
+  guestId         String            // primary guest — quick FK for display
   roomId          String
-
-  companyId       String? 
-  groupBookingId  String?
-  bookingType     BookingType @default(INDIVIDUAL)
-
+  companyId       String?           // set if this is a company booking
+  groupBookingId  String?           // set if part of a group
   reservationNo   String            @unique
+  bookingType     BookingType       @default(INDIVIDUAL)
   checkIn         DateTime
   checkOut        DateTime
   adults          Int               @default(1)
@@ -542,14 +546,15 @@ model Reservation {
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
 
-  hotel      Hotel       @relation(fields: [hotelId], references: [id])
-  guest      Guest       @relation(fields: [guestId], references: [id])
-  room       Room        @relation(fields: [roomId], references: [id])
+  hotel        Hotel              @relation(fields: [hotelId], references: [id])
+  guest        Guest              @relation(fields: [guestId], references: [id])
+  room         Room               @relation(fields: [roomId], references: [id])
   company      Company?           @relation(fields: [companyId], references: [id])
   groupBooking GroupBooking?      @relation(fields: [groupBookingId], references: [id])
   guests       ReservationGuest[] // full guest list including primary
-  invoices   Invoice[]
-  folioItems FolioItem[]
+  invoices     Invoice[]
+  folioItems   FolioItem[]
+  posOrders    PosOrder[]
 
   @@index([hotelId, status])
   @@index([hotelId, checkIn, checkOut])
@@ -588,6 +593,7 @@ model Invoice {
   tax           Decimal
   discount      Decimal       @default(0)
   total         Decimal
+  type          String        @default("RESERVATION") // RESERVATION | POS | FACILITY | MANUAL
   paymentStatus PaymentStatus @default(UNPAID)
   notes         String?
 
@@ -622,6 +628,7 @@ model FolioItem {
   amount        Decimal
   quantity      Int      @default(1)
   category      String   // ROOM, FOOD, LAUNDRY, SPA, MISC
+  posOrderId    String?  // which POS order generated this charge
   createdAt     DateTime @default(now())
 
   reservation Reservation @relation(fields: [reservationId], references: [id])
@@ -635,9 +642,12 @@ model PosOrder {
   id            String      @id @default(uuid())
   hotelId       String
   orderNo       String      @unique
+  tableId         String?   // FK to PosTable
   tableNo       String?
-  roomNo        String?
-  staffId       String?
+  roomNo          String?
+  reservationId   String?   // FK for room charge flow
+  staffId         String?
+  posTerminalId   String?
   type          String      // DINE_IN, ROOM_SERVICE, TAKEAWAY, RETAIL
   status        OrderStatus @default(PENDING)
   subtotal      Decimal
@@ -651,11 +661,34 @@ model PosOrder {
   updatedAt     DateTime    @updatedAt
 
   hotel    Hotel          @relation(fields: [hotelId], references: [id])
+  posTerminal    PosTerminal?       @relation(fields: [posTerminalId], references: [id])
+  table       PosTable?     @relation(fields: [tableId],       references: [id])
+  reservation Reservation?  @relation(fields: [reservationId], references: [id])
+  staff       Staff?        @relation(fields: [staffId],       references: [id])
+  
   items    PosOrderItem[]
   invoices Invoice[]
 
   @@index([hotelId])
   @@index([hotelId, createdAt])
+}
+
+model ProductIngredient {
+  id              String   @id @default(uuid())
+  hotelId         String
+  productId       String
+  inventoryItemId String
+  quantity        Decimal  // amount of inventory item consumed per 1 unit sold
+  unit            String?  // display unit override (e.g. "ml", "g")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  product       PosProduct    @relation(fields: [productId],       references: [id], onDelete: Cascade)
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id])
+
+  @@unique([productId, inventoryItemId])
+  @@index([hotelId])
+  @@index([productId])
 }
 
 model PosOrderItem {
@@ -679,19 +712,41 @@ model PosProduct {
   sku         String?
   description String?
   price       Decimal
-  category    String
+  categoryId  String
   unit        String   @default("item")
   image       String?
+  type        String   @default("PHYSICAL") // PHYSICAL | SERVICE | BUNDLE
   isAvailable Boolean  @default(true)
   stock       Int?     // null = unlimited (e.g. services)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  hotel      Hotel          @relation(fields: [hotelId], references: [id])
-  orderItems PosOrderItem[]
+  hotel       Hotel               @relation(fields: [hotelId], references: [id])
+  orderItems  PosOrderItem[]
+  ingredients ProductIngredient[]
+  category    PosProductCategory @relation(fields: [categoryId], references: [id])
 
   @@index([hotelId])
   @@unique([hotelId, sku])
+}
+
+model PosProductCategory {
+  id          String   @id @default(uuid())
+  hotelId     String
+  name        String
+  description String?
+  icon        String?   // emoji or icon name — "🍺", "🍽️", "💆"
+  color       String   @default("bg-blue-500")
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  hotel    Hotel        @relation(fields: [hotelId], references: [id])
+  products PosProduct[]
+
+  @@unique([hotelId, name])
+  @@index([hotelId])
 }
 
 model PosTerminal {
@@ -699,18 +754,64 @@ model PosTerminal {
   hotelId   String
   staffId   String?
   name      String
-  location  String
-  group     String
+  location  String?
+  terminalGroupId     String?
   device    String
   status    String   @default("Online")
+  setupCode      String?
+  setupCodeQr String?
+  currentStaffId String?
+  lastActivityAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   hotel Hotel @relation(fields: [hotelId], references: [id])
   staff Staff? @relation(fields: [staffId], references: [id])
+  terminalGroup PosTerminalGroup? @relation(fields: [terminalGroupId], references: [id])
+  currentStaff Staff? @relation("CurrentTerminalStaff", fields: [currentStaffId], references: [id])
+  orders    PosOrder[]
 
   @@index([hotelId])
   @@index([staffId])
+  @@index([terminalGroupId])
+}
+
+// ─── POS Terminal GROUPS ───────────────────────────────────────────────────────────────────
+
+model PosTerminalGroup {
+  id          String   @id @default(uuid())
+  hotelId     String
+  name        String   // "Bar", "Outside Block A", "Rooftop", "Basement"
+  level       Int      // sort order — negative for basements (e.g. -1)
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  hotel Hotel  @relation(fields: [hotelId], references: [id])
+  posTerminals PosTerminal[]
+
+  @@unique([hotelId, name])
+  @@index([hotelId, level])
+}
+
+model PosTable {
+  id          String   @id @default(uuid())
+  hotelId     String
+  name        String   // "Table 1", "Bar Counter", "VIP Booth"
+  section     String?  // "Restaurant", "Bar", "Poolside", "Rooftop"
+  capacity    Int?     // number of seats
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  hotel  Hotel      @relation(fields: [hotelId], references: [id])
+  orders PosOrder[]
+
+  @@unique([hotelId, name])
+  @@index([hotelId])
+  @@index([hotelId, section])
 }
 
 // ─── INVENTORY ────────────────────────────────────────────────────────────────
@@ -732,8 +833,9 @@ model InventoryItem {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  hotel     Hotel           @relation(fields: [hotelId], references: [id])
-  movements StockMovement[]
+  hotel       Hotel               @relation(fields: [hotelId], references: [id])
+  movements   StockMovement[]
+  usedInProducts ProductIngredient[]
 
   @@unique([hotelId, sku])
   @@index([hotelId])
@@ -743,10 +845,13 @@ model StockMovement {
   id        String   @id @default(uuid())
   hotelId   String
   itemId    String
-  type      String   // IN, OUT, ADJUSTMENT
-  quantity  Decimal
-  note      String?
-  createdAt DateTime @default(now())
+  type       String   // IN, OUT, ADJUSTMENT, WASTAGE
+  quantity   Decimal
+  note       String?
+  sourceType String?  // POS_SALE, MANUAL, WASTAGE, PURCHASE, ADJUSTMENT
+  sourceId   String?  // orderId, requisitionId, etc.
+  staffId    String?  // who made the movement
+  createdAt  DateTime @default(now())
 
   item InventoryItem @relation(fields: [itemId], references: [id])
 

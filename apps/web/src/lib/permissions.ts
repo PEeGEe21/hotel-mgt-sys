@@ -127,6 +127,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     label: 'POS / Bar',
     key: 'pos',
     permissions: [
+      { key: 'manage:pos', label: 'Manage POS', description: 'Manage POS Terminals' },
       { key: 'view:pos', label: 'View POS', description: 'Access POS and orders' },
       { key: 'create:pos', label: 'Create Orders', description: 'Place new POS orders' },
       { key: 'void:pos', label: 'Void Orders', description: 'Cancel or void orders' },
@@ -343,6 +344,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'view:settings',
     'view:hr',
     'manage:hr',
+    'manage:pos'
   ],
 
   RECEPTIONIST: [

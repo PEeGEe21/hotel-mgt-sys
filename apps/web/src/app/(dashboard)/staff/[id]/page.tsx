@@ -1,270 +1,811 @@
 'use client';
 
-import { useParams, useRouter } from 'next/navigation';
+import { useState } from 'react';
+import { useRouter, useParams } from 'next/navigation';
 import {
-  ArrowLeft, Phone, Mail, Briefcase, Calendar, DollarSign,
-  Clock, Edit2, CheckCircle2, XCircle, AlertTriangle,
-  Shield, TrendingUp, FileText, UserCheck
+  ArrowLeft,
+  Phone,
+  Mail,
+  Briefcase,
+  Calendar,
+  DollarSign,
+  Clock,
+  Edit2,
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
+  Shield,
+  FileText,
+  UserCheck,
+  Loader2,
+  X,
+  Check,
+  KeyRound,
+  BedDouble,
+  RotateCcw,
 } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import {
+  useStaffMember,
+  useUpdateStaff,
+  useDeactivateStaff,
+  useReactivateStaff,
+  useResetStaffPassword,
+  type ApiStaff,
+  type CreateStaffInput,
+  type StaffRole,
+} from '@/hooks/useStaff';
+import openToast from '@/components/ToastComponent';
 
-type StaffRole = 'Admin' | 'Manager' | 'Receptionist' | 'Housekeeping' | 'Cashier' | 'Bartender' | 'Security' | 'Maintenance';
-type StaffStatus = 'Active' | 'On Leave' | 'Off Duty' | 'Clocked In';
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function fmt(iso: string) {
+  return new Date(iso).toLocaleDateString('en-NG', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+function fmtTime(iso: string) {
+  return new Date(iso).toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit' });
+}
+function fmtDateTime(iso: string) {
+  return new Date(iso).toLocaleString('en-NG', {
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
 
-type StaffMember = {
-  id: string; employeeCode: string; firstName: string; lastName: string;
-  email: string; phone: string; department: string; position: string;
-  role: StaffRole; status: StaffStatus; hireDate: string;
-  shift: string; salary: number;
+const ROLE_COLOR: Record<string, string> = {
+  ADMIN: 'text-violet-400',
+  MANAGER: 'text-blue-400',
+  RECEPTIONIST: 'text-sky-400',
+  HOUSEKEEPING: 'text-emerald-400',
+  CASHIER: 'text-amber-400',
+  BARTENDER: 'text-orange-400',
+  STAFF: 'text-slate-400',
 };
 
-const staffList: StaffMember[] = [
-  { id: 's1', employeeCode: 'EMP001', firstName: 'Blessing', lastName: 'Adeyemi', email: 'blessing.a@hotel.com', phone: '+234 802 111 2222', department: 'Management', position: 'Hotel Manager', role: 'Manager', status: 'Clocked In', hireDate: '2022-01-15', shift: 'Morning', salary: 2800 },
-  { id: 's2', employeeCode: 'EMP002', firstName: 'Chidi', lastName: 'Nwosu', email: 'chidi.n@hotel.com', phone: '+234 803 222 3333', department: 'Front Desk', position: 'Head Receptionist', role: 'Receptionist', status: 'Clocked In', hireDate: '2022-03-01', shift: 'Morning', salary: 1400 },
-  { id: 's3', employeeCode: 'EMP003', firstName: 'Ngozi', lastName: 'Eze', email: 'ngozi.e@hotel.com', phone: '+234 804 333 4444', department: 'Front Desk', position: 'Receptionist', role: 'Receptionist', status: 'Off Duty', hireDate: '2023-06-10', shift: 'Evening', salary: 1100 },
-  { id: 's4', employeeCode: 'EMP004', firstName: 'Emeka', lastName: 'Obi', email: 'emeka.o@hotel.com', phone: '+234 805 444 5555', department: 'Housekeeping', position: 'Head Housekeeper', role: 'Housekeeping', status: 'Clocked In', hireDate: '2022-08-20', shift: 'Morning', salary: 1200 },
-  { id: 's5', employeeCode: 'EMP005', firstName: 'Adaeze', lastName: 'Okafor', email: 'adaeze.o@hotel.com', phone: '+234 806 555 6666', department: 'Housekeeping', position: 'Housekeeper', role: 'Housekeeping', status: 'Clocked In', hireDate: '2023-01-05', shift: 'Morning', salary: 900 },
-  { id: 's6', employeeCode: 'EMP006', firstName: 'Tunde', lastName: 'Bakare', email: 'tunde.b@hotel.com', phone: '+234 807 666 7777', department: 'Bar', position: 'Head Bartender', role: 'Bartender', status: 'Clocked In', hireDate: '2022-11-01', shift: 'Evening', salary: 1300 },
-  { id: 's7', employeeCode: 'EMP007', firstName: 'Kemi', lastName: 'Adebayo', email: 'kemi.a@hotel.com', phone: '+234 808 777 8888', department: 'Finance', position: 'Cashier', role: 'Cashier', status: 'On Leave', hireDate: '2023-04-15', shift: 'Morning', salary: 1050 },
-  { id: 's8', employeeCode: 'EMP008', firstName: 'Seun', lastName: 'Lawal', email: 'seun.l@hotel.com', phone: '+234 809 888 9999', department: 'Security', position: 'Security Officer', role: 'Security', status: 'Clocked In', hireDate: '2023-09-01', shift: 'Night', salary: 950 },
-  { id: 's9', employeeCode: 'EMP009', firstName: 'Yetunde', lastName: 'Aina', email: 'yetunde.a@hotel.com', phone: '+234 810 999 0000', department: 'Maintenance', position: 'Maintenance Tech', role: 'Maintenance', status: 'Off Duty', hireDate: '2024-02-01', shift: 'Morning', salary: 1000 },
-];
-
-const attendanceLog = [
-  { date: 'Mon, Mar 10', clockIn: '07:58 AM', clockOut: '04:02 PM', hours: 8.1, status: 'Full Day' },
-  { date: 'Tue, Mar 09', clockIn: '08:03 AM', clockOut: '04:00 PM', hours: 7.9, status: 'Full Day' },
-  { date: 'Wed, Mar 08', clockIn: '08:30 AM', clockOut: '04:00 PM', hours: 7.5, status: 'Late' },
-  { date: 'Thu, Mar 07', clockIn: '07:55 AM', clockOut: '04:05 PM', hours: 8.2, status: 'Full Day' },
-  { date: 'Fri, Mar 06', clockIn: '—', clockOut: '—', hours: 0, status: 'Absent' },
-  { date: 'Sat, Mar 05', clockIn: '08:00 AM', clockOut: '12:00 PM', hours: 4, status: 'Half Day' },
-  { date: 'Sun, Mar 04', clockIn: '—', clockOut: '—', hours: 0, status: 'Day Off' },
-];
-
-const statusStyle: Record<StaffStatus, string> = {
-  'Clocked In': 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20',
-  'Active': 'bg-blue-500/15 text-blue-400 border-blue-500/20',
-  'On Leave': 'bg-amber-500/15 text-amber-400 border-amber-500/20',
-  'Off Duty': 'bg-slate-500/15 text-slate-400 border-slate-500/20',
+const LEAVE_STATUS_STYLE: Record<string, string> = {
+  PENDING: 'bg-amber-500/15 text-amber-400',
+  APPROVED: 'bg-emerald-500/15 text-emerald-400',
+  REJECTED: 'bg-red-500/15 text-red-400',
 };
 
-const attendanceStyle: Record<string, string> = {
-  'Full Day': 'bg-emerald-500/15 text-emerald-400',
-  'Late': 'bg-amber-500/15 text-amber-400',
-  'Half Day': 'bg-blue-500/15 text-blue-400',
-  'Absent': 'bg-red-500/15 text-red-400',
-  'Day Off': 'bg-slate-500/15 text-slate-400',
+const TASK_TYPE_STYLE: Record<string, string> = {
+  CLEANING: 'bg-sky-500/15 text-sky-400',
+  TURNDOWN: 'bg-violet-500/15 text-violet-400',
+  INSPECTION: 'bg-amber-500/15 text-amber-400',
+  MAINTENANCE: 'bg-red-500/15 text-red-400',
+  AMENITY: 'bg-emerald-500/15 text-emerald-400',
 };
 
-const roleColor: Record<StaffRole, string> = {
-  Admin: 'text-violet-400', Manager: 'text-blue-400', Receptionist: 'text-sky-400',
-  Housekeeping: 'text-emerald-400', Cashier: 'text-amber-400', Bartender: 'text-orange-400',
-  Security: 'text-red-400', Maintenance: 'text-slate-400',
-};
+// ─── Edit Staff Modal ─────────────────────────────────────────────────────────
+function EditStaffModal({ staff, onClose }: { staff: ApiStaff; onClose: () => void }) {
+  const update = useUpdateStaff(staff.id);
+  const ROLES: StaffRole[] = [
+    'ADMIN',
+    'MANAGER',
+    'RECEPTIONIST',
+    'HOUSEKEEPING',
+    'CASHIER',
+    'BARTENDER',
+    'STAFF',
+  ];
+  const [form, setForm] = useState({
+    firstName: staff.firstName,
+    lastName: staff.lastName,
+    email: staff.user.email,
+    department: staff.department,
+    position: staff.position,
+    phone: staff.phone ?? '',
+    salary: Number(staff.salary),
+    role: staff.user.role,
+  });
+  const [error, setError] = useState('');
+  const set = (k: string, v: any) => setForm((f) => ({ ...f, [k]: v }));
 
-export default function StaffDetailPage() {
-  const { id } = useParams();
-  const router = useRouter();
-  const staff = staffList.find(s => s.id === id) ?? staffList[0];
+  const handleSave = async () => {
+    if (!form.firstName.trim()) return setError('First name is required.');
+    if (!form.email.trim()) return setError('Email is required.');
+    setError('');
+    try {
+      await update.mutateAsync(form as any);
+      onClose();
+    } catch (e: any) {
+      setError(e?.response?.data?.message ?? 'Update failed.');
+    }
+  };
 
-  const totalHours = attendanceLog.reduce((s, d) => s + d.hours, 0);
-  const daysPresent = attendanceLog.filter(d => d.status !== 'Absent' && d.status !== 'Day Off').length;
-  const hireDate = new Date(staff.hireDate);
-  const monthsEmployed = Math.floor((Date.now() - hireDate.getTime()) / (1000 * 60 * 60 * 24 * 30));
+  const inputCls =
+    'w-full bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 outline-none focus:border-blue-500 transition-colors';
+  const Label = ({ children }: { children: React.ReactNode }) => (
+    <label className="text-xs text-slate-500 uppercase tracking-wider mb-1.5 block">
+      {children}
+    </label>
+  );
 
-  return (
-    <div className="space-y-6 max-w-full">
-      {/* Back + Header */}
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-4">
-          <button onClick={() => router.push('/staff')}
-            className="w-9 h-9 rounded-lg bg-[#161b27] border border-[#1e2536] flex items-center justify-center text-slate-400 hover:text-slate-200 transition-colors">
-            <ArrowLeft size={16} />
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-[#161b27] border border-[#1e2536] rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden">
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-[#1e2536]">
+          <h2 className="text-base font-bold text-white">Edit Staff</h2>
+          <button
+            onClick={onClose}
+            className="text-slate-500 hover:text-slate-300 transition-colors"
+          >
+            <X size={18} />
           </button>
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-slate-600/50 to-slate-700/50 border border-white/10 flex items-center justify-center text-xl font-bold text-white">
-              {staff.firstName[0]}{staff.lastName[0]}
+        </div>
+        <div className="px-6 py-5 space-y-4 max-h-[65vh] overflow-y-auto">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label>First Name *</Label>
+              <input
+                value={form.firstName}
+                onChange={(e) => set('firstName', e.target.value)}
+                className={inputCls}
+                autoFocus
+              />
             </div>
             <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-2xl font-bold text-white">{staff.firstName} {staff.lastName}</h1>
-                <span className={`text-xs px-2.5 py-1 rounded-full font-medium border ${statusStyle[staff.status]}`}>{staff.status}</span>
-              </div>
-              <div className="flex items-center gap-2 mt-0.5">
-                <p className={`text-sm font-medium ${roleColor[staff.role]}`}>{staff.position}</p>
-                <span className="text-slate-700">·</span>
-                <p className="text-sm text-slate-500">{staff.department}</p>
-                <span className="text-slate-700">·</span>
-                <p className="text-sm text-slate-500">{staff.employeeCode}</p>
-              </div>
+              <Label>Last Name</Label>
+              <input
+                value={form.lastName}
+                onChange={(e) => set('lastName', e.target.value)}
+                className={inputCls}
+              />
             </div>
           </div>
-        </div>
-        <button className="flex items-center gap-2 bg-[#161b27] border border-[#1e2536] hover:border-blue-500/40 text-slate-300 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-          <Edit2 size={14} /> Edit Profile
-        </button>
-      </div>
-
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        {/* Left */}
-        <div className="space-y-5">
-          {/* Contact */}
-          <div className="bg-[#161b27] border border-[#1e2536] rounded-xl p-5">
-            <h2 className="text-xs text-slate-500 uppercase tracking-widest font-medium mb-4">Contact & Info</h2>
-            <div className="space-y-3">
-              {[
-                { icon: Phone, label: 'Phone', value: staff.phone },
-                { icon: Mail, label: 'Email', value: staff.email },
-                { icon: Briefcase, label: 'Department', value: staff.department },
-                { icon: Shield, label: 'Role', value: staff.role },
-                { icon: Clock, label: 'Shift', value: `${staff.shift} Shift` },
-                { icon: Calendar, label: 'Hire Date', value: staff.hireDate },
-              ].map(({ icon: Icon, label, value }) => (
-                <div key={label} className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-[#0f1117] border border-[#1e2536] flex items-center justify-center shrink-0">
-                    <Icon size={13} className="text-slate-500" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-slate-600">{label}</p>
-                    <p className="text-sm text-slate-300">{value}</p>
-                  </div>
-                </div>
-              ))}
+          <div>
+            <Label>Email *</Label>
+            <input
+              type="email"
+              value={form.email}
+              onChange={(e) => set('email', e.target.value)}
+              className={inputCls}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label>Department</Label>
+              <input
+                value={form.department}
+                onChange={(e) => set('department', e.target.value)}
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <Label>Position</Label>
+              <input
+                value={form.position}
+                onChange={(e) => set('position', e.target.value)}
+                className={inputCls}
+              />
             </div>
           </div>
-
-          {/* Stats */}
-          <div className="bg-[#161b27] border border-[#1e2536] rounded-xl p-5">
-            <h2 className="text-xs text-slate-500 uppercase tracking-widest font-medium mb-4">This Week</h2>
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                { label: 'Hours Worked', value: `${totalHours.toFixed(1)}h`, color: 'text-blue-400' },
-                { label: 'Days Present', value: `${daysPresent}/6`, color: 'text-emerald-400' },
-                { label: 'Monthly Pay', value: `$${staff.salary.toLocaleString()}`, color: 'text-violet-400' },
-                { label: 'Tenure', value: `${monthsEmployed}mo`, color: 'text-amber-400' },
-              ].map(({ label, value, color }) => (
-                <div key={label} className="bg-[#0f1117] border border-[#1e2536] rounded-lg p-3">
-                  <p className="text-xs text-slate-600 mb-1">{label}</p>
-                  <p className={`text-sm font-bold ${color}`}>{value}</p>
-                </div>
-              ))}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label>Phone</Label>
+              <input
+                value={form.phone}
+                onChange={(e) => set('phone', e.target.value)}
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <Label>Salary (₦/mo)</Label>
+              <input
+                type="number"
+                min={0}
+                value={form.salary}
+                onChange={(e) => set('salary', Number(e.target.value))}
+                className={inputCls}
+              />
             </div>
           </div>
-
-          {/* Quick Actions */}
-          <div className="bg-[#161b27] border border-[#1e2536] rounded-xl p-5">
-            <h2 className="text-xs text-slate-500 uppercase tracking-widest font-medium mb-3">Actions</h2>
-            <div className="space-y-2">
-              {[
-                { label: 'Clock In / Out', icon: Clock, color: 'text-emerald-400', bg: 'hover:bg-emerald-500/10' },
-                { label: 'Request Leave', icon: Calendar, color: 'text-amber-400', bg: 'hover:bg-amber-500/10' },
-                { label: 'View Pay Slip', icon: DollarSign, color: 'text-blue-400', bg: 'hover:bg-blue-500/10' },
-                { label: 'Performance Review', icon: TrendingUp, color: 'text-violet-400', bg: 'hover:bg-violet-500/10' },
-              ].map(({ label, icon: Icon, color, bg }) => (
-                <button key={label} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border border-transparent ${bg} transition-colors text-left`}>
-                  <Icon size={15} className={color} />
-                  <span className="text-sm text-slate-300">{label}</span>
+          <div>
+            <Label>Role</Label>
+            <div className="flex flex-wrap gap-2">
+              {ROLES.map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => set('role', r)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${form.role === r ? 'bg-blue-600/20 border-blue-500/30 text-blue-400' : 'bg-[#0f1117] border-[#1e2536] text-slate-400 hover:text-slate-200'}`}
+                >
+                  {r}
                 </button>
               ))}
             </div>
           </div>
+          {error && (
+            <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+              {error}
+            </p>
+          )}
+        </div>
+        <div className="flex gap-3 px-6 pb-5 pt-4 border-t border-[#1e2536]">
+          <button
+            onClick={onClose}
+            className="flex-1 px-4 py-2.5 rounded-lg border border-[#1e2536] text-slate-400 text-sm hover:text-white transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={update.isPending}
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-semibold transition-colors"
+          >
+            {update.isPending ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <Check size={14} />
+            )}
+            Save Changes
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+// ─── Tab ──────────────────────────────────────────────────────────────────────
+type Tab = 'overview' | 'attendance' | 'leaves' | 'tasks';
+function TabBtn({
+  label,
+  icon: Icon,
+  active,
+  onClick,
+}: {
+  label: string;
+  icon: any;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap border ${active ? 'bg-blue-600/20 text-blue-400 border-blue-500/20' : 'text-slate-400 hover:text-slate-200 hover:bg-white/5 border-transparent'}`}
+    >
+      <Icon size={14} />
+      {label}
+    </button>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
+export default function StaffDetailPage() {
+  const { id } = useParams();
+  const router = useRouter();
+  const staffId = id as string;
+
+  const { data: staff, isLoading, isError } = useStaffMember(staffId);
+  const deactivate = useDeactivateStaff(staffId);
+  const reactivate = useReactivateStaff(staffId);
+  const resetPwd = useResetStaffPassword(staffId);
+
+  const [tab, setTab] = useState<Tab>('overview');
+  const [showEdit, setShowEdit] = useState(false);
+
+  if (isLoading)
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 size={24} className="animate-spin text-slate-500" />
+      </div>
+    );
+  if (isError || !staff)
+    return (
+      <div className="flex flex-col items-center justify-center py-24 gap-4">
+        <UserCheck size={40} className="text-slate-700" />
+        <p className="text-slate-500">Staff member not found</p>
+        <button
+          onClick={() => router.push('/staff')}
+          className="text-blue-400 text-sm hover:underline"
+        >
+          Back to Staff
+        </button>
+      </div>
+    );
+
+  const attendance = staff.attendance ?? [];
+  const leaves = staff.leaves ?? [];
+  const tasks = staff.tasks ?? [];
+  const isActive = staff.user.isActive;
+
+  // Compute today's hours from attendance
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayRecs = attendance.filter((a) => new Date(a.timestamp) >= today);
+  let hoursToday = 0;
+  for (let i = 0; i < todayRecs.length - 1; i += 2) {
+    if (todayRecs[i]?.type === 'CLOCK_IN' && todayRecs[i + 1]?.type === 'CLOCK_OUT') {
+      hoursToday +=
+        (new Date(todayRecs[i + 1].timestamp).getTime() -
+          new Date(todayRecs[i].timestamp).getTime()) /
+        3_600_000;
+    }
+  }
+
+  return (
+    <div className="space-y-6 max-w-full">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => router.push('/staff')}
+            className="w-9 h-9 rounded-lg bg-[#161b27] border border-[#1e2536] flex items-center justify-center text-slate-400 hover:text-slate-200 transition-colors shrink-0"
+          >
+            <ArrowLeft size={16} />
+          </button>
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-slate-600/50 to-slate-700/50 border border-white/10 flex items-center justify-center text-xl font-bold text-white shrink-0">
+            {staff.firstName[0]}
+            {staff.lastName[0]}
+          </div>
+          <div>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h1 className="text-2xl font-bold text-white">
+                {staff.firstName} {staff.lastName}
+              </h1>
+              {!isActive && (
+                <span className="text-xs px-2 py-0.5 rounded-full bg-red-500/15 text-red-400 border border-red-500/20">
+                  Inactive
+                </span>
+              )}
+              {staff.user.mustChangePassword && (
+                <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/20 flex items-center gap-1">
+                  <AlertTriangle size={10} /> Must change password
+                </span>
+              )}
+            </div>
+            <p className="text-slate-500 text-sm mt-0.5">
+              <span className={`font-medium ${ROLE_COLOR[staff.user.role]}`}>
+                {staff.user.role}
+              </span>
+              {' · '}
+              {staff.position}
+              {' · '}
+              {staff.department}
+            </p>
+          </div>
         </div>
 
-        {/* Right — 2 wide */}
-        <div className="xl:col-span-2 space-y-5">
-          {/* Today's Clock Status */}
-          <div className={`border rounded-xl p-5 flex items-center justify-between ${staff.status === 'Clocked In' ? 'bg-emerald-500/10 border-emerald-500/25' : 'bg-[#161b27] border-[#1e2536]'}`}>
-            <div className="flex items-center gap-4">
-              <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${staff.status === 'Clocked In' ? 'bg-emerald-500/20' : 'bg-slate-500/10'}`}>
-                <UserCheck size={22} className={staff.status === 'Clocked In' ? 'text-emerald-400' : 'text-slate-500'} />
-              </div>
-              <div>
-                <p className="text-base font-bold text-white">
-                  {staff.status === 'Clocked In' ? 'Currently Clocked In' : 'Not Clocked In Today'}
-                </p>
-                <p className="text-sm text-slate-500 mt-0.5">
-                  {staff.status === 'Clocked In' ? 'Since 07:58 AM · 4h 22m elapsed' : 'Last seen: Yesterday, 4:02 PM'}
-                </p>
+        {/* Actions */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => setShowEdit(true)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#161b27] border border-[#1e2536] hover:border-slate-500 text-slate-300 text-xs font-medium transition-colors"
+          >
+            <Edit2 size={13} /> Edit
+          </button>
+          <button
+            onClick={() => {
+              if (confirm('Reset password to default?')) resetPwd.mutate();
+            }}
+            disabled={resetPwd.isPending}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#161b27] border border-[#1e2536] hover:border-amber-500/30 text-slate-400 hover:text-amber-400 text-xs font-medium transition-colors"
+          >
+            {resetPwd.isPending ? (
+              <Loader2 size={12} className="animate-spin" />
+            ) : (
+              <RotateCcw size={13} />
+            )}
+            Reset Password
+          </button>
+          {isActive ? (
+            <button
+              onClick={() => {
+                if (confirm('Deactivate this staff account?')) deactivate.mutate();
+              }}
+              disabled={deactivate.isPending}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#161b27] border border-[#1e2536] hover:border-red-500/30 text-slate-400 hover:text-red-400 text-xs font-medium transition-colors"
+            >
+              {deactivate.isPending ? (
+                <Loader2 size={12} className="animate-spin" />
+              ) : (
+                <XCircle size={13} />
+              )}
+              Deactivate
+            </button>
+          ) : (
+            <button
+              onClick={() => reactivate.mutate()}
+              disabled={reactivate.isPending}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-600/15 border border-emerald-500/20 hover:bg-emerald-600/25 text-emerald-400 text-xs font-medium transition-colors"
+            >
+              {reactivate.isPending ? (
+                <Loader2 size={12} className="animate-spin" />
+              ) : (
+                <CheckCircle2 size={13} />
+              )}
+              Reactivate
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Stat cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          {
+            label: 'Employee Code',
+            value: staff.employeeCode,
+            sub: 'Kiosk ID',
+            icon: Shield,
+            color: 'text-blue-400',
+            bg: 'bg-blue-500/10   border-blue-500/20',
+          },
+          {
+            label: 'Hire Date',
+            value: fmt(staff.hireDate),
+            sub: 'Start date',
+            icon: Calendar,
+            color: 'text-violet-400',
+            bg: 'bg-violet-500/10 border-violet-500/20',
+          },
+          {
+            label: 'Salary',
+            value: Number(staff.salary) > 0 ? `₦${Number(staff.salary).toLocaleString()}` : '—',
+            sub: 'per month',
+            icon: DollarSign,
+            color: 'text-emerald-400',
+            bg: 'bg-emerald-500/10 border-emerald-500/20',
+          },
+          {
+            label: 'Hours Today',
+            value: hoursToday > 0 ? `${hoursToday.toFixed(1)}h` : todayRecs.length ? 'Active' : '—',
+            sub: 'from attendance',
+            icon: Clock,
+            color: 'text-amber-400',
+            bg: 'bg-amber-500/10 border-amber-500/20',
+          },
+        ].map(({ label, value, sub, icon: Icon, color, bg }) => (
+          <div key={label} className={`${bg} border rounded-xl px-4 py-4`}>
+            <div className="flex items-center gap-2 mb-1">
+              <Icon size={14} className={color} />
+              <p className="text-xs text-slate-500 uppercase tracking-wider">{label}</p>
+            </div>
+            <p className="text-lg font-bold text-white leading-tight">{value}</p>
+            <p className="text-xs text-slate-600 mt-0.5">{sub}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 bg-[#161b27] border border-[#1e2536] rounded-xl p-1 w-fit">
+        <TabBtn
+          label="Overview"
+          icon={UserCheck}
+          active={tab === 'overview'}
+          onClick={() => setTab('overview')}
+        />
+        <TabBtn
+          label="Attendance"
+          icon={Clock}
+          active={tab === 'attendance'}
+          onClick={() => setTab('attendance')}
+        />
+        <TabBtn
+          label="Leaves"
+          icon={Briefcase}
+          active={tab === 'leaves'}
+          onClick={() => setTab('leaves')}
+        />
+        <TabBtn
+          label="Tasks"
+          icon={BedDouble}
+          active={tab === 'tasks'}
+          onClick={() => setTab('tasks')}
+        />
+      </div>
+
+      {/* ── Overview ── */}
+      {tab === 'overview' && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          <div className="md:col-span-2 space-y-5">
+            {/* Profile */}
+            <div className="bg-[#161b27] border border-[#1e2536] rounded-xl p-5">
+              <p className="text-xs text-slate-500 uppercase tracking-wider font-medium mb-4">
+                Profile
+              </p>
+              <div className="grid grid-cols-2 gap-x-8 gap-y-3">
+                {[
+                  { label: 'Full Name', value: `${staff.firstName} ${staff.lastName}` },
+                  { label: 'Email', value: staff.user.email },
+                  { label: 'Phone', value: staff.phone ?? '—' },
+                  { label: 'Department', value: staff.department },
+                  { label: 'Position', value: staff.position },
+                  { label: 'System Role', value: staff.user.role },
+                  { label: 'Employee No', value: staff.employeeCode },
+                  { label: 'Hire Date', value: fmt(staff.hireDate) },
+                  {
+                    label: 'Salary',
+                    value:
+                      Number(staff.salary) > 0
+                        ? `₦${Number(staff.salary).toLocaleString()}/mo`
+                        : '—',
+                  },
+                  { label: 'Account', value: isActive ? 'Active' : 'Deactivated' },
+                ].map(({ label, value }) => (
+                  <div key={label}>
+                    <p className="text-xs text-slate-600">{label}</p>
+                    <p
+                      className={`text-sm font-medium mt-0.5 ${label === 'System Role' ? (ROLE_COLOR[value] ?? 'text-slate-200') : label === 'Account' ? (isActive ? 'text-emerald-400' : 'text-red-400') : 'text-slate-200'}`}
+                    >
+                      {value}
+                    </p>
+                  </div>
+                ))}
               </div>
             </div>
-            <button className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${staff.status === 'Clocked In' ? 'bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-500/20' : 'bg-emerald-600 hover:bg-emerald-500 text-white'}`}>
-              {staff.status === 'Clocked In' ? 'Clock Out' : 'Clock In'}
-            </button>
+
+            {/* Recent attendance */}
+            <div className="bg-[#161b27] border border-[#1e2536] rounded-xl p-5">
+              <p className="text-xs text-slate-500 uppercase tracking-wider font-medium mb-4">
+                Recent Attendance
+              </p>
+              {attendance.length > 0 ? (
+                <div className="space-y-2">
+                  {attendance.slice(0, 8).map((a, i) => (
+                    <div
+                      key={i}
+                      className="flex items-center justify-between py-2 border-b border-[#1e2536] last:border-0"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`w-2 h-2 rounded-full ${a.type === 'CLOCK_IN' ? 'bg-emerald-400' : 'bg-slate-500'}`}
+                        />
+                        <span
+                          className={`text-xs font-medium ${a.type === 'CLOCK_IN' ? 'text-emerald-400' : 'text-slate-400'}`}
+                        >
+                          {a.type === 'CLOCK_IN' ? 'Clock In' : 'Clock Out'}
+                        </span>
+                        {a.method && (
+                          <span className="text-[10px] text-slate-600 bg-slate-700/30 px-1.5 py-0.5 rounded">
+                            {a.method}
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-xs text-slate-500">{fmtDateTime(a.timestamp)}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-slate-600 text-sm text-center py-4">No attendance records</p>
+              )}
+            </div>
           </div>
 
-          {/* Attendance Log */}
-          <div className="bg-[#161b27] border border-[#1e2536] rounded-xl overflow-hidden">
-            <div className="px-5 py-4 border-b border-[#1e2536] flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-white flex items-center gap-2"><Clock size={14} className="text-blue-400" /> Attendance — This Week</h2>
-              <button className="text-xs text-slate-500 hover:text-slate-300 flex items-center gap-1.5 transition-colors">
-                <FileText size={12} /> Full Report
-              </button>
+          {/* Right */}
+          <div className="space-y-5">
+            {/* Account info */}
+            <div className="bg-[#161b27] border border-[#1e2536] rounded-xl p-5">
+              <p className="text-xs text-slate-500 uppercase tracking-wider font-medium mb-4">
+                Account
+              </p>
+              <div className="space-y-3">
+                {[
+                  { label: 'Email', value: staff.user.email },
+                  { label: 'Role', value: staff.user.role },
+                  { label: 'Status', value: isActive ? 'Active' : 'Deactivated' },
+                  {
+                    label: 'Last Login',
+                    value: staff.user.lastLoginAt ? fmtDateTime(staff.user.lastLoginAt) : 'Never',
+                  },
+                  {
+                    label: 'Password',
+                    value: staff.user.mustChangePassword ? 'Must change' : 'Set',
+                  },
+                ].map(({ label, value }) => (
+                  <div key={label} className="flex items-center justify-between">
+                    <span className="text-xs text-slate-500">{label}</span>
+                    <span
+                      className={`text-xs font-medium ${
+                        label === 'Status'
+                          ? isActive
+                            ? 'text-emerald-400'
+                            : 'text-red-400'
+                          : label === 'Password' && staff.user.mustChangePassword
+                            ? 'text-amber-400'
+                            : 'text-slate-300'
+                      }`}
+                    >
+                      {value}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
+
+            {/* Active tasks */}
+            <div className="bg-[#161b27] border border-[#1e2536] rounded-xl p-5">
+              <p className="text-xs text-slate-500 uppercase tracking-wider font-medium mb-3">
+                Active Tasks
+              </p>
+              {tasks.length > 0 ? (
+                <div className="space-y-2">
+                  {tasks.map((t: any) => (
+                    <div
+                      key={t.id}
+                      className="flex items-center gap-2 bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-2"
+                    >
+                      <span
+                        className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${TASK_TYPE_STYLE[t.type] ?? 'bg-slate-500/15 text-slate-400'}`}
+                      >
+                        {t.type}
+                      </span>
+                      <span className="text-xs text-slate-300">Room {t.room?.number}</span>
+                      <span className="ml-auto text-[10px] text-slate-600">{t.status}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-slate-600 text-xs text-center py-3">No active tasks</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Attendance ── */}
+      {tab === 'attendance' && (
+        <div className="bg-[#161b27] border border-[#1e2536] rounded-xl overflow-hidden">
+          <div className="px-5 py-4 border-b border-[#1e2536]">
+            <p className="text-sm font-semibold text-white">Attendance History</p>
+            <p className="text-xs text-slate-500 mt-0.5">Last 20 records</p>
+          </div>
+          {attendance.length > 0 ? (
             <table className="w-full">
-              <thead className="border-b border-[#1e2536] bg-[#0f1117]/40">
+              <thead className="border-b border-[#1e2536] bg-[#0f1117]/50">
                 <tr>
-                  {['Date', 'Clock In', 'Clock Out', 'Hours', 'Status'].map(h => (
-                    <th key={h} className="text-xs text-slate-500 uppercase tracking-wider font-medium px-4 py-2.5 text-left">{h}</th>
+                  {['Type', 'Date & Time', 'Method', 'Note'].map((h) => (
+                    <th
+                      key={h}
+                      className="text-xs text-slate-500 uppercase tracking-wider font-medium px-4 py-3 text-left"
+                    >
+                      {h}
+                    </th>
                   ))}
                 </tr>
               </thead>
-              <tbody>
-                {attendanceLog.map((day, i) => (
-                  <tr key={i} className="border-b border-[#1e2536] last:border-0 hover:bg-white/[0.02] transition-colors">
-                    <td className="px-4 py-3 text-sm text-slate-300">{day.date}</td>
+              <tbody className="divide-y divide-[#1e2536]">
+                {attendance.map((a: any, i: number) => (
+                  <tr key={i} className="hover:bg-white/[0.02] transition-colors">
                     <td className="px-4 py-3">
-                      <span className={`text-sm ${day.clockIn === '—' ? 'text-slate-600' : 'text-slate-300'}`}>{day.clockIn}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`text-sm ${day.clockOut === '—' ? 'text-slate-600' : 'text-slate-300'}`}>{day.clockOut}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`text-sm font-medium ${day.hours > 0 ? 'text-slate-200' : 'text-slate-600'}`}>
-                        {day.hours > 0 ? `${day.hours}h` : '—'}
+                      <span
+                        className={`text-xs font-medium flex items-center gap-1.5 ${a.type === 'CLOCK_IN' ? 'text-emerald-400' : 'text-slate-400'}`}
+                      >
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full ${a.type === 'CLOCK_IN' ? 'bg-emerald-400' : 'bg-slate-500'}`}
+                        />
+                        {a.type === 'CLOCK_IN' ? 'Clock In' : 'Clock Out'}
                       </span>
                     </td>
+                    <td className="px-4 py-3 text-xs text-slate-400">{fmtDateTime(a.timestamp)}</td>
                     <td className="px-4 py-3">
-                      <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${attendanceStyle[day.status]}`}>
-                        {day.status === 'Full Day' && <span className="flex items-center gap-1"><CheckCircle2 size={10} /> {day.status}</span>}
-                        {day.status === 'Absent' && <span className="flex items-center gap-1"><XCircle size={10} /> {day.status}</span>}
-                        {day.status === 'Late' && <span className="flex items-center gap-1"><AlertTriangle size={10} /> {day.status}</span>}
-                        {(day.status === 'Half Day' || day.status === 'Day Off') && day.status}
+                      <span className="text-[10px] bg-slate-700/30 text-slate-400 px-2 py-0.5 rounded">
+                        {a.method ?? '—'}
                       </span>
                     </td>
+                    <td className="px-4 py-3 text-xs text-slate-500">{a.note ?? '—'}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            <div className="px-5 py-3 bg-[#0f1117]/40 border-t border-[#1e2536] flex items-center justify-between">
-              <span className="text-xs text-slate-500">Total hours this week</span>
-              <span className="text-sm font-bold text-white">{totalHours.toFixed(1)} hrs</span>
+          ) : (
+            <div className="py-12 text-center">
+              <Clock size={28} className="text-slate-700 mx-auto mb-2" />
+              <p className="text-slate-500 text-sm">No attendance records</p>
             </div>
-          </div>
-
-          {/* Leave History */}
-          <div className="bg-[#161b27] border border-[#1e2536] rounded-xl p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-semibold text-white flex items-center gap-2"><Calendar size={14} className="text-violet-400" /> Leave History</h2>
-              <button className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 transition-colors">
-                <FileText size={12} /> Request Leave
-              </button>
-            </div>
-            <div className="space-y-3">
-              {[
-                { type: 'Annual Leave', from: '2026-01-06', to: '2026-01-10', days: 5, status: 'Approved' },
-                { type: 'Sick Leave', from: '2025-11-14', to: '2025-11-15', days: 2, status: 'Approved' },
-                { type: 'Annual Leave', from: '2025-08-04', to: '2025-08-08', days: 5, status: 'Approved' },
-              ].map((leave, i) => (
-                <div key={i} className="flex items-center justify-between py-2.5 border-b border-[#1e2536] last:border-0">
-                  <div>
-                    <p className="text-sm font-medium text-slate-200">{leave.type}</p>
-                    <p className="text-xs text-slate-500 mt-0.5">{leave.from} → {leave.to} · {leave.days} days</p>
-                  </div>
-                  <span className="text-xs px-2.5 py-1 rounded-full font-medium bg-emerald-500/15 text-emerald-400">{leave.status}</span>
-                </div>
-              ))}
-            </div>
-          </div>
+          )}
         </div>
-      </div>
+      )}
+
+      {/* ── Leaves ── */}
+      {tab === 'leaves' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-white">Leave History</p>
+          </div>
+          {leaves.length > 0 ? (
+            <div className="bg-[#161b27] border border-[#1e2536] rounded-xl overflow-hidden">
+              <table className="w-full">
+                <thead className="border-b border-[#1e2536] bg-[#0f1117]/50">
+                  <tr>
+                    {['Type', 'From', 'To', 'Reason', 'Status'].map((h) => (
+                      <th
+                        key={h}
+                        className="text-xs text-slate-500 uppercase tracking-wider font-medium px-4 py-3 text-left"
+                      >
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#1e2536]">
+                  {leaves.map((l: any) => (
+                    <tr key={l.id} className="hover:bg-white/[0.02] transition-colors">
+                      <td className="px-4 py-3 text-xs text-slate-300">{l.type}</td>
+                      <td className="px-4 py-3 text-xs text-slate-400">{fmt(l.startDate)}</td>
+                      <td className="px-4 py-3 text-xs text-slate-400">{fmt(l.endDate)}</td>
+                      <td className="px-4 py-3 text-xs text-slate-400 max-w-xs truncate">
+                        {l.reason}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`text-xs px-2 py-0.5 rounded-full font-medium ${LEAVE_STATUS_STYLE[l.status] ?? 'bg-slate-500/15 text-slate-400'}`}
+                        >
+                          {l.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="py-12 text-center bg-[#161b27] border border-[#1e2536] rounded-xl">
+              <Briefcase size={28} className="text-slate-700 mx-auto mb-2" />
+              <p className="text-slate-500 text-sm">No leave records</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Tasks ── */}
+      {tab === 'tasks' && (
+        <div className="space-y-3">
+          {tasks.length > 0 ? (
+            tasks.map((t: any) => (
+              <div
+                key={t.id}
+                className="bg-[#161b27] border border-[#1e2536] rounded-xl p-4 flex items-center justify-between"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-[#0f1117] border border-[#1e2536] flex items-center justify-center shrink-0">
+                    <BedDouble size={14} className="text-slate-500" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium text-slate-200">Room {t.room?.number}</p>
+                      <span
+                        className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${TASK_TYPE_STYLE[t.type] ?? 'bg-slate-500/15 text-slate-400'}`}
+                      >
+                        {t.type}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {t.room?.type}
+                      {t.dueBy && ` · Due ${fmtTime(t.dueBy)}`}
+                    </p>
+                  </div>
+                </div>
+                <span
+                  className={`text-xs px-2.5 py-1 rounded-full font-medium ${
+                    t.status === 'DONE'
+                      ? 'bg-emerald-500/15 text-emerald-400'
+                      : t.status === 'IN_PROGRESS'
+                        ? 'bg-blue-500/15    text-blue-400'
+                        : 'bg-amber-500/15   text-amber-400'
+                  }`}
+                >
+                  {t.status}
+                </span>
+              </div>
+            ))
+          ) : (
+            <div className="py-12 text-center bg-[#161b27] border border-[#1e2536] rounded-xl">
+              <BedDouble size={28} className="text-slate-700 mx-auto mb-2" />
+              <p className="text-slate-500 text-sm">No active tasks assigned</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {showEdit && <EditStaffModal staff={staff} onClose={() => setShowEdit(false)} />}
     </div>
   );
 }

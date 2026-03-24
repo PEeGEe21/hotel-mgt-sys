@@ -49,6 +49,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, string[]> = {
     'view:hr',
     'manage:hr',
     'manage:permissions',
+    'manage:pos'
   ],
 
   ADMIN: [
@@ -98,6 +99,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, string[]> = {
     'view:hr',
     'manage:hr',
     'manage:permissions',
+    'manage:pos'
   ],
 
   MANAGER: [
@@ -137,6 +139,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, string[]> = {
     'view:settings',
     'view:hr',
     'manage:hr',
+    'manage:pos'
   ],
 
   RECEPTIONIST: [

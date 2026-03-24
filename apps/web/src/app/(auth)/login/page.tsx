@@ -5,6 +5,7 @@ import { useAuthStore } from '@/store/auth.store';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAppStore } from '@/store/app.store';
 import { useHotelBranding } from '@/hooks/useHotelBranding';
+import openToast from '@/components/ToastComponent';
 
 export default function LoginPage() {
   // const login = useAuthStore((s) => s.login);
@@ -37,6 +38,13 @@ export default function LoginPage() {
       }
 
       if (result.hotel) setHotel(result.hotel);
+
+      openToast('success', 'Logged In Successfully');
+      
+      if (result.user?.mustChangePassword) {
+        router.push('/change-password');
+        return;
+      }
 
       // Respect ?from= redirect, fall back to dashboard
       const from = searchParams.get('from') ?? '/dashboard';

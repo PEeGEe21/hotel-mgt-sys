@@ -51,7 +51,7 @@ export default function Topbar() {
         ) : (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="flex items-center gap-2.5 hover:bg-white/5 px-2.5 py-1.5 rounded-lg transition-colors">
+              <button className="flex items-center gap-2.5 hover:bg-white/5 px-2.5 py-1.5 rounded-lg transition-colors min-w-28">
                 {user?.avatar ? (
                   <img
                     src={user.avatar}
@@ -73,7 +73,7 @@ export default function Topbar() {
                 <ChevronDown size={14} className="text-slate-500" />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-fit !bg-[#161b27] border border-[#1e2536] ring-0 text-white">
+            <DropdownMenuContent align="end" className="min-w-44 !bg-[#161b27] border border-[#1e2536] ring-0 text-white">
               <DropdownMenuItem asChild>
                 <Link href="/profile" className="flex items-center gap-2 cursor-pointer hover:!bg-white/5 !text-white">
                   <User size={14} /> Profile

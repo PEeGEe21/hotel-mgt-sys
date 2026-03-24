@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/api';
 import openToast from '@/components/ToastComponent';
 
@@ -47,13 +47,53 @@ export type UserAccountUpdate = Partial<{
   phone: string;
 }>;
 
-export function useUserAccounts(search?: string) {
+export type UserFilters = {
+  search?: string;
+  department?: string;
+  role?: string;
+  page?: number;
+  limit?: number;
+};
+
+export type UserResponse = {
+  users: UserAccount[];
+  total: number;
+  page: number;
+  totalPages: number;
+  meta: any;
+  stats?: {
+    total: number;
+    active: number;
+    suspended: number;
+    pending: number;
+  };
+};
+
+export function useUserAccounts(filters: UserFilters = {}) {
+  return useQuery<UserResponse>({
+    queryKey: ['user-accounts', filters],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (filters.search) params.set('search', filters.search);
+      if (filters.department) params.set('department', filters.department);
+      if (filters.role) params.set('role', filters.role);
+      if (filters.page) params.set('page', String(filters.page));
+      if (filters.limit) params.set('limit', String(filters.limit));
+      const { data } = await api.get(`/users?${params}`);
+      return data;
+    },
+    staleTime: 30_000,
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useAllUserAccounts(search?: string) {
   return useQuery<UserAccount[]>({
     queryKey: ['user-accounts', search],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (search) params.set('search', search);
-      const { data } = await api.get(`/users?${params}`);
+      const { data } = await api.get(`/users/list?${params}`);
       return data;
     },
   });

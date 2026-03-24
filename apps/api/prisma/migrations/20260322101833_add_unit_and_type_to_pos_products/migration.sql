@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "PosProduct" ADD COLUMN     "type" TEXT NOT NULL DEFAULT 'PHYSICAL',
+ADD COLUMN     "unit" TEXT NOT NULL DEFAULT 'item';

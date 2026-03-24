@@ -1,7 +1,18 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { UserCog, Plus, Search, Shield, X, Pencil, Trash2, CheckCircle2, XCircle, Key } from 'lucide-react';
+import {
+  UserCog,
+  Plus,
+  Search,
+  Shield,
+  X,
+  Pencil,
+  Trash2,
+  CheckCircle2,
+  XCircle,
+  Key,
+} from 'lucide-react';
 import {
   useCreateUserAccount,
   useDeleteUserAccount,
@@ -11,6 +22,7 @@ import {
   type UserAccount,
 } from '@/hooks/useUserAccounts';
 import { useDebounce } from '@/hooks/useDebounce';
+import Pagination from '@/components/ui/pagination';
 
 type Role =
   | 'SUPER_ADMIN'
@@ -40,7 +52,15 @@ const statusStyle: Record<AccountStatus, string> = {
   Pending: 'bg-amber-500/15 text-amber-400',
 };
 
-const roles: Role[] = ['ADMIN', 'MANAGER', 'RECEPTIONIST', 'HOUSEKEEPING', 'CASHIER', 'BARTENDER', 'STAFF'];
+const roles: Role[] = [
+  'ADMIN',
+  'MANAGER',
+  'RECEPTIONIST',
+  'HOUSEKEEPING',
+  'CASHIER',
+  'BARTENDER',
+  'STAFF',
+];
 
 function AccountModal({
   account,
@@ -174,32 +194,34 @@ function AccountModal({
 
 export default function UserAccountsPage() {
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
   const [showAdd, setShowAdd] = useState(false);
   const [editing, setEditing] = useState<UserAccount | null>(null);
   const debouncedSearch = useDebounce(search.trim(), 300);
-  const { data: accounts = [], isLoading } = useUserAccounts(debouncedSearch || undefined);
+  const { data, isLoading } = useUserAccounts({
+    search: debouncedSearch || undefined,
+    page,
+    limit: limit,
+  });
   const createAccount = useCreateUserAccount();
   const updateAccount = useUpdateUserAccount(editing?.id ?? '');
   const deleteAccount = useDeleteUserAccount();
   const resetPassword = useResetUserPassword(editing?.id ?? '');
+  const resetPage = () => setPage(1);
 
-  const filtered = useMemo(
-    () =>
-      accounts.filter((a) =>
-        `${a.staffName} ${a.username} ${a.email} ${a.role}`.toLowerCase().includes(search.toLowerCase()),
-      ),
-    [accounts, search],
-  );
+  const accounts = data?.users ?? [];
+  const stats = data?.stats;
 
-  const stats = useMemo(
-    () => ({
-      total: accounts.length,
-      active: accounts.filter((a) => a.status === 'Active').length,
-      suspended: accounts.filter((a) => a.status === 'Suspended').length,
-      pending: accounts.filter((a) => a.status === 'Pending').length,
-    }),
-    [accounts],
-  );
+  // const stats = useMemo(
+  //   () => ({
+  //     total: accounts.length,
+  //     active: accounts.filter((a) => a.status === 'Active').length,
+  //     suspended: accounts.filter((a) => a.status === 'Suspended').length,
+  //     pending: accounts.filter((a) => a.status === 'Pending').length,
+  //   }),
+  //   [accounts],
+  // );
 
   return (
     <div className="space-y-6">
@@ -221,10 +243,30 @@ export default function UserAccountsPage() {
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
-          { label: 'Total Accounts', value: stats.total, color: 'text-blue-400', bg: 'bg-blue-500/10 border-blue-500/20' },
-          { label: 'Active', value: stats.active, color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20' },
-          { label: 'Suspended', value: stats.suspended, color: 'text-red-400', bg: 'bg-red-500/10 border-red-500/20' },
-          { label: 'Pending Setup', value: stats.pending, color: 'text-amber-400', bg: 'bg-amber-500/10 border-amber-500/20' },
+          {
+            label: 'Total Accounts',
+            value: stats?.total,
+            color: 'text-blue-400',
+            bg: 'bg-blue-500/10 border-blue-500/20',
+          },
+          {
+            label: 'Active',
+            value: stats?.active,
+            color: 'text-emerald-400',
+            bg: 'bg-emerald-500/10 border-emerald-500/20',
+          },
+          {
+            label: 'Suspended',
+            value: stats?.suspended,
+            color: 'text-red-400',
+            bg: 'bg-red-500/10 border-red-500/20',
+          },
+          {
+            label: 'Pending Setup',
+            value: stats?.pending,
+            color: 'text-amber-400',
+            bg: 'bg-amber-500/10 border-amber-500/20',
+          },
         ].map(({ label, value, color, bg }) => (
           <div key={label} className={`${bg} border rounded-xl px-4 py-4`}>
             <p className={`text-2xl font-bold ${color}`}>{value}</p>
@@ -233,19 +275,50 @@ export default function UserAccountsPage() {
         ))}
       </div>
 
-      <div className="flex items-center gap-2 bg-[#161b27] border border-[#1e2536] rounded-lg px-3 py-2 max-w-80">
-        <Search size={14} className="text-slate-500" />
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search accounts..."
-          className="bg-transparent text-sm text-slate-300 placeholder:text-slate-600 outline-none flex-1" />
+      <div className="flex items-center gap-2">
+        <select
+          value={limit}
+          onChange={(e) => {
+            setLimit(Number(e.target.value));
+            resetPage();
+          }}
+          className="h-10 bg-[#161b27] border border-[#1e2536] rounded-lg px-3 py-2 text-sm text-slate-300 outline-none focus:border-blue-500 transition-colors"
+        >
+          {[5, 10, 20, 50, 100].map((n) => (
+            <option key={n} value={n}>
+              {n} per page
+            </option>
+          ))}
+        </select>
+
+        <div className="flex items-center gap-2 bg-[#161b27] border border-[#1e2536] rounded-lg px-3 py-2 max-w-80">
+          <Search size={14} className="text-slate-500" />
+          <input
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            placeholder="Search accounts..."
+            className="bg-transparent text-sm text-slate-300 placeholder:text-slate-600 outline-none flex-1"
+          />
+        </div>
       </div>
 
       <div className="bg-[#161b27] border border-[#1e2536] rounded-xl overflow-hidden">
         <table className="w-full">
           <thead className="border-b border-[#1e2536] bg-[#0f1117]/50">
             <tr>
-              {['Staff Member', 'Username', 'Role', 'Status', 'Last Login', 'Created', ''].map(h => (
-                <th key={h} className="text-xs text-slate-500 uppercase tracking-wider font-medium px-4 py-3 text-left whitespace-nowrap">{h}</th>
-              ))}
+              {['Staff Member', 'Username', 'Role', 'Status', 'Last Login', 'Created', ''].map(
+                (h) => (
+                  <th
+                    key={h}
+                    className="text-xs text-slate-500 uppercase tracking-wider font-medium px-4 py-3 text-left whitespace-nowrap"
+                  >
+                    {h}
+                  </th>
+                ),
+              )}
             </tr>
           </thead>
           <tbody>
@@ -255,75 +328,102 @@ export default function UserAccountsPage() {
                   Loading accounts…
                 </td>
               </tr>
-            ) : filtered.length === 0 ? (
+            ) : accounts.length === 0 ? (
               <tr>
                 <td colSpan={7} className="px-4 py-8 text-center text-slate-500 text-sm">
                   No accounts found
                 </td>
               </tr>
-            ) : filtered.map(acc => (
-              <tr key={acc.id} className="border-b border-[#1e2536] last:border-0 hover:bg-white/[0.02] transition-colors">
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500/30 to-violet-500/30 border border-white/10 flex items-center justify-center text-xs font-bold text-white shrink-0">
-                      {acc.staffName.split(' ').map(n => n[0]).join('')}
+            ) : (
+              accounts.map((acc) => (
+                <tr
+                  key={acc.id}
+                  className="border-b border-[#1e2536] last:border-0 hover:bg-white/[0.02] transition-colors"
+                >
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="uppercase w-8 h-8 rounded-full bg-gradient-to-br from-blue-500/30 to-violet-500/30 border border-white/10 flex items-center justify-center text-xs font-bold text-white shrink-0">
+                        {acc.staffName
+                          .split(' ')
+                          .map((n) => n[0])
+                          .join('')}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-slate-200 capitalize">
+                          {acc.staffName}
+                        </p>
+                        <p className="text-xs text-slate-500">{acc.email}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-sm font-medium text-slate-200">{acc.staffName}</p>
-                      <p className="text-xs text-slate-500">{acc.email}</p>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-slate-400 font-mono">{acc.username}</td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`text-xs px-2.5 py-1 rounded-full font-medium ${roleColors[acc.role as Role] || 'bg-slate-500/15 text-slate-400'}`}
+                    >
+                      {acc.role}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`text-xs px-2.5 py-1 rounded-full font-medium flex items-center gap-1 w-fit ${statusStyle[acc.status]}`}
+                    >
+                      {acc.status === 'Active' ? (
+                        <CheckCircle2 size={10} />
+                      ) : acc.status === 'Suspended' ? (
+                        <XCircle size={10} />
+                      ) : null}
+                      {acc.status}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">
+                    {acc.lastLogin ?? 'Never'}
+                  </td>
+                  <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">
+                    {acc.createdAt}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-1">
+                      <button
+                        className="p-1.5 rounded-lg text-slate-500 hover:text-amber-400 hover:bg-amber-500/10 transition-colors"
+                        title="Reset Password"
+                        onClick={async () => {
+                          const pw = prompt('Enter a temporary password');
+                          if (!pw) return;
+                          setEditing(acc);
+                          await resetPassword.mutateAsync(pw);
+                        }}
+                      >
+                        <Key size={13} />
+                      </button>
+                      <button
+                        className="p-1.5 rounded-lg text-slate-500 hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
+                        onClick={() => {
+                          setEditing(acc);
+                          setShowAdd(true);
+                        }}
+                      >
+                        <Pencil size={13} />
+                      </button>
+                      <button
+                        className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                        onClick={async () => {
+                          if (!confirm('Disable this account?')) return;
+                          await deleteAccount.mutateAsync(acc.id);
+                        }}
+                      >
+                        <Trash2 size={13} />
+                      </button>
                     </div>
-                  </div>
-                </td>
-                <td className="px-4 py-3 text-sm text-slate-400 font-mono">{acc.username}</td>
-                <td className="px-4 py-3">
-                  <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${roleColors[acc.role as Role] || 'bg-slate-500/15 text-slate-400'}`}>{acc.role}</span>
-                </td>
-                <td className="px-4 py-3">
-                  <span className={`text-xs px-2.5 py-1 rounded-full font-medium flex items-center gap-1 w-fit ${statusStyle[acc.status]}`}>
-                    {acc.status === 'Active' ? <CheckCircle2 size={10} /> : acc.status === 'Suspended' ? <XCircle size={10} /> : null}
-                    {acc.status}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">{acc.lastLogin ?? 'Never'}</td>
-                <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">{acc.createdAt}</td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-1">
-                    <button
-                      className="p-1.5 rounded-lg text-slate-500 hover:text-amber-400 hover:bg-amber-500/10 transition-colors"
-                      title="Reset Password"
-                      onClick={async () => {
-                        const pw = prompt('Enter a temporary password');
-                        if (!pw) return;
-                        setEditing(acc);
-                        await resetPassword.mutateAsync(pw);
-                      }}
-                    >
-                      <Key size={13} />
-                    </button>
-                    <button
-                      className="p-1.5 rounded-lg text-slate-500 hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
-                      onClick={() => {
-                        setEditing(acc);
-                        setShowAdd(true);
-                      }}
-                    >
-                      <Pencil size={13} />
-                    </button>
-                    <button
-                      className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                      onClick={async () => {
-                        if (!confirm('Disable this account?')) return;
-                        await deleteAccount.mutateAsync(acc.id);
-                      }}
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
+        {data?.meta && accounts.length > 0 && (
+          <Pagination meta={data.meta} currentPage={page} handlePageChange={setPage} />
+        )}
       </div>
 
       {showAdd && (

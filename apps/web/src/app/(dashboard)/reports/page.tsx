@@ -179,7 +179,7 @@ export default function ReportsPage() {
       <div className="flex gap-1 flex-wrap bg-[#161b27] border border-[#1e2536] rounded-xl p-1">
         {TABS.map(({ id, label, icon: Icon }) => (
           <button key={id} onClick={() => setActiveTab(id)}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors flex-1 justify-center ${activeTab === id ? 'bg-blue-600/20 text-blue-400 border border-blue-500/20' : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'}`}>
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors flex-1 justify-center border ${activeTab === id ? 'bg-blue-600/20 text-blue-400 border border-blue-500/20' : 'text-slate-400 hover:text-slate-200 hover:bg-white/5 border-transparent'}`}>
             <Icon size={13} />{label}
           </button>
         ))}

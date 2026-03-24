@@ -21,6 +21,7 @@ export class PermissionsGuard implements CanActivate {
     if (!required || required.length === 0) return true;
 
     const { user } = context.switchToHttp().getRequest();
+
     if (!user?.sub) throw new ForbiddenException('Insufficient permissions');
 
     if (user.role === 'SUPER_ADMIN') return true;

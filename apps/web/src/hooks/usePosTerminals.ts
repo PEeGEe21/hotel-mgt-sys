@@ -8,7 +8,8 @@ export type PosTerminal = {
   id: string;
   name: string;
   location: string;
-  group: string;
+  terminalGroupId: string | null;
+  terminalGroupName: string | null;
   device: string;
   status: string;
   staffId: string | null;
@@ -16,10 +17,18 @@ export type PosTerminal = {
   createdAt: string;
 };
 
+export type PosTerminalGroup = {
+  id: string;
+  name: string;
+  description?: string;
+  level?: number;
+  createdAt: string;
+};
+
 export type PosTerminalInput = {
   name: string;
   location: string;
-  group: string;
+  terminalGroupId: string | null;
   device: string;
   status?: string;
   staffId?: string | null;
@@ -30,6 +39,16 @@ export function usePosTerminals() {
     queryKey: ['pos-terminals'],
     queryFn: async () => {
       const { data } = await api.get('/pos/terminals');
+      return data;
+    },
+  });
+}
+
+export function usePosTerminalGroups() {
+  return useQuery<PosTerminalGroup[]>({
+    queryKey: ['pos-terminal-groups'],
+    queryFn: async () => {
+      const { data } = await api.get('/pos/terminals/groups');
       return data;
     },
   });
@@ -54,6 +73,7 @@ export function useUpdatePosTerminal(id: string) {
       api.patch(`/pos/terminals/${id}`, dto).then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['pos-terminals'] });
+      qc.invalidateQueries({ queryKey: ['pos-terminals', id] });
       openToast('success', 'Terminal updated');
     },
     onError: (e: any) => openToast('error', e?.response?.data?.message ?? 'Update failed'),
@@ -67,6 +87,18 @@ export function useDeletePosTerminal() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['pos-terminals'] });
       openToast('success', 'Terminal removed');
+    },
+    onError: (e: any) => openToast('error', e?.response?.data?.message ?? 'Delete failed'),
+  });
+}
+
+export function useTerminalStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.patch(`/pos/terminals/${id}`).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['pos-terminals'] });
+      openToast('success', 'Terminal Status updated');
     },
     onError: (e: any) => openToast('error', e?.response?.data?.message ?? 'Delete failed'),
   });

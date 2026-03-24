@@ -12,6 +12,8 @@ import {
   Settings,
   ChevronRight,
   Hotel,
+  ShoppingCart,
+  Table,
 } from 'lucide-react';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Layers } from '@solar-icons/react';
@@ -87,6 +89,24 @@ const sections = [
     description: 'Create logins and assign roles to staff',
     href: '/profile',
     icon: Users,
+    color: 'text-slate-400',
+    bg: 'bg-slate-500/10 border-slate-500/20',
+    adminOnly: true,
+  },
+  {
+    label: 'Pos Product Categories',
+    description: 'Manage Categories For Pos Products',
+    href: '/settings/pos-product-categories',
+    icon: ShoppingCart,
+    color: 'text-slate-400',
+    bg: 'bg-slate-500/10 border-slate-500/20',
+    adminOnly: true,
+  },
+  {
+    label: 'Tables',
+    description: 'Manage Tables For Bars, Restaurant etc',
+    href: '/settings/tables',
+    icon: Table,
     color: 'text-slate-400',
     bg: 'bg-slate-500/10 border-slate-500/20',
     adminOnly: true,

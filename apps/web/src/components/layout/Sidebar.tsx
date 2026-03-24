@@ -37,6 +37,9 @@ import { useAuthStore } from '@/store/auth.store';
 import { useAppStore } from '@/store/app.store';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useHydration } from '@/hooks/useHydration';
+import { Lock } from '@solar-icons/react';
+import { chevronVariants, dropdownVariants, itemVariants } from '@/utils/animations';
+import { motion, AnimatePresence } from 'framer-motion';
 
 type NavItem = { label: string; href: string; icon: any };
 type NavGroup = { label: string; href: string; icon: any; permission: string; children: NavItem[] };
@@ -51,7 +54,16 @@ const nav: NavEntry[] = [
   { label: 'Staff', href: '/staff', icon: UserCheck },
   { label: 'Attendance', href: '/attendance', icon: Clock },
   { label: 'Clock', href: '/clock', icon: Clock },
-  { label: 'POS / Store', href: '/pos', icon: ShoppingCart },
+  {
+    label: 'POS / Store',
+    href: '/pos',
+    icon: ShoppingCart,
+    permission: 'manage:pos',
+    children: [
+      { label: 'Manage POS', href: '/pos/manage-pos', icon: Building2 },
+      { label: 'POS Products', href: '/pos/products', icon: Lock },
+    ],
+  },
   { label: 'Inventory', href: '/inventory', icon: Package },
   { label: 'Housekeeping', href: '/housekeeping', icon: Sparkles },
   {
@@ -75,6 +87,7 @@ const nav: NavEntry[] = [
     permission: 'view:facilities',
     children: [
       { label: 'Facility List', href: '/facilities/list', icon: Building2 },
+      { label: 'Reservations', href: '/facilities/reservations', icon: Lock },
       { label: 'Complaints', href: '/facilities/complaints', icon: AlertTriangle },
       { label: 'Inspections', href: '/facilities/inspections', icon: ClipboardList },
       { label: 'Maintenance', href: '/facilities/maintenance', icon: Wrench },
@@ -162,6 +175,9 @@ export default function Sidebar() {
             ))}
           </div>
         )}
+
+        {/* search */}
+        {ready && <></>}
         {ready &&
           nav.map((item) => {
             if (isGroup(item)) {
@@ -181,33 +197,64 @@ export default function Sidebar() {
                   >
                     <Icon size={16} strokeWidth={groupActive ? 2 : 1.5} />
                     <span className="flex-1 text-left">{item.label}</span>
-                    <ChevronDown
-                      size={14}
-                      className={`transition-transform duration-200 ${open ? 'rotate-180' : ''} ${groupActive ? 'text-blue-400' : 'text-slate-600'}`}
-                    />
+                    <motion.div
+                      variants={chevronVariants}
+                      animate={open ? 'open' : 'closed'}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <ChevronDown
+                        size={14}
+                        className={`transition-transform duration-200  ${groupActive ? 'text-blue-400' : 'text-slate-600'}`}
+                      />
+                    </motion.div>
                   </button>
-                  {open && (
-                    <div className="mt-0.5 ml-3 pl-3 border-l border-[#1e2536] space-y-0.5">
-                      {item.children.map((child) => {
-                        const CIcon = child.icon;
-                        const active = isActive(child.href);
-                        return (
-                          <Link
-                            key={child.href}
-                            href={child.href}
-                            className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-150 ${
-                              active
-                                ? 'bg-blue-600/20 text-blue-400 font-medium'
-                                : 'text-slate-500 hover:text-slate-200 hover:bg-white/5'
-                            }`}
-                          >
-                            <CIcon size={14} strokeWidth={active ? 2 : 1.5} />
-                            {child.label}
-                          </Link>
-                        );
-                      })}
-                    </div>
-                  )}
+                  <AnimatePresence initial={false}>
+                    {open && (
+                      <motion.div
+                        variants={dropdownVariants}
+                        initial="closed"
+                        animate="open"
+                        exit="closed"
+                        transition={{
+                          height: { duration: 0.3, ease: [0.4, 0, 0.2, 1] },
+                          opacity: {
+                            duration: 0.3,
+                            delay: 0.1,
+                            ease: [0.4, 0, 0.2, 1],
+                          },
+                        }}
+                        className="overflow-hidden mt-0.5 ml-3 pl-3 border-l border-[#1e2536] space-y-0.5"
+                      >
+                        {item.children.map((child, index) => {
+                          const CIcon = child.icon;
+                          const active = isActive(child.href);
+                          return (
+                            <motion.div
+                              key={child.href}
+                              variants={itemVariants}
+                              initial="closed"
+                              animate="open"
+                              exit="closed"
+                              custom={index}
+                            >
+                              <Link
+                                key={child.href}
+                                href={child.href}
+                                className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-150 ${
+                                  active
+                                    ? 'bg-blue-600/20 text-blue-400 font-medium'
+                                    : 'text-slate-500 hover:text-slate-200 hover:bg-white/5'
+                                }`}
+                              >
+                                <CIcon size={14} strokeWidth={active ? 2 : 1.5} />
+                                {child.label}
+                              </Link>
+                            </motion.div>
+                          );
+                        })}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
               );
             }

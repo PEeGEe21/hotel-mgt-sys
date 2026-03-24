@@ -23,6 +23,7 @@ export type AuthUser = {
   role: string;
   department: string | null;
   position: string | null;
+  mustChangePassword: boolean;
   permissionOverrides: {
     grants: string[];
     denies: string[];
@@ -38,7 +39,7 @@ interface AuthState {
   login: (
     email: string,
     password: string,
-  ) => Promise<{ success: boolean; hotel?: any; message?: string }>;
+  ) => Promise<{ success: boolean; hotel?: any; user?: AuthUser; message?: string }>;
   logout: () => Promise<void>;
   setUser: (user: AuthUser | null) => void;
   clearError: () => void;
@@ -65,7 +66,7 @@ export const useAuthStore = create<AuthState>()(
         console.log(result, 'ffs');
 
         set({ user: result.user, isAuthenticated: true, isLoading: false, error: null });
-        return { success: true, hotel: result.hotel };
+        return { success: true, hotel: result.hotel, user: result.user };
       },
 
       logout: async () => {

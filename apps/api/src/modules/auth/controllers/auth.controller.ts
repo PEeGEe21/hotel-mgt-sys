@@ -78,6 +78,17 @@ export class AuthController {
     return this.authService.updateMe(req.user.sub, dto);
   }
 
+  @Patch('change-password')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Change own password (clears mustChangePassword flag)' })
+  changePassword(
+    @Request() req: any,
+    @Body() body: { currentPassword: string; newPassword: string },
+  ) {
+    return this.authService.changePassword(req.user.sub, body.currentPassword, body.newPassword);
+  }
+
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @Patch('me/attendance-pin/reset')

@@ -1,0 +1,28 @@
+import {
+  IsString,
+  IsOptional,
+  IsNumber,
+  IsBoolean,
+  IsArray,
+  ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IngredientDto } from '../ingredient.dto';
+
+export class UpdateProductDto {
+  @ApiPropertyOptional() @IsString() @IsOptional() name?: string;
+  @ApiPropertyOptional() @IsNumber() @IsOptional() price?: number;
+  @ApiPropertyOptional() @IsString() @IsOptional() categoryId?: string;
+  @ApiPropertyOptional() @IsString() @IsOptional() description?: string;
+  @ApiPropertyOptional() @IsString() @IsOptional() unit?: string;
+  @ApiPropertyOptional() @IsBoolean() @IsOptional() isAvailable?: boolean;
+  @ApiPropertyOptional() @IsNumber() @IsOptional() stock?: number;
+  @ApiPropertyOptional() @IsString() @IsOptional() type?: string;
+  @ApiPropertyOptional({ type: [IngredientDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => IngredientDto)
+  @IsOptional()
+  ingredients?: IngredientDto[];
+}

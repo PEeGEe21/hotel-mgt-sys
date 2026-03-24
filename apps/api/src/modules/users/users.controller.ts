@@ -1,4 +1,15 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Request, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Request,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -7,6 +18,7 @@ import { CreateUserAccountDto } from './dtos/create-user-account.dto';
 import { UpdateUserAccountDto } from './dtos/update-user-account.dto';
 import { ResetPasswordDto } from './dtos/reset-password.dto';
 import { UpdateUserPermissionsDto } from './dtos/update-user-permissions.dto';
+import { UsersFilterDto } from './dtos/users-filter.dto';
 
 @ApiTags('Users')
 @ApiBearerAuth()
@@ -17,8 +29,14 @@ export class UsersController {
 
   @Get()
   @Permissions('view:hr')
-  list(@Request() req: any, @Query('search') search?: string) {
-    return this.usersService.list(req.user.hotelId, search);
+  list(@Request() req: any, @Query() filters: UsersFilterDto) {
+    return this.usersService.list(req.user.hotelId, filters);
+  }
+
+  @Get('/list')
+  @Permissions('view:hr')
+  findAll(@Request() req: any, @Query('search') search?: string) {
+    return this.usersService.findAll(req.user.hotelId, search);
   }
 
   @Post()

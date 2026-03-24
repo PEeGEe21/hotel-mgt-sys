@@ -92,7 +92,11 @@ async function main() {
     { name: 'Beer', description: 'Lager, stout, ale, cider', color: 'bg-orange-500' },
     { name: 'Wine', description: 'Red, white, rosé, sparkling', color: 'bg-red-500' },
     { name: 'Cocktails', description: 'Mixes, syrups, bitters', color: 'bg-pink-500' },
-    { name: 'Soft Drinks', description: 'Juices, sodas, water, energy drinks', color: 'bg-sky-500' },
+    {
+      name: 'Soft Drinks',
+      description: 'Juices, sodas, water, energy drinks',
+      color: 'bg-sky-500',
+    },
     { name: 'Food', description: 'Snacks, bar bites, kitchen items', color: 'bg-emerald-500' },
   ];
 
@@ -558,6 +562,7 @@ async function main() {
       'view:hr',
       'manage:hr',
       'manage:permissions',
+      'manage:pos',
     ],
     [Role.ADMIN]: [
       'view:dashboard',
@@ -606,6 +611,7 @@ async function main() {
       'view:hr',
       'manage:hr',
       'manage:permissions',
+      'manage:pos',
     ],
     [Role.MANAGER]: [
       'view:dashboard',
@@ -644,6 +650,7 @@ async function main() {
       'view:settings',
       'view:hr',
       'manage:hr',
+      'manage:pos',
     ],
     [Role.RECEPTIONIST]: [
       'view:dashboard',
@@ -676,13 +683,7 @@ async function main() {
       'view:finance',
       'clock:self',
     ],
-    [Role.BARTENDER]: [
-      'view:dashboard',
-      'view:pos',
-      'create:pos',
-      'view:inventory',
-      'clock:self',
-    ],
+    [Role.BARTENDER]: ['view:dashboard', 'view:pos', 'create:pos', 'view:inventory', 'clock:self'],
     [Role.STAFF]: ['view:dashboard', 'clock:self'],
   };
 
@@ -695,7 +696,39 @@ async function main() {
   }
   console.log(`✅ ${Object.keys(rolePermissions).length} role permissions seeded`);
 
+  // ─── Pos Terminal Groups ──────────────────────────────────────────────────────────
+  const seedPosTerminalGroups = [
+    { name: 'Bar' },
+    { name: 'Kitchen' },
+    { name: 'Front Desk' },
+    { name: 'Pool' },
+    { name: 'Spa' },
+    { name: 'Other Locations' },
+  ];
+
+  let level = 1;
+
+  for (const group of seedPosTerminalGroups) {
+    await prisma.posTerminalGroup.upsert({
+      where: {
+        hotelId_name: {
+          hotelId: hotel.id,
+          name: group.name,
+        },
+      },
+      update: {},
+      create: {
+        hotelId: hotel.id,
+        name: group.name,
+        level: level++,
+      },
+    });
+  }
+
+  console.log(`✅ ${seedPosTerminalGroups.length} pos terminal groups seeded`);
+
   // ─── POS Terminals ───────────────────────────────────────────────────────
+
   const seedTerminals = [
     {
       id: 'term-bar-01',
@@ -731,13 +764,21 @@ async function main() {
     },
   ];
 
+  const groups = await prisma.posTerminalGroup.findMany({
+    where: { hotelId: hotel.id },
+  });
+
+  const groupMap = Object.fromEntries(groups.map((g) => [g.name, g.id]));
+
   for (const t of seedTerminals) {
+    const groupId = groupMap[t.group] ?? null;
+
     await prisma.posTerminal.upsert({
       where: { id: t.id },
       update: {
         name: t.name,
         location: t.location,
-        group: t.group,
+        terminalGroupId: groupId,
         device: t.device,
         status: t.status,
       },
@@ -746,12 +787,13 @@ async function main() {
         hotelId: hotel.id,
         name: t.name,
         location: t.location,
-        group: t.group,
+        terminalGroupId: groupId,
         device: t.device,
         status: t.status,
       },
     });
   }
+
   console.log(`✅ ${seedTerminals.length} POS terminals seeded`);
 
   // ─── Floors ───────────────────────────────────────────────────────────────

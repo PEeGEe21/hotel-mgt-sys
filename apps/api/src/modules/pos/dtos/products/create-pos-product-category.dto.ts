@@ -1,0 +1,8 @@
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsOptional, IsString, MinLength } from 'class-validator';
+
+export class CreatePosProductCategoryDto {
+  @ApiProperty() @IsString() @MinLength(2) name!: string;
+  @ApiPropertyOptional() @IsString() @IsOptional() description?: string;
+  @ApiPropertyOptional() @IsString() @IsOptional() color?: string;
+}
