@@ -24,7 +24,11 @@ import {
   type Role,
   type Permission,
 } from '@/lib/permissions';
-import { useUpdateUserPermissions, useUserAccounts } from '@/hooks/useUserAccounts';
+import {
+  useAllUserAccounts,
+  useUpdateUserPermissions,
+  useUserAccounts,
+} from '@/hooks/useUserAccounts';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -43,16 +47,18 @@ type StaffUser = {
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 const toRole = (value: string): Role =>
-  ([
-    'SUPER_ADMIN',
-    'ADMIN',
-    'MANAGER',
-    'RECEPTIONIST',
-    'HOUSEKEEPING',
-    'CASHIER',
-    'BARTENDER',
-    'STAFF',
-  ] as Role[]).includes(value as Role)
+  (
+    [
+      'SUPER_ADMIN',
+      'ADMIN',
+      'MANAGER',
+      'RECEPTIONIST',
+      'HOUSEKEEPING',
+      'CASHIER',
+      'BARTENDER',
+      'STAFF',
+    ] as Role[]
+  ).includes(value as Role)
     ? (value as Role)
     : 'STAFF';
 
@@ -402,7 +408,7 @@ export default function UserPermissionsPage() {
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<Role | 'ALL'>('ALL');
   const [selected, setSelected] = useState<StaffUser | null>(null);
-  const { data, isLoading } = useUserAccounts(search);
+  const { data, isLoading } = useAllUserAccounts(search);
   const updatePermissions = useUpdateUserPermissions(selected?.id ?? '');
 
   const users = useMemo<StaffUser[]>(() => {
