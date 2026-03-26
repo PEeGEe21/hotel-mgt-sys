@@ -13,6 +13,7 @@ import { AddItemDto } from '../dtos/orders/add-item.dto';
 import { CreateOrderDto } from '../dtos/orders/create-order.dto';
 import { OrderFilterDto } from '../dtos/orders/order-filter.dto';
 import dayjs from 'dayjs';
+import { LedgerService } from '../../ledger/ledger.service';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -40,7 +41,10 @@ const ORDER_INCLUDE = {
 
 @Injectable()
 export class PosOrdersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private ledger: LedgerService,
+  ) {}
 
   // ── List ───────────────────────────────────────────────────────────────────
   async findAll(hotelId: string, filters: OrderFilterDto) {
@@ -330,7 +334,14 @@ export class PosOrdersService {
 
   // ── Fulfil order (DELIVERED) — the big one ────────────────────────────────
   private async fulfillOrder(hotelId: string, id: string, order: any) {
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
+      let createdFolio: {
+        id: string;
+        reservationId: string;
+        description: string;
+        amount: number;
+        category: string;
+      } | null = null;
       // 1. Mark order as DELIVERED
       await tx.posOrder.update({
         where: { id },
@@ -388,17 +399,25 @@ export class PosOrdersService {
 
       // 3. Room charge path — create FolioItem on reservation
       if (order.reservationId) {
-        await tx.folioItem.create({
+        const description = `POS charge — ${order.orderNo} (${order.type.replace('_', ' ')})`;
+        const created = await tx.folioItem.create({
           data: {
             hotelId,
             reservationId: order.reservationId,
-            description: `POS charge — ${order.orderNo} (${order.type.replace('_', ' ')})`,
+            description,
             amount: order.total,
             quantity: 1,
             category: this.mapOrderTypeToFolioCategory(order.type),
             posOrderId: id,
           },
         });
+        createdFolio = {
+          id: created.id,
+          reservationId: created.reservationId,
+          description: created.description,
+          amount: Number(created.amount),
+          category: created.category,
+        };
 
         // Update reservation paymentStatus to PARTIAL if previously UNPAID
         const res = await tx.reservation.findUnique({
@@ -431,11 +450,25 @@ export class PosOrdersService {
         },
       });
 
-      return tx.posOrder.findFirst({
+      const updated = await tx.posOrder.findFirst({
         where: { id },
         include: ORDER_INCLUDE,
       });
+
+      return { updated, createdFolio };
     });
+
+    if (result.createdFolio) {
+      await this.ledger.postFolioCharge(hotelId, {
+        amount: result.createdFolio.amount,
+        category: result.createdFolio.category,
+        description: result.createdFolio.description,
+        reservationId: result.createdFolio.reservationId,
+        folioItemId: result.createdFolio.id,
+      });
+    }
+
+    return result.updated;
   }
 
   // ── Pay order (walk-in direct payment) ────────────────────────────────────
@@ -452,7 +485,7 @@ export class PosOrdersService {
       throw new BadRequestException('Room charge orders are settled at checkout — not here.');
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       // Find the invoice created at fulfillment
       const invoice = await tx.invoice.findFirst({
         where: { posOrderId: id, hotelId },
@@ -491,6 +524,18 @@ export class PosOrdersService {
 
       return { order: updated, invoice, change: Math.max(0, change) };
     });
+
+    await this.ledger.postPosSale(hotelId, {
+      subtotal: Number(result.order.subtotal),
+      tax: Number(result.order.tax),
+      total: Number(result.order.total),
+      orderType: result.order.type,
+      method: dto.method,
+      orderId: result.order.id,
+      invoiceId: result.invoice.id,
+    });
+
+    return result;
   }
 
   // ── Cancel order ───────────────────────────────────────────────────────────

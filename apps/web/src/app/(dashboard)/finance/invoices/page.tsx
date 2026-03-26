@@ -1,37 +1,26 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Search, Plus, Download, ChevronRight, Receipt, X, Check, Loader2 } from 'lucide-react';
+import { Search, Plus, Download, ChevronRight, Receipt, Loader2 } from 'lucide-react';
+import { useFinanceInvoices, FinanceInvoice } from '@/hooks/useFinance';
 
-type InvoiceStatus = 'Draft' | 'Sent' | 'Paid' | 'Overdue' | 'Cancelled';
-type Invoice = {
-  id: string;
-  number: string;
-  guest: string;
-  type: 'Guest' | 'Vendor';
-  date: string;
-  due: string;
-  amount: number;
-  paid: number;
-  status: InvoiceStatus;
-  description: string;
-};
+type InvoiceStatus = 'Unpaid' | 'Partial' | 'Paid' | 'Overdue' | 'Refunded';
 
 const STATUS_CONFIG: Record<
   InvoiceStatus,
   { color: string; bg: string; border: string; dot: string }
 > = {
-  Draft: {
-    color: 'text-slate-400',
-    bg: 'bg-slate-500/15',
-    border: 'border-slate-500/30',
-    dot: 'bg-slate-400',
-  },
-  Sent: {
+  Unpaid: {
     color: 'text-blue-400',
     bg: 'bg-blue-500/15',
     border: 'border-blue-500/30',
     dot: 'bg-blue-400',
+  },
+  Partial: {
+    color: 'text-amber-400',
+    bg: 'bg-amber-500/15',
+    border: 'border-amber-500/30',
+    dot: 'bg-amber-400',
   },
   Paid: {
     color: 'text-emerald-400',
@@ -45,7 +34,7 @@ const STATUS_CONFIG: Record<
     border: 'border-red-500/30',
     dot: 'bg-red-400',
   },
-  Cancelled: {
+  Refunded: {
     color: 'text-slate-500',
     bg: 'bg-slate-600/15',
     border: 'border-slate-600/30',
@@ -53,130 +42,7 @@ const STATUS_CONFIG: Record<
   },
 };
 
-const invoices: Invoice[] = [
-  {
-    id: 'i1',
-    number: 'INV-2026-0041',
-    guest: 'Sofia Martins',
-    type: 'Guest',
-    date: '2026-03-10',
-    due: '2026-03-14',
-    amount: 3200,
-    paid: 3200,
-    status: 'Paid',
-    description: 'Room 401 · 4 nights',
-  },
-  {
-    id: 'i2',
-    number: 'INV-2026-0042',
-    guest: 'Fatima Al-Hassan',
-    type: 'Guest',
-    date: '2026-03-07',
-    due: '2026-03-12',
-    amount: 1900,
-    paid: 1900,
-    status: 'Paid',
-    description: 'Room 303 · 5 nights',
-  },
-  {
-    id: 'i3',
-    number: 'INV-2026-0043',
-    guest: 'David Mensah',
-    type: 'Guest',
-    date: '2026-03-10',
-    due: '2026-03-14',
-    amount: 600,
-    paid: 300,
-    status: 'Sent',
-    description: 'Room 102 · 4 nights',
-  },
-  {
-    id: 'i4',
-    number: 'INV-2026-0044',
-    guest: 'Marcus Johnson',
-    type: 'Guest',
-    date: '2026-03-08',
-    due: '2026-03-12',
-    amount: 1120,
-    paid: 560,
-    status: 'Overdue',
-    description: 'Room 205 · 4 nights',
-  },
-  {
-    id: 'i5',
-    number: 'INV-2026-0045',
-    guest: 'Chen Wei',
-    type: 'Guest',
-    date: '2026-03-13',
-    due: '2026-03-17',
-    amount: 1520,
-    paid: 760,
-    status: 'Sent',
-    description: 'Room 302 · 4 nights',
-  },
-  {
-    id: 'i6',
-    number: 'INV-2026-0046',
-    guest: 'Linen Supply Co.',
-    type: 'Vendor',
-    date: '2026-03-01',
-    due: '2026-03-15',
-    amount: 4200,
-    paid: 4200,
-    status: 'Paid',
-    description: 'Monthly linen supply',
-  },
-  {
-    id: 'i7',
-    number: 'INV-2026-0047',
-    guest: 'FoodServe Ltd.',
-    type: 'Vendor',
-    date: '2026-03-05',
-    due: '2026-03-20',
-    amount: 11800,
-    paid: 0,
-    status: 'Sent',
-    description: 'F&B supplies March',
-  },
-  {
-    id: 'i8',
-    number: 'INV-2026-0048',
-    guest: 'TechRepair NG',
-    type: 'Vendor',
-    date: '2026-03-02',
-    due: '2026-03-09',
-    amount: 750,
-    paid: 0,
-    status: 'Overdue',
-    description: 'HVAC maintenance',
-  },
-  {
-    id: 'i9',
-    number: 'INV-2026-0049',
-    guest: 'Ngozi Williams',
-    type: 'Guest',
-    date: '2026-03-11',
-    due: '2026-03-18',
-    amount: 1520,
-    paid: 0,
-    status: 'Draft',
-    description: 'Room 403 · 4 nights',
-  },
-  {
-    id: 'i10',
-    number: 'INV-2026-0050',
-    guest: 'Pedro Alvarez',
-    type: 'Guest',
-    date: '2026-03-10',
-    due: '2026-03-22',
-    amount: 1520,
-    paid: 760,
-    status: 'Sent',
-    description: 'Room 301 · 4 nights',
-  },
-];
-
-const ALL_STATUSES: InvoiceStatus[] = ['Draft', 'Sent', 'Paid', 'Overdue', 'Cancelled'];
+const ALL_STATUSES: InvoiceStatus[] = ['Unpaid', 'Partial', 'Paid', 'Overdue', 'Refunded'];
 
 function StatusBadge({ status }: { status: InvoiceStatus }) {
   const s = STATUS_CONFIG[status];
@@ -190,44 +56,110 @@ function StatusBadge({ status }: { status: InvoiceStatus }) {
   );
 }
 
+function fmtMoney(n: number) {
+  return new Intl.NumberFormat('en-NG', {
+    style: 'currency',
+    currency: 'NGN',
+    maximumFractionDigits: 0,
+  }).format(n);
+}
+
+function invoiceStatus(inv: FinanceInvoice): InvoiceStatus {
+  if (inv.status === 'OVERDUE') return 'Overdue';
+  if (inv.paymentStatus === 'PAID') return 'Paid';
+  if (inv.paymentStatus === 'PARTIAL') return 'Partial';
+  if (inv.paymentStatus === 'REFUNDED') return 'Refunded';
+  return 'Unpaid';
+}
+
+function invoiceType(inv: FinanceInvoice) {
+  if (inv.type === 'RESERVATION') return 'Reservation';
+  if (inv.type === 'POS') return 'POS';
+  if (inv.type === 'FACILITY') return 'Facility';
+  return 'Manual';
+}
+
+function invoiceParty(inv: FinanceInvoice) {
+  const guest = inv.reservation?.guest ?? inv.posOrder?.reservation?.guest;
+  if (guest) return `${guest.firstName} ${guest.lastName}`;
+  if (inv.posOrder?.roomNo) return `Room ${inv.posOrder.roomNo}`;
+  if (inv.posOrder?.tableNo) return `Table ${inv.posOrder.tableNo}`;
+  return 'Walk-in';
+}
+
+function invoiceDescription(inv: FinanceInvoice) {
+  if (inv.reservation?.room?.number) return `Room ${inv.reservation.room.number} stay`;
+  if (inv.reservation?.reservationNo) return `Reservation ${inv.reservation.reservationNo}`;
+  if (inv.posOrder?.orderNo) return `POS ${inv.posOrder.orderNo}`;
+  return 'Invoice';
+}
+
 export default function InvoicesPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<InvoiceStatus | 'All'>('All');
-  const [typeFilter, setTypeFilter] = useState<'All' | 'Guest' | 'Vendor'>('All');
+  const [typeFilter, setTypeFilter] = useState<
+    'All' | 'Reservation' | 'POS' | 'Facility' | 'Manual'
+  >('All');
+
+  const { data, isLoading } = useFinanceInvoices();
+  const invoices = data?.invoices ?? [];
+
+  const normalized = useMemo(
+    () =>
+      invoices.map((inv) => ({
+        id: inv.id,
+        number: inv.invoiceNo,
+        party: invoiceParty(inv),
+        type: invoiceType(inv),
+        date: new Date(inv.issuedAt).toISOString().slice(0, 10),
+        due: inv.dueAt ? new Date(inv.dueAt).toISOString().slice(0, 10) : '—',
+        amount: inv.total,
+        paid: inv.paidAmount,
+        status: invoiceStatus(inv),
+        description: invoiceDescription(inv),
+      })),
+    [invoices],
+  );
 
   const filtered = useMemo(
     () =>
-      invoices.filter((i) => {
-        const ms = `${i.number} ${i.guest} ${i.description}`
+      normalized.filter((i) => {
+        const ms = `${i.number} ${i.party} ${i.description}`
           .toLowerCase()
           .includes(search.toLowerCase());
         const mst = statusFilter === 'All' || i.status === statusFilter;
         const mt = typeFilter === 'All' || i.type === typeFilter;
         return ms && mst && mt;
       }),
-    [search, statusFilter, typeFilter],
+    [normalized, search, statusFilter, typeFilter],
   );
 
   const totals = useMemo(
     () => ({
-      total: invoices.reduce((s, i) => s + i.amount, 0),
-      paid: invoices.filter((i) => i.status === 'Paid').reduce((s, i) => s + i.amount, 0),
-      outstanding: invoices
-        .filter((i) => i.status !== 'Paid' && i.status !== 'Cancelled')
+      total: normalized.reduce((s, i) => s + i.amount, 0),
+      paid: normalized.filter((i) => i.status === 'Paid').reduce((s, i) => s + i.amount, 0),
+      outstanding: normalized
+        .filter((i) => i.status !== 'Paid' && i.status !== 'Refunded')
         .reduce((s, i) => s + (i.amount - i.paid), 0),
-      overdue: invoices
+      overdue: normalized
         .filter((i) => i.status === 'Overdue')
         .reduce((s, i) => s + (i.amount - i.paid), 0),
     }),
-    [],
+    [normalized],
   );
+
+  const rangeLabel = data?.range
+    ? new Date(data.range.from).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
+    : '—';
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-white tracking-tight">Invoices</h1>
-          <p className="text-slate-500 text-sm mt-0.5">{invoices.length} invoices · March 2026</p>
+          <p className="text-slate-500 text-sm mt-0.5">
+            {isLoading ? 'Loading invoices…' : `${normalized.length} invoices · ${rangeLabel}`}
+          </p>
         </div>
         <div className="flex gap-2">
           <button className="flex items-center gap-2 bg-[#161b27] border border-[#1e2536] hover:border-slate-500 text-slate-300 px-3 py-2 rounded-lg text-sm font-medium transition-all">
@@ -243,20 +175,24 @@ export default function InvoicesPage() {
         {[
           {
             label: 'Total Invoiced',
-            value: `$${totals.total.toLocaleString()}`,
+            value: `${fmtMoney(totals.total).toLocaleString()}`,
             color: 'text-slate-200',
           },
           {
             label: 'Collected',
-            value: `$${totals.paid.toLocaleString()}`,
+            value: `${fmtMoney(totals.paid).toLocaleString()}`,
             color: 'text-emerald-400',
           },
           {
             label: 'Outstanding',
-            value: `$${totals.outstanding.toLocaleString()}`,
+            value: `${fmtMoney(totals.outstanding).toLocaleString()}`,
             color: 'text-amber-400',
           },
-          { label: 'Overdue', value: `$${totals.overdue.toLocaleString()}`, color: 'text-red-400' },
+          {
+            label: 'Overdue',
+            value: `${fmtMoney(totals.overdue).toLocaleString()}`,
+            color: 'text-red-400',
+          },
         ].map(({ label, value, color }) => (
           <div key={label} className="bg-[#161b27] border border-[#1e2536] rounded-xl px-4 py-4">
             <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">{label}</p>
@@ -269,7 +205,7 @@ export default function InvoicesPage() {
         {(['All', ...ALL_STATUSES] as const).map((s) => {
           const active = statusFilter === s;
           const count =
-            s === 'All' ? invoices.length : invoices.filter((i) => i.status === s).length;
+            s === 'All' ? normalized.length : normalized.filter((i) => i.status === s).length;
           const cfg = s !== 'All' ? STATUS_CONFIG[s] : null;
           return (
             <button
@@ -288,7 +224,7 @@ export default function InvoicesPage() {
           );
         })}
         <div className="ml-auto flex gap-1 bg-[#161b27] border border-[#1e2536] rounded-lg p-1">
-          {(['All', 'Guest', 'Vendor'] as const).map((t) => (
+          {(['All', 'Reservation', 'POS', 'Facility', 'Manual'] as const).map((t) => (
             <button
               key={t}
               onClick={() => setTypeFilter(t)}
@@ -349,13 +285,13 @@ export default function InvoicesPage() {
                   </td>
                   <td className="px-4 py-3">
                     <span
-                      className={`text-xs px-2 py-0.5 rounded-md font-medium border ${inv.type === 'Guest' ? 'bg-blue-500/10 border-blue-500/20 text-blue-400' : 'bg-violet-500/10 border-violet-500/20 text-violet-400'}`}
+                      className={`text-xs px-2 py-0.5 rounded-md font-medium border ${inv.type === 'Reservation' ? 'bg-blue-500/10 border-blue-500/20 text-blue-400' : inv.type === 'POS' ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' : 'bg-violet-500/10 border-violet-500/20 text-violet-400'}`}
                     >
                       {inv.type}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-sm font-medium text-slate-200 whitespace-nowrap">
-                    {inv.guest}
+                    {inv.party}
                   </td>
                   <td className="px-4 py-3 text-xs text-slate-500 max-w-[160px] truncate">
                     {inv.description}
@@ -363,14 +299,16 @@ export default function InvoicesPage() {
                   <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">{inv.date}</td>
                   <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">{inv.due}</td>
                   <td className="px-4 py-3 text-sm font-semibold text-slate-200 whitespace-nowrap">
-                    ${inv.amount.toLocaleString()}
+                    {fmtMoney(inv.amount).toLocaleString()}
                   </td>
                   <td className="px-4 py-3 text-sm text-emerald-400 whitespace-nowrap">
-                    ${inv.paid.toLocaleString()}
+                    {fmtMoney(inv.paid).toLocaleString()}
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     {balance > 0 ? (
-                      <span className="text-xs text-red-400">${balance.toLocaleString()}</span>
+                      <span className="text-xs text-red-400">
+                        {fmtMoney(balance).toLocaleString()}
+                      </span>
                     ) : (
                       <span className="text-xs text-emerald-400">—</span>
                     )}
@@ -386,7 +324,13 @@ export default function InvoicesPage() {
             })}
           </tbody>
         </table>
-        {filtered.length === 0 && (
+        {isLoading && (
+          <div className="py-14 text-center">
+            <Loader2 size={28} className="text-slate-600 mx-auto mb-2 animate-spin" />
+            <p className="text-slate-500 text-sm">Loading invoices…</p>
+          </div>
+        )}
+        {!isLoading && filtered.length === 0 && (
           <div className="py-14 text-center">
             <Receipt size={28} className="text-slate-700 mx-auto mb-2" />
             <p className="text-slate-500 text-sm">No invoices match your filters</p>

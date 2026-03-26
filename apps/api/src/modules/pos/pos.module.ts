@@ -12,9 +12,10 @@ import { PosTablesController } from './controllers/pos-tables.controller';
 import { PosTablesService } from './services/pos-tables.service';
 import { PosTerminalAuthService } from './services/pos-terminal-auth.service';
 import { PosTerminalAuthController } from './controllers/pos-terminal-auth.controller';
+import { LedgerModule } from '../ledger/ledger.module';
 
 @Module({
-  imports: [PrismaModule],
+  imports: [PrismaModule, LedgerModule],
   providers: [
     PosService,
     PosTerminalsService,

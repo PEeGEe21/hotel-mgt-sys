@@ -15,6 +15,7 @@ export type HotelInfo = {
   logo: string | null;
   email: string;
   phone: string;
+  taxRate?: number | string | null;
   geofenceEnabled?: boolean;
   geofenceRadiusMeters?: number;
   attendancePinRequired?: boolean;

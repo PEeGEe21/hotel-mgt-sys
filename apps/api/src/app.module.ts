@@ -23,6 +23,7 @@ import { ShiftsModule } from './modules/shifts/shifts.module';
 import { RoomTypesModule } from './modules/room-types/room-types.module';
 import { PermissionsModule } from './modules/permissions/permissions.module';
 import { PermissionsGuard } from './modules/auth/guards';
+import { LedgerModule } from './modules/ledger/ledger.module';
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { PermissionsGuard } from './modules/auth/guards';
     ShiftsModule,
     RoomTypesModule,
     PermissionsModule,
+    LedgerModule,
   ],
   providers: [PermissionsGuard],
 })

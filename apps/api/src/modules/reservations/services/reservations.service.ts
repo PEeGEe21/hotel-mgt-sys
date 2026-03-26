@@ -17,6 +17,7 @@ import * as path from 'path';
 import { readFile } from 'fs/promises';
 import * as handlebars from 'handlebars';
 import { compileTemplate } from 'src/common/utils/compile-template.utils';
+import { LedgerService } from '../../ledger/ledger.service';
 
 // ─── Service ──────────────────────────────────────────────────────────────────
 
@@ -32,7 +33,10 @@ const RESERVATION_INCLUDE = {
 
 @Injectable()
 export class ReservationsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private ledger: LedgerService,
+  ) {}
 
   // ── List ────────────────────────────────────────────────────────────────────
   async findAll(hotelId: string, filters: ReservationFilterDto) {
@@ -284,15 +288,24 @@ export class ReservationsService {
     ]);
 
     // Seed first room-night folio item
-    await this.prisma.folioItem.create({
+    const description = `Room charge — ${(res as any).room.number} (${(res as any).room.type})`;
+    const folioItem = await this.prisma.folioItem.create({
       data: {
         hotelId,
         reservationId: id,
-        description: `Room charge — ${(res as any).room.number} (${(res as any).room.type})`,
+        description,
         amount: (res as any).room.baseRate,
         quantity: 1,
         category: 'ROOM',
       },
+    });
+
+    await this.ledger.postFolioCharge(hotelId, {
+      amount: Number(folioItem.amount),
+      category: folioItem.category,
+      description: folioItem.description,
+      reservationId: folioItem.reservationId,
+      folioItemId: folioItem.id,
     });
 
     return updated;
@@ -371,7 +384,7 @@ export class ReservationsService {
     dto: { description: string; amount: number; category: string; quantity?: number },
   ) {
     await this.findOne(hotelId, id);
-    return this.prisma.folioItem.create({
+    const folioItem = await this.prisma.folioItem.create({
       data: {
         hotelId,
         reservationId: id,
@@ -381,6 +394,16 @@ export class ReservationsService {
         category: dto.category,
       },
     });
+
+    await this.ledger.postFolioCharge(hotelId, {
+      amount: Number(folioItem.amount),
+      category: folioItem.category,
+      description: folioItem.description,
+      reservationId: folioItem.reservationId,
+      folioItemId: folioItem.id,
+    });
+
+    return folioItem;
   }
 
   async getFolioItems(
@@ -447,7 +470,7 @@ export class ReservationsService {
   }
 
   async recordPayment(hotelId: string, reservationId: string, dto: RecordPaymentDto) {
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const reservation = await tx.reservation.findFirst({
         where: { id: reservationId, hotelId },
         include: { guest: true, room: true },
@@ -512,6 +535,16 @@ export class ReservationsService {
 
       return { payment, reservation: updatedReservation };
     });
+
+    await this.ledger.postPayment(hotelId, {
+      amount: Number(result.payment.amount),
+      method: result.payment.method,
+      description: `Reservation payment — ${result.reservation.reservationNo}`,
+      invoiceId: result.payment.invoiceId,
+      paymentId: result.payment.id,
+    });
+
+    return result;
   }
 
   async getPaymentReceiptHtml(hotelId: string, reservationId: string, paymentId: string) {

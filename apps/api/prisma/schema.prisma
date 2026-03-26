@@ -168,6 +168,8 @@ model Hotel {
   roomTypeConfigs RoomTypeConfig[]
   rolePermissions RolePermission[]
   permissionAuditLogs PermissionAuditLog[]
+  accounts      Account[]
+  journalEntries JournalEntry[]
 }
 
 // ─── USERS & AUTH ─────────────────────────────────────────────────────────────
@@ -918,4 +920,79 @@ model FacilityBooking {
   facility Facility @relation(fields: [facilityId], references: [id])
 
   @@index([hotelId])
+}
+
+
+// ─── LEDGER / CHART OF ACCOUNTS ──────────────────────────────────────────────
+
+// Account types:
+//   ASSET       — things the hotel owns (cash, AR, inventory)
+//   LIABILITY   — things the hotel owes (deposits, payables)
+//   EQUITY      — owner's equity
+//   REVENUE     — income earned
+//   EXPENSE     — costs incurred (COGS, salaries, supplies)
+
+model Account {
+  id            String   @id @default(uuid())
+  hotelId       String
+  code          String   // e.g. "1000", "4100"
+  name          String   // e.g. "Cash", "Room Revenue"
+  type          String   // ASSET | LIABILITY | EQUITY | REVENUE | EXPENSE
+  normalBalance String   // DEBIT | CREDIT (which side increases the account)
+  description   String?
+  isActive      Boolean  @default(true)
+  isSystem      Boolean  @default(false) // system accounts cannot be deleted
+  parentCode    String?  // for sub-accounts e.g. 4100 under 4000
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  hotel        Hotel          @relation(fields: [hotelId], references: [id])
+  journalLines  JournalLine[] @relation("AccountJournalLines")
+  debitLines   JournalLine[]  @relation("DebitAccount")
+  creditLines  JournalLine[]  @relation("CreditAccount")
+
+  @@unique([hotelId, code])
+  @@index([hotelId])
+  @@index([hotelId, type])
+}
+
+model JournalEntry {
+  id          String   @id @default(uuid())
+  hotelId     String
+  entryNo     String   @unique  // JE-2026-0001
+  date        DateTime @default(now())
+  description String
+  reference   String?  // invoice no, order no, payment ref etc
+  sourceType  String?  // RESERVATION | POS_SALE | PAYMENT | FOLIO | MANUAL | PAYROLL
+  sourceId    String?  // FK to the source record
+  postedBy    String?  // staffId who posted (null = system auto-post)
+  isReversed  Boolean  @default(false)
+  reversedBy  String?  // JournalEntry.id of the reversal entry
+  createdAt   DateTime @default(now())
+
+  hotel Hotel         @relation(fields: [hotelId], references: [id])
+  lines JournalLine[]
+
+  @@index([hotelId])
+  @@index([hotelId, date])
+  @@index([hotelId, sourceType, sourceId])
+}
+
+model JournalLine {
+  id             String   @id @default(uuid())
+  journalEntryId String
+  accountId      String
+  debitAccountId  String?  // redundant FK for fast querying by account
+  creditAccountId String?  // redundant FK for fast querying by account
+  type           String   // DEBIT | CREDIT
+  amount         Decimal
+  description    String?
+
+  journalEntry   JournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  account        Account      @relation("AccountJournalLines", fields: [accountId],       references: [id])
+  debitAccount   Account?     @relation("DebitAccount",  fields: [debitAccountId],  references: [id])
+  creditAccount  Account?     @relation("CreditAccount", fields: [creditAccountId], references: [id])
+
+  @@index([journalEntryId])
+  @@index([accountId])
 }

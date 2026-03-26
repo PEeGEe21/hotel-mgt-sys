@@ -24,7 +24,7 @@ import {
   useUpdatePosTerminal,
 } from '@/hooks/usePosTerminals';
 import { useUserAccounts } from '@/hooks/useUserAccounts';
-import { useInventoryItems } from '@/hooks/useInventoryItems';
+import { useInventoryList } from '@/hooks/useInventoryItems';
 import EditPosTerminal from '../../_components/EditPosTerminal';
 import DeleteConfirm from '../../_components/DeleteConfirm';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -132,7 +132,7 @@ export default function PosPage() {
   const [groupOrder, setGroupOrder] = useState<string[]>([]);
   const { data: terminalGroups = [], isLoading: terminalGroupsLoading } = usePosTerminalGroups();
   const { data: terminals = [], isLoading: terminalsLoading } = usePosTerminals();
-  const { data: inventoryItems = [], isLoading: inventoryLoading } = useInventoryItems();
+  const { data: inventoryItems = [], isLoading: inventoryLoading } = useInventoryList();
   const updateTerminal = useUpdatePosTerminal(assignTarget?.id ?? '');
   const renameGroup = useRenamePosTerminalGroup();
   const { data: users = [] } = useUserAccounts();

@@ -66,6 +66,7 @@ type ItemForm = {
   supplier: string;
   sku: string;
   description: string;
+  uniqueId: string;
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -136,6 +137,7 @@ function AddItemModal({
     supplier: '',
     sku: '',
     description: '',
+    uniqueId: '',
   });
 
   useEffect(() => {
@@ -151,6 +153,7 @@ function AddItemModal({
       supplier: initial?.supplier ?? '',
       sku: initial?.sku ?? '',
       description: initial?.description ?? '',
+      uniqueId: initial?.uniqueId ?? '',
     });
   }, [isOpen, initial, categories]);
 
@@ -438,7 +441,7 @@ function StockMovementModal({
             <div className="bg-[#0f1117] border border-[#1e2536] rounded-lg px-4 py-3">
               <p className="text-xs text-slate-500">Sale Amount</p>
               <p className="text-lg font-bold text-emerald-400 mt-0.5">
-                &#8358;{(qty * item.sellPrice).toFixed(2)}
+                &#8358;{item?.sellPrice ? (qty * item?.sellPrice).toFixed(2) : 0}
               </p>
             </div>
           )}
@@ -537,7 +540,6 @@ export default function InventoryPage() {
     // );
     setModal(null);
   };
-
 
   const tabs = [
     { key: 'stock', label: 'Stock', icon: Package },

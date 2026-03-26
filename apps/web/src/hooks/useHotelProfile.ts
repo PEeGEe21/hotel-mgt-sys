@@ -56,6 +56,7 @@ export function useUpdateHotelProfile() {
         logo: null,
         email: data.email,
         phone: data.phone,
+        taxRate: data.taxRate,
         geofenceEnabled: data.geofenceEnabled,
         geofenceRadiusMeters: data.geofenceRadiusMeters,
         attendancePinRequired: data.attendancePinRequired,

@@ -1579,6 +1579,55 @@ async function main() {
   }
   console.log(`✅ ${rgCount} reservation-guest links seeded`);
 
+  // ─── Chart of Accounts ───────────────────────────────────────────────────
+  const HOTEL_COA = [
+    { code: '1000', name: 'Cash on Hand',          type: 'ASSET',   normalBalance: 'DEBIT',  description: 'Physical cash in registers',                isSystem: true  },
+    { code: '1010', name: 'Cash — Bank Account',   type: 'ASSET',   normalBalance: 'DEBIT',  description: 'Hotel bank account balance',                isSystem: true  },
+    { code: '1020', name: 'Cash — POS Terminal',   type: 'ASSET',   normalBalance: 'DEBIT',  description: 'Card/POS terminal settlements',             isSystem: false },
+    { code: '1100', name: 'Guest Ledger (AR)',      type: 'ASSET',   normalBalance: 'DEBIT',  description: 'Amounts owed by in-house guests',           isSystem: true  },
+    { code: '1110', name: 'City Ledger (AR)',       type: 'ASSET',   normalBalance: 'DEBIT',  description: 'Amounts owed by corporate accounts',        isSystem: false },
+    { code: '1200', name: 'Inventory Asset',        type: 'ASSET',   normalBalance: 'DEBIT',  description: 'Cost value of items in stock',              isSystem: true  },
+    { code: '1300', name: 'Prepaid Expenses',       type: 'ASSET',   normalBalance: 'DEBIT',  description: 'Expenses paid in advance',                  isSystem: false },
+    { code: '2000', name: 'Accounts Payable',       type: 'LIABILITY', normalBalance: 'CREDIT', description: 'Amounts owed to suppliers',               isSystem: false },
+    { code: '2100', name: 'Advance Deposits',       type: 'LIABILITY', normalBalance: 'CREDIT', description: 'Guest deposits for future reservations',   isSystem: true  },
+    { code: '2200', name: 'VAT Payable',            type: 'LIABILITY', normalBalance: 'CREDIT', description: 'VAT collected on behalf of government',    isSystem: true  },
+    { code: '2300', name: 'Salary Payable',         type: 'LIABILITY', normalBalance: 'CREDIT', description: 'Accrued salaries not yet paid',            isSystem: false },
+    { code: '2400', name: 'Pension Payable',        type: 'LIABILITY', normalBalance: 'CREDIT', description: 'Employee pension contributions payable',    isSystem: false },
+    { code: '3000', name: "Owner's Equity",         type: 'EQUITY',  normalBalance: 'CREDIT', description: "Owner's investment in the business",        isSystem: false },
+    { code: '3100', name: 'Retained Earnings',      type: 'EQUITY',  normalBalance: 'CREDIT', description: 'Accumulated profits retained in business',  isSystem: false },
+    { code: '4000', name: 'Revenue',                type: 'REVENUE', normalBalance: 'CREDIT', description: 'Total revenue parent account',              isSystem: true  },
+    { code: '4100', name: 'Room Revenue',           type: 'REVENUE', normalBalance: 'CREDIT', description: 'Revenue from room charges',                 isSystem: true  },
+    { code: '4200', name: 'Food & Beverage Revenue',type: 'REVENUE', normalBalance: 'CREDIT', description: 'Revenue from restaurant and room service',   isSystem: true  },
+    { code: '4300', name: 'Bar Revenue',            type: 'REVENUE', normalBalance: 'CREDIT', description: 'Revenue from bar sales',                    isSystem: true  },
+    { code: '4400', name: 'Spa & Wellness Revenue', type: 'REVENUE', normalBalance: 'CREDIT', description: 'Revenue from spa and wellness services',     isSystem: false },
+    { code: '4500', name: 'Facilities Revenue',     type: 'REVENUE', normalBalance: 'CREDIT', description: 'Revenue from conference rooms, pool etc',    isSystem: false },
+    { code: '4600', name: 'Laundry Revenue',        type: 'REVENUE', normalBalance: 'CREDIT', description: 'Revenue from laundry services',             isSystem: false },
+    { code: '4900', name: 'Miscellaneous Revenue',  type: 'REVENUE', normalBalance: 'CREDIT', description: 'Other revenue not categorised above',        isSystem: false },
+    { code: '5000', name: 'Cost of Goods Sold',     type: 'EXPENSE', normalBalance: 'DEBIT',  description: 'Direct cost of items sold',                 isSystem: true  },
+    { code: '5100', name: 'Cost of Food Sold',      type: 'EXPENSE', normalBalance: 'DEBIT',  description: 'Cost of food items consumed in sales',       isSystem: true  },
+    { code: '5200', name: 'Cost of Beverages Sold', type: 'EXPENSE', normalBalance: 'DEBIT',  description: 'Cost of beverage items consumed in sales',   isSystem: true  },
+    { code: '6000', name: 'Operating Expenses',     type: 'EXPENSE', normalBalance: 'DEBIT',  description: 'Total operating expenses parent account',    isSystem: false },
+    { code: '6100', name: 'Salaries & Wages',       type: 'EXPENSE', normalBalance: 'DEBIT',  description: 'Employee salaries and wages',                isSystem: false },
+    { code: '6110', name: 'Employer Pension',        type: 'EXPENSE', normalBalance: 'DEBIT',  description: 'Employer pension contribution (10%)',        isSystem: false },
+    { code: '6200', name: 'Housekeeping Supplies',  type: 'EXPENSE', normalBalance: 'DEBIT',  description: 'Cleaning and housekeeping materials',         isSystem: false },
+    { code: '6300', name: 'Utilities',              type: 'EXPENSE', normalBalance: 'DEBIT',  description: 'Electricity, water, gas',                    isSystem: false },
+    { code: '6400', name: 'Maintenance & Repairs',  type: 'EXPENSE', normalBalance: 'DEBIT',  description: 'Equipment and facility maintenance',          isSystem: false },
+    { code: '6500', name: 'Marketing & Advertising',type: 'EXPENSE', normalBalance: 'DEBIT',  description: 'Sales and marketing costs',                  isSystem: false },
+    { code: '6600', name: 'Bank Charges',           type: 'EXPENSE', normalBalance: 'DEBIT',  description: 'Bank fees and transaction charges',           isSystem: false },
+    { code: '6900', name: 'Miscellaneous Expenses', type: 'EXPENSE', normalBalance: 'DEBIT',  description: 'Other expenses not categorised above',        isSystem: false },
+  ];
+
+  let coaSeeded = 0;
+  for (const account of HOTEL_COA) {
+    await prisma.account.upsert({
+      where:  { hotelId_code: { hotelId: hotel.id, code: account.code } },
+      update: { name: account.name, description: account.description },
+      create: { hotelId: hotel.id, ...account },
+    });
+    coaSeeded++;
+  }
+  console.log(`✅ ${coaSeeded} chart of accounts entries seeded`);
+
   console.log('\n🏨 Seed complete!');
   console.log('─────────────────────────────────────');
   console.log('Login credentials:');

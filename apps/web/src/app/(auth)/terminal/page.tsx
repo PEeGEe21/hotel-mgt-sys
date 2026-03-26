@@ -47,6 +47,7 @@ import {
 import openToast from '@/components/ToastComponent';
 import { useDebounce } from '@/hooks/useDebounce';
 import { usePosProductCategories } from '@/hooks/usePosProductCategories';
+import { useAppStore } from '@/store/app.store';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmtMoney(n: number) {
@@ -490,6 +491,7 @@ function PaymentModal({
 // ─────────────────────────────────────────────────────────────────────────────
 function OrderScreen({ terminalId, staff }: { terminalId: string; staff: TerminalStaff }) {
   const router = useRouter();
+  const { hotel } = useAppStore();
 
   // ── Store ──────────────────────────────────────────────────────────────────
   const {
@@ -554,7 +556,9 @@ function OrderScreen({ terminalId, staff }: { terminalId: string; staff: Termina
   const subtotal = items.reduce((s, i) => s + i.price * i.qty, 0);
   const discountAmt = Math.round(subtotal * (discount / 100));
   const taxable = subtotal - discountAmt;
-  const tax = Math.round(taxable * 0.075);
+  const taxRate = (Number(hotel?.taxRate) || 0) / 100;
+  const tax = Math.round(taxable * taxRate);
+  // const tax = Math.round(taxable * 0.075);
   const total = taxable + tax;
 
   // ── Handlers ───────────────────────────────────────────────────────────────
