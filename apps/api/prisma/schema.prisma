@@ -170,6 +170,8 @@ model Hotel {
   permissionAuditLogs PermissionAuditLog[]
   accounts      Account[]
   journalEntries JournalEntry[]
+  auditLogs     AuditLog[]
+  notificationPreferences NotificationPreference[]
 }
 
 // ─── USERS & AUTH ─────────────────────────────────────────────────────────────
@@ -194,16 +196,62 @@ model User {
   refreshTokens RefreshToken[]
   permissionAuditActor PermissionAuditLog[] @relation("PermissionAuditActor")
   permissionAuditTarget PermissionAuditLog[] @relation("PermissionAuditTarget")
+  auditLogsActor AuditLog[] @relation("AuditActor")
+  auditLogsTarget AuditLog[] @relation("AuditTarget")
+  notificationPreferences NotificationPreference[]
 }
 
 model RefreshToken {
   id        String   @id @default(uuid())
   token     String   @unique
   userId    String
+  impersonatorId String?
+  isImpersonation Boolean @default(false)
   expiresAt DateTime
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id           String   @id @default(uuid())
+  hotelId      String
+  actorUserId  String
+  action       String
+  targetType   String?
+  targetId     String?
+  targetUserId String?
+  ipAddress    String?
+  userAgent    String?
+  metadata     Json?
+  createdAt    DateTime @default(now())
+
+  hotel     Hotel @relation(fields: [hotelId], references: [id])
+  actor     User  @relation("AuditActor", fields: [actorUserId], references: [id])
+  targetUser User? @relation("AuditTarget", fields: [targetUserId], references: [id])
+
+  @@index([hotelId])
+  @@index([actorUserId])
+  @@index([targetUserId])
+  @@index([action])
+}
+
+model NotificationPreference {
+  id           String   @id @default(uuid())
+  userId       String
+  hotelId      String
+  event        String
+  channelEmail Boolean  @default(true)
+  channelInApp Boolean  @default(true)
+  channelPush  Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hotel Hotel @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, event])
+  @@index([hotelId])
 }
 
 model RolePermission {

@@ -14,6 +14,9 @@ import {
   Hotel,
   ShoppingCart,
   Table,
+  Bell,
+  KeyRound,
+  ShieldCheck,
 } from 'lucide-react';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Layers } from '@solar-icons/react';
@@ -92,6 +95,39 @@ const sections = [
     color: 'text-slate-400',
     bg: 'bg-slate-500/10 border-slate-500/20',
     adminOnly: true,
+  },
+  {
+    label: 'Notifications',
+    description: 'Manage email, in-app and push alerts',
+    href: '/profile?tab=notifications',
+    icon: Bell,
+    color: 'text-sky-400',
+    bg: 'bg-sky-500/10 border-sky-500/20',
+  },
+  {
+    label: 'My Permissions',
+    description: 'View effective role permissions and overrides',
+    href: '/profile?tab=permissions',
+    icon: Shield,
+    color: 'text-amber-400',
+    bg: 'bg-amber-500/10 border-amber-500/20',
+  },
+  {
+    label: 'Audit Logs',
+    description: 'Track sensitive actions and access',
+    href: '/settings/audit-logs',
+    icon: ShieldCheck,
+    color: 'text-emerald-400',
+    bg: 'bg-emerald-500/10 border-emerald-500/20',
+    adminOnly: true,
+  },
+  {
+    label: 'Password Reset',
+    description: 'Self-service password change and security',
+    href: '/profile?tab=password',
+    icon: KeyRound,
+    color: 'text-rose-400',
+    bg: 'bg-rose-500/10 border-rose-500/20',
   },
   {
     label: 'Pos Product Categories',

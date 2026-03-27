@@ -9,13 +9,15 @@ import {
   HttpStatus,
   Query,
   Patch,
+  Param,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { AuthService } from '../services/auth.service';
-import { JwtAuthGuard, LocalAuthGuard } from '../guards/index';
+import { JwtAuthGuard, LocalAuthGuard, Roles, RolesGuard } from '../guards/index';
 import { RefreshDto } from '../dtos/refresh.dto';
 import { LogoutDto } from '../dtos/logout.dto';
 import { UpdateMeDto } from '../dtos/update-me.dto';
+import { getRequestIp, getUserAgent } from '../../../common/utils/request.utils';
 
 // ─── Controller ────────────────────────────────────────────────────────────────
 @ApiTags('Auth')
@@ -34,7 +36,10 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Login with email and password' })
   login(@Request() req: any) {
-    return this.authService.login(req.user);
+    return this.authService.login(req.user, {
+      ipAddress: getRequestIp(req),
+      userAgent: getUserAgent(req),
+    });
   }
 
   @Post('refresh')
@@ -50,7 +55,10 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Logout current session' })
   logout(@Request() req: any, @Body() dto: LogoutDto) {
-    return this.authService.logout(req.user.sub, dto.refreshToken);
+    return this.authService.logout(req.user.sub, dto.refreshToken, {
+      ipAddress: getRequestIp(req),
+      userAgent: getUserAgent(req),
+    });
   }
 
   @ApiBearerAuth()
@@ -59,7 +67,10 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Logout all sessions' })
   logoutAll(@Request() req: any) {
-    return this.authService.logoutAll(req.user.sub);
+    return this.authService.logoutAll(req.user.sub, {
+      ipAddress: getRequestIp(req),
+      userAgent: getUserAgent(req),
+    });
   }
 
   @ApiBearerAuth()
@@ -67,7 +78,10 @@ export class AuthController {
   @Get('me')
   @ApiOperation({ summary: 'Get current user profile' })
   getMe(@Request() req: any) {
-    return this.authService.getMe(req.user.sub);
+    return this.authService.getMe(req.user.sub, {
+      impersonatorId: req.user.impersonatorId ?? null,
+      isImpersonation: Boolean(req.user.isImpersonation),
+    });
   }
 
   @ApiBearerAuth()
@@ -95,5 +109,33 @@ export class AuthController {
   @ApiOperation({ summary: 'Reset current user attendance PIN' })
   resetAttendancePin(@Request() req: any) {
     return this.authService.resetAttendancePin(req.user.sub);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Post('impersonate/stop')
+  @ApiOperation({ summary: 'Stop impersonation and return to your account' })
+  stopImpersonation(@Request() req: any, @Body() dto: LogoutDto) {
+    return this.authService.stopImpersonation(
+      req.user.sub,
+      req.user.impersonatorId ?? null,
+      dto.refreshToken ?? null,
+      {
+        ipAddress: getRequestIp(req),
+        userAgent: getUserAgent(req),
+      },
+    );
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN', 'MANAGER')
+  @Post('impersonate/:userId')
+  @ApiOperation({ summary: 'Impersonate a user account' })
+  impersonate(@Request() req: any, @Param('userId') userId: string) {
+    return this.authService.impersonate(req.user.sub, userId, {
+      ipAddress: getRequestIp(req),
+      userAgent: getUserAgent(req),
+    });
   }
 }

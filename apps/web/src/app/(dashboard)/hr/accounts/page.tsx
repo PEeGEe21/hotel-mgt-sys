@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   XCircle,
   Key,
+  LogIn,
 } from 'lucide-react';
 import {
   useCreateUserAccount,
@@ -23,6 +24,10 @@ import {
 } from '@/hooks/useUserAccounts';
 import { useDebounce } from '@/hooks/useDebounce';
 import Pagination from '@/components/ui/pagination';
+import { useAuthStore } from '@/store/auth.store';
+import { impersonateAction } from '@/actions/auth.actions';
+import { useAppStore } from '@/store/app.store';
+import { useRouter } from 'next/navigation';
 
 type Role =
   | 'SUPER_ADMIN'
@@ -193,6 +198,14 @@ function AccountModal({
 }
 
 export default function UserAccountsPage() {
+  const router = useRouter();
+  const currentUser = useAuthStore((s) => s.user);
+  const setUser = useAuthStore((s) => s.setUser);
+  const setHotel = useAppStore((s) => s.setHotel);
+  const canImpersonate =
+    currentUser?.role === 'SUPER_ADMIN' ||
+    currentUser?.role === 'ADMIN' ||
+    currentUser?.role === 'MANAGER';
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
@@ -384,6 +397,25 @@ export default function UserAccountsPage() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1">
+                      {canImpersonate && currentUser?.id !== acc.id && (
+                        <button
+                          className="p-1.5 rounded-lg text-slate-500 hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
+                          title="Impersonate"
+                          onClick={async () => {
+                            if (!confirm(`Impersonate ${acc.staffName}?`)) return;
+                            const result = await impersonateAction(acc.id);
+                            if (result.success) {
+                              setUser(result.user);
+                              if (result.hotel) setHotel(result.hotel);
+                              router.push('/dashboard');
+                            } else {
+                              alert(result.message);
+                            }
+                          }}
+                        >
+                          <LogIn size={13} />
+                        </button>
+                      )}
                       <button
                         className="p-1.5 rounded-lg text-slate-500 hover:text-amber-400 hover:bg-amber-500/10 transition-colors"
                         title="Reset Password"

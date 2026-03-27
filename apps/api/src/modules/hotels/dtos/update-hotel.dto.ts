@@ -10,6 +10,7 @@ export class UpdateHotelDto {
   @ApiPropertyOptional() @IsString() @IsOptional() phone?: string;
   @ApiPropertyOptional() @IsString() @IsOptional() email?: string;
   @ApiPropertyOptional() @IsString() @IsOptional() website?: string;
+  @ApiPropertyOptional() @IsString() @IsOptional() logo?: string;
   @ApiPropertyOptional() @IsString() @IsOptional() description?: string;
   @ApiPropertyOptional() @IsString() @IsOptional() currency?: string;
   @ApiPropertyOptional() @IsString() @IsOptional() timezone?: string;

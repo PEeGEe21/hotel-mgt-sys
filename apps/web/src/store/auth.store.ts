@@ -24,6 +24,8 @@ export type AuthUser = {
   department: string | null;
   position: string | null;
   mustChangePassword: boolean;
+  impersonatorId?: string | null;
+  isImpersonation?: boolean;
   permissionOverrides: {
     grants: string[];
     denies: string[];

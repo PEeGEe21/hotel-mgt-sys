@@ -9,6 +9,9 @@ import { useAppStore } from '@/store/app.store';
 import { Hotel, ShieldAlert } from 'lucide-react';
 import { usePermissions } from '@/hooks/usePermissions';
 import { usePathname, useRouter } from 'next/navigation';
+import { stopImpersonationAction } from '@/actions/auth.actions';
+import { useState } from 'react';
+import openToast from '@/components/ToastComponent';
 
 function AuthOverlay({ label }: { label: string }) {
   const hotel = useAppStore((s) => s.hotel);
@@ -33,6 +36,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const hydrated = useHydration();
   const isLoading = useAuthStore((s) => s.isLoading);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const user = useAuthStore((s) => s.user);
+  const setUser = useAuthStore((s) => s.setUser);
+  const setHotel = useAppStore((s) => s.setHotel);
+  const [stoppingImpersonation, setStoppingImpersonation] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
   const { canPath, ready } = usePermissions();
@@ -90,6 +97,32 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div className="flex h-screen bg-[#0f1117] overflow-hidden">
         <Sidebar />
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+          {user?.isImpersonation && (
+            <div className="bg-amber-500/10 border-b border-amber-500/20 text-amber-200 px-6 py-2.5 flex items-center justify-between">
+              <div className="text-sm">
+                You are impersonating <span className="font-semibold">{user.name}</span>
+              </div>
+              <button
+                onClick={async () => {
+                  if (stoppingImpersonation) return;
+                  setStoppingImpersonation(true);
+                  const result = await stopImpersonationAction();
+                  if (result.success) {
+                    setUser(result.user);
+                    if (result.hotel) setHotel(result.hotel);
+                    openToast('success', 'Returned to your account');
+                    router.push('/dashboard');
+                  } else {
+                    openToast('error', result.message);
+                  }
+                  setStoppingImpersonation(false);
+                }}
+                className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 transition-colors"
+              >
+                {stoppingImpersonation ? 'Stopping...' : 'Stop impersonation'}
+              </button>
+            </div>
+          )}
           <Topbar />
           <main className="flex-1 overflow-y-auto p-6">{children}</main>
         </div>

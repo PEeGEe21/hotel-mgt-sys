@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
@@ -36,7 +36,7 @@ export class AuthService {
   }
 
   // ─── Login — returns access + refresh tokens ───────────────────────────────
-  async login(user: any) {
+  async login(user: any, meta?: { ipAddress?: string | null; userAgent?: string | null }) {
     const [accessToken, refreshToken] = await Promise.all([
       this.generateAccessToken(user),
       this.generateRefreshToken(user.id),
@@ -49,12 +49,24 @@ export class AuthService {
 
     const rolePermissions = await this.getRolePermissions(user.staff?.hotelId, user.role);
 
-    return {
+    const result = {
       accessToken,
       refreshToken,
       user: { ...this.sanitizeUser(user), rolePermissions },
       hotel: this.sanitizeHotel(user.staff?.hotel),
     };
+
+    if (meta?.ipAddress || meta?.userAgent) {
+      await this.logAudit({
+        actorUserId: user.id,
+        hotelId: user.staff?.hotelId ?? null,
+        action: 'auth.login',
+        ipAddress: meta.ipAddress ?? null,
+        userAgent: meta.userAgent ?? null,
+      });
+    }
+
+    return result;
   }
 
   // ─── Refresh — rotate refresh token, issue new access token ───────────────
@@ -80,29 +92,70 @@ export class AuthService {
     await this.prisma.refreshToken.delete({ where: { token } });
 
     const [accessToken, refreshToken] = await Promise.all([
-      this.generateAccessToken(stored.user),
-      this.generateRefreshToken(stored.user.id),
+      this.generateAccessToken(stored.user, stored.impersonatorId ?? null),
+      this.generateRefreshToken(stored.user.id, {
+        impersonatorId: stored.impersonatorId ?? null,
+        isImpersonation: stored.isImpersonation ?? false,
+      }),
     ]);
 
     return { accessToken, refreshToken };
   }
 
   // ─── Logout — invalidate refresh token ────────────────────────────────────
-  async logout(userId: string, refreshToken: string) {
-    await this.prisma.refreshToken.deleteMany({
-      where: { userId, token: refreshToken },
-    });
+  async logout(
+    userId: string,
+    refreshToken?: string,
+    meta?: { ipAddress?: string | null; userAgent?: string | null },
+  ) {
+    if (refreshToken) {
+      await this.prisma.refreshToken.deleteMany({
+        where: { userId, token: refreshToken },
+      });
+    }
+    if (meta?.ipAddress || meta?.userAgent) {
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { staff: { select: { hotelId: true } } },
+      });
+      await this.logAudit({
+        actorUserId: userId,
+        hotelId: user?.staff?.hotelId ?? null,
+        action: 'auth.logout',
+        ipAddress: meta.ipAddress ?? null,
+        userAgent: meta.userAgent ?? null,
+      });
+    }
     return { message: 'Logged out successfully.' };
   }
 
   // ─── Logout all sessions ───────────────────────────────────────────────────
-  async logoutAll(userId: string) {
+  async logoutAll(
+    userId: string,
+    meta?: { ipAddress?: string | null; userAgent?: string | null },
+  ) {
     await this.prisma.refreshToken.deleteMany({ where: { userId } });
+    if (meta?.ipAddress || meta?.userAgent) {
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { staff: { select: { hotelId: true } } },
+      });
+      await this.logAudit({
+        actorUserId: userId,
+        hotelId: user?.staff?.hotelId ?? null,
+        action: 'auth.logout_all',
+        ipAddress: meta.ipAddress ?? null,
+        userAgent: meta.userAgent ?? null,
+      });
+    }
     return { message: 'All sessions terminated.' };
   }
 
   // ─── Get current user profile ─────────────────────────────────────────────
-  async getMe(userId: string) {
+  async getMe(
+    userId: string,
+    meta?: { impersonatorId?: string | null; isImpersonation?: boolean },
+  ) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: { staff: { include: { hotel: true } } },
@@ -110,7 +163,12 @@ export class AuthService {
     if (!user) throw new UnauthorizedException('User not found.');
     const rolePermissions = await this.getRolePermissions(user.staff?.hotelId, user.role);
     return {
-      user: { ...this.sanitizeUser(user), rolePermissions },
+      user: {
+        ...this.sanitizeUser(user),
+        rolePermissions,
+        impersonatorId: meta?.impersonatorId ?? null,
+        isImpersonation: Boolean(meta?.isImpersonation),
+      },
       hotel: this.sanitizeHotel(user.staff?.hotel),
     };
   }
@@ -212,11 +270,13 @@ export class AuthService {
   }
 
   // ─── Helpers ───────────────────────────────────────────────────────────────
-  private generateAccessToken(user: any) {
+  private generateAccessToken(user: any, impersonatorId?: string | null) {
     const payload = {
       sub: user.id,
       email: user.email,
       role: user.role,
+      impersonatorId: impersonatorId ?? null,
+      isImpersonation: Boolean(impersonatorId),
     };
     return this.jwt.signAsync(payload, {
       secret: this.config.get('JWT_SECRET'),
@@ -224,16 +284,174 @@ export class AuthService {
     });
   }
 
-  private async generateRefreshToken(userId: string) {
+  private async generateRefreshToken(
+    userId: string,
+    opts?: { impersonatorId?: string | null; isImpersonation?: boolean },
+  ) {
     const token = crypto.randomBytes(64).toString('hex');
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7); // 7 days
 
     await this.prisma.refreshToken.create({
-      data: { token, userId, expiresAt },
+      data: {
+        token,
+        userId,
+        expiresAt,
+        impersonatorId: opts?.impersonatorId ?? null,
+        isImpersonation: Boolean(opts?.isImpersonation),
+      },
     });
 
     return token;
+  }
+
+  async impersonate(
+    impersonatorId: string,
+    targetUserId: string,
+    meta?: { ipAddress?: string | null; userAgent?: string | null },
+  ) {
+    if (impersonatorId === targetUserId) {
+      throw new BadRequestException('Cannot impersonate yourself.');
+    }
+
+    const [impersonator, target] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { id: impersonatorId },
+        include: { staff: { include: { hotel: true } } },
+      }),
+      this.prisma.user.findUnique({
+        where: { id: targetUserId },
+        include: { staff: { include: { hotel: true } } },
+      }),
+    ]);
+
+    if (!impersonator || !impersonator.isActive) {
+      throw new UnauthorizedException('Impersonator not found or inactive.');
+    }
+    if (!target || !target.isActive) {
+      throw new UnauthorizedException('Target user not found or inactive.');
+    }
+    if (!target.staff?.hotelId) {
+      throw new BadRequestException('Target user is not linked to a hotel.');
+    }
+    if (impersonator.staff?.hotelId && target.staff?.hotelId !== impersonator.staff?.hotelId) {
+      throw new ForbiddenException('Cannot impersonate users from another hotel.');
+    }
+
+    const [accessToken, refreshToken] = await Promise.all([
+      this.generateAccessToken(target, impersonator.id),
+      this.generateRefreshToken(target.id, {
+        impersonatorId: impersonator.id,
+        isImpersonation: true,
+      }),
+    ]);
+
+    const rolePermissions = await this.getRolePermissions(target.staff?.hotelId, target.role);
+
+    await this.logAudit({
+      actorUserId: impersonator.id,
+      hotelId: target.staff?.hotelId ?? null,
+      action: 'auth.impersonate.start',
+      targetUserId: target.id,
+      ipAddress: meta?.ipAddress ?? null,
+      userAgent: meta?.userAgent ?? null,
+      metadata: { targetEmail: target.email },
+    });
+
+    return {
+      accessToken,
+      refreshToken,
+      user: {
+        ...this.sanitizeUser(target),
+        rolePermissions,
+        impersonatorId: impersonator.id,
+        isImpersonation: true,
+      },
+      hotel: this.sanitizeHotel(target.staff?.hotel),
+    };
+  }
+
+  async stopImpersonation(
+    currentUserId: string,
+    impersonatorId: string | null,
+    refreshToken: string | null,
+    meta?: { ipAddress?: string | null; userAgent?: string | null },
+  ) {
+    if (!impersonatorId) {
+      throw new BadRequestException('Not currently impersonating.');
+    }
+
+    if (refreshToken) {
+      await this.prisma.refreshToken.deleteMany({
+        where: { userId: currentUserId, token: refreshToken },
+      });
+    }
+
+    const impersonator = await this.prisma.user.findUnique({
+      where: { id: impersonatorId },
+      include: { staff: { include: { hotel: true } } },
+    });
+    if (!impersonator || !impersonator.isActive) {
+      throw new UnauthorizedException('Impersonator not found or inactive.');
+    }
+
+    const [accessToken, newRefreshToken] = await Promise.all([
+      this.generateAccessToken(impersonator, null),
+      this.generateRefreshToken(impersonator.id),
+    ]);
+
+    const rolePermissions = await this.getRolePermissions(
+      impersonator.staff?.hotelId,
+      impersonator.role,
+    );
+
+    await this.logAudit({
+      actorUserId: impersonator.id,
+      hotelId: impersonator.staff?.hotelId ?? null,
+      action: 'auth.impersonate.stop',
+      targetUserId: currentUserId,
+      ipAddress: meta?.ipAddress ?? null,
+      userAgent: meta?.userAgent ?? null,
+    });
+
+    return {
+      accessToken,
+      refreshToken: newRefreshToken,
+      user: {
+        ...this.sanitizeUser(impersonator),
+        rolePermissions,
+        impersonatorId: null,
+        isImpersonation: false,
+      },
+      hotel: this.sanitizeHotel(impersonator.staff?.hotel),
+    };
+  }
+
+  private async logAudit(params: {
+    actorUserId: string;
+    hotelId: string | null;
+    action: string;
+    targetType?: string | null;
+    targetId?: string | null;
+    targetUserId?: string | null;
+    ipAddress?: string | null;
+    userAgent?: string | null;
+    metadata?: any;
+  }) {
+    if (!params.hotelId) return;
+    await this.prisma.auditLog.create({
+      data: {
+        hotelId: params.hotelId,
+        actorUserId: params.actorUserId,
+        action: params.action,
+        targetType: params.targetType ?? null,
+        targetId: params.targetId ?? null,
+        targetUserId: params.targetUserId ?? null,
+        ipAddress: params.ipAddress ?? null,
+        userAgent: params.userAgent ?? null,
+        metadata: params.metadata ?? null,
+      },
+    });
   }
 
   // ─── Public hotel info (for login page branding — no auth required) ────────

@@ -15,6 +15,7 @@ export type HotelProfile = {
   phone: string;
   email: string;
   website?: string | null;
+  logo?: string | null;
   description?: string | null;
   currency: string;
   timezone: string;
@@ -53,7 +54,7 @@ export function useUpdateHotelProfile() {
         country: data.country,
         currency: data.currency,
         timezone: data.timezone,
-        logo: null,
+        logo: data.logo ?? null,
         email: data.email,
         phone: data.phone,
         taxRate: data.taxRate,

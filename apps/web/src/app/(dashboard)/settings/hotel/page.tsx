@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Hotel, Save, Check, MapPin, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, Hotel, Save, Check, MapPin, ShieldCheck, Camera, X } from 'lucide-react';
 import { useHotelProfile, useUpdateHotelProfile } from '@/hooks/useHotelProfile';
 import dynamic from 'next/dynamic';
+import openToast from '@/components/ToastComponent';
 
 const GeofenceMap = dynamic(() => import('@/components/GeofenceMap'), { ssr: false });
 
@@ -24,6 +25,8 @@ export default function HotelProfilePage() {
   const { data, isLoading } = useHotelProfile();
   const updateHotel = useUpdateHotelProfile();
   const [saved, setSaved] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [form, setForm] = useState({
     name: '',
     address: '',
@@ -33,6 +36,7 @@ export default function HotelProfilePage() {
     phone: '',
     email: '',
     website: '',
+    logo: null as string | null,
     currency: 'NGN',
     timezone: 'Africa/Lagos',
     taxRate: '0',
@@ -46,7 +50,7 @@ export default function HotelProfilePage() {
     attendancePersonalEnabled: true,
   });
 
-  const set = (k: string, v: string | boolean) => setForm((f) => ({ ...f, [k]: v }));
+  const set = (k: string, v: string | boolean | null) => setForm((f) => ({ ...f, [k]: v }));
 
   useEffect(() => {
     if (!data) return;
@@ -60,6 +64,7 @@ export default function HotelProfilePage() {
       phone: data.phone ?? '',
       email: data.email ?? '',
       website: data.website ?? '',
+      logo: data.logo ?? null,
       currency: data.currency ?? 'NGN',
       timezone: data.timezone ?? 'Africa/Lagos',
       taxRate: data.taxRate != null ? String(data.taxRate) : '0',
@@ -73,6 +78,7 @@ export default function HotelProfilePage() {
       attendanceKioskEnabled: Boolean(data.attendanceKioskEnabled ?? true),
       attendancePersonalEnabled: Boolean(data.attendancePersonalEnabled ?? true),
     }));
+    setLogoPreview(data.logo ?? null);
   }, [data]);
 
   const handleSave = async () => {
@@ -85,6 +91,7 @@ export default function HotelProfilePage() {
       phone: form.phone,
       email: form.email,
       website: form.website || null,
+      logo: form.logo || null,
       currency: form.currency,
       timezone: form.timezone,
       taxRate: Number(form.taxRate || 0),
@@ -105,6 +112,45 @@ export default function HotelProfilePage() {
       // handled by toast
     }
   };
+
+  const handleLogoClick = () => {
+    logoInputRef.current?.click();
+  };
+
+  const handleLogoChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      openToast('error', 'Please select an image file');
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      openToast('error', 'Logo must be under 2MB');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const value = String(reader.result);
+      setLogoPreview(value);
+      set('logo', value);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveLogo = () => {
+    setLogoPreview(null);
+    set('logo', null);
+    if (logoInputRef.current) logoInputRef.current.value = '';
+  };
+
+  const hotelInitials = form.name
+    .split(' ')
+    .filter(Boolean)
+    .map((n) => n[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
 
   const handleUseCurrentLocation = () => {
     if (!navigator.geolocation) return;
@@ -158,6 +204,41 @@ export default function HotelProfilePage() {
           <Hotel size={12} /> Identity
         </h2>
         <div className="grid grid-cols-2 gap-4">
+          <div className="col-span-2 flex items-center gap-4">
+            <div className="w-16 h-16 rounded-2xl border border-[#1e2536] bg-[#0f1117] flex items-center justify-center overflow-hidden">
+              {logoPreview ? (
+                <img src={logoPreview} alt="Hotel logo" className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-xl font-bold text-slate-400">{hotelInitials || 'H'}</span>
+              )}
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={handleLogoClick}
+                  className="flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-[#1e2536] text-slate-300 rounded-lg px-3 py-2 text-sm font-medium transition-colors"
+                >
+                  <Camera size={14} /> Upload logo
+                </button>
+                {logoPreview && (
+                  <button
+                    onClick={handleRemoveLogo}
+                    className="flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-[#1e2536] text-slate-400 rounded-lg px-3 py-2 text-sm font-medium transition-colors"
+                  >
+                    <X size={14} /> Remove
+                  </button>
+                )}
+              </div>
+              <p className="text-xs text-slate-500">PNG or JPG · Max 2MB</p>
+              <input
+                ref={logoInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleLogoChange}
+              />
+            </div>
+          </div>
           <div className="col-span-2">
             <label className="text-xs text-slate-500 uppercase tracking-wider mb-1.5 block">
               Hotel Name

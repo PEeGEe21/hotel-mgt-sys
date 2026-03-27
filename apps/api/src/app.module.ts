@@ -22,8 +22,10 @@ import { SuppliersModule } from './modules/suppliers/suppliers.module';
 import { ShiftsModule } from './modules/shifts/shifts.module';
 import { RoomTypesModule } from './modules/room-types/room-types.module';
 import { PermissionsModule } from './modules/permissions/permissions.module';
-import { PermissionsGuard } from './modules/auth/guards';
+import { PermissionsGuard, RolesGuard } from './modules/auth/guards';
 import { LedgerModule } from './modules/ledger/ledger.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { AuditLogsModule } from './modules/audit-logs/audit-logs.module';
 
 @Module({
   imports: [
@@ -51,7 +53,9 @@ import { LedgerModule } from './modules/ledger/ledger.module';
     RoomTypesModule,
     PermissionsModule,
     LedgerModule,
+    NotificationsModule,
+    AuditLogsModule,
   ],
-  providers: [PermissionsGuard],
+  providers: [PermissionsGuard, RolesGuard],
 })
 export class AppModule {}

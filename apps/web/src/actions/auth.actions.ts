@@ -116,6 +116,90 @@ export async function refreshAction(): Promise<{ success: boolean }> {
   }
 }
 
+// ─── Impersonation ────────────────────────────────────────────────────────────
+export async function impersonateAction(
+  userId: string,
+): Promise<AuthResult> {
+  const accessToken = await getAccessToken();
+  if (!accessToken) return { success: false, message: 'Not authenticated.' };
+
+  try {
+    const response = await apiFetch(`/auth/impersonate/${userId}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      return {
+        success: false,
+        message: data?.message ?? 'Impersonation failed.',
+        field: 'general',
+      };
+    }
+
+    const cookieStore = await cookies();
+    await setAuthCookies(cookieStore, data.accessToken, data.refreshToken);
+
+    return {
+      success: true,
+      user: {
+        ...data.user,
+        permissionOverrides: data.user.permissionOverrides ?? { grants: [], denies: [] },
+      },
+      hotel: data.hotel ?? null,
+    };
+  } catch {
+    return {
+      success: false,
+      message: 'Could not reach the server. Check your connection.',
+      field: 'general',
+    };
+  }
+}
+
+export async function stopImpersonationAction(): Promise<AuthResult> {
+  const accessToken = await getAccessToken();
+  if (!accessToken) return { success: false, message: 'Not authenticated.' };
+
+  const cookieStore = await cookies();
+  const refreshToken = cookieStore.get(COOKIE_REFRESH)?.value;
+
+  try {
+    const response = await apiFetch('/auth/impersonate/stop', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ refreshToken }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      return {
+        success: false,
+        message: data?.message ?? 'Could not stop impersonation.',
+        field: 'general',
+      };
+    }
+
+    await setAuthCookies(cookieStore, data.accessToken, data.refreshToken);
+
+    return {
+      success: true,
+      user: {
+        ...data.user,
+        permissionOverrides: data.user.permissionOverrides ?? { grants: [], denies: [] },
+      },
+      hotel: data.hotel ?? null,
+    };
+  } catch {
+    return {
+      success: false,
+      message: 'Could not reach the server. Check your connection.',
+      field: 'general',
+    };
+  }
+}
+
 // ─── Get session (server components) ─────────────────────────────────────────
 // Use this in Server Components / layouts to read the current user.
 // Returns null if not authenticated.

@@ -25,9 +25,19 @@ import {
 import { useMe, useResetAttendancePin, useUpdateMe } from '@/hooks/useMe';
 import { useAuthStore } from '@/store/auth.store';
 import openToast from '@/components/ToastComponent';
+import { usePermissions } from '@/hooks/usePermissions';
+import { Switch } from '@/components/ui/switch';
+import {
+  type NotificationEvent,
+  useNotificationPreferences,
+  useUpdateNotificationPreferences,
+} from '@/hooks/useNotificationPreferences';
+import { useSearchParams } from 'next/navigation';
+import { type Permission } from '@/lib/permissions';
+import api from '@/lib/api';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
-type Tab = 'profile' | 'password' | 'notifications' | 'sessions';
+type Tab = 'profile' | 'password' | 'notifications' | 'sessions' | 'permissions';
 
 const activeSessions = [
   {
@@ -448,6 +458,8 @@ function PasswordTab() {
   const [show, setShow] = useState({ current: false, newPw: false, confirm: false });
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+  const user = useAuthStore((s) => s.user);
+  const setUser = useAuthStore((s) => s.setUser);
 
   const strength = (() => {
     const p = form.newPw;
@@ -474,13 +486,29 @@ function PasswordTab() {
       openToast('error', 'Passwords do not match');
       return setToast({ msg: 'Passwords do not match', type: 'error' });
     }
+    if (form.current === form.newPw) {
+      openToast('error', 'New password must be different');
+      return setToast({ msg: 'New password must be different', type: 'error' });
+    }
     setSaving(true);
-    await new Promise((r) => setTimeout(r, 700));
-    setSaving(false);
-    setForm({ current: '', newPw: '', confirm: '' });
-    setToast({ msg: 'Password changed successfully', type: 'success' });
-    openToast('success', 'Password changed successfully');
-    setTimeout(() => setToast(null), 3000);
+    try {
+      await api.patch('/auth/change-password', {
+        currentPassword: form.current,
+        newPassword: form.newPw,
+      });
+      if (user) setUser({ ...user, mustChangePassword: false });
+      setForm({ current: '', newPw: '', confirm: '' });
+      setToast({ msg: 'Password changed successfully', type: 'success' });
+      openToast('success', 'Password changed successfully');
+      setTimeout(() => setToast(null), 3000);
+    } catch (err: any) {
+      const msg = err?.response?.data?.message ?? 'Could not change password';
+      setToast({ msg, type: 'error' });
+      openToast('error', msg);
+      setTimeout(() => setToast(null), 3000);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const PwField = ({
@@ -608,7 +636,7 @@ function PasswordTab() {
 
 // ─── Notifications Tab ────────────────────────────────────────────────────────
 function NotificationsTab() {
-  const [prefs, setPrefs] = useState({
+  const defaultPrefs: Record<NotificationEvent, { email: boolean; inApp: boolean; push: boolean }> = {
     newReservation: { email: true, inApp: true, push: false },
     checkIn: { email: false, inApp: true, push: true },
     checkOut: { email: false, inApp: true, push: false },
@@ -617,22 +645,8 @@ function NotificationsTab() {
     maintenanceAlert: { email: false, inApp: true, push: true },
     attendanceAlert: { email: false, inApp: false, push: false },
     systemAlerts: { email: true, inApp: true, push: true },
-  });
-
-  const [saved, setSaved] = useState(false);
-
-  const toggle = (key: keyof typeof prefs, channel: 'email' | 'inApp' | 'push') => {
-    setPrefs((p) => ({ ...p, [key]: { ...p[key], [channel]: !p[key][channel] } }));
-    setSaved(false);
   };
-
-  const handleSave = async () => {
-    await new Promise((r) => setTimeout(r, 300));
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
-  };
-
-  const labels: Record<keyof typeof prefs, { label: string; sub: string }> = {
+  const labels: Record<NotificationEvent, { label: string; sub: string }> = {
     newReservation: { label: 'New Reservation', sub: 'When a reservation is created' },
     checkIn: { label: 'Guest Check-in', sub: 'When a guest checks in' },
     checkOut: { label: 'Guest Check-out', sub: 'When a guest checks out' },
@@ -642,17 +656,59 @@ function NotificationsTab() {
     attendanceAlert: { label: 'Attendance Issues', sub: 'Late or absent staff' },
     systemAlerts: { label: 'System Alerts', sub: 'Security and system events' },
   };
+  const eventPermissions: Partial<Record<NotificationEvent, Permission>> = {
+    newReservation: 'view:reservations',
+    checkIn: 'checkin:reservations',
+    checkOut: 'checkout:reservations',
+    paymentReceived: 'view:finance',
+    lowInventory: 'view:inventory',
+    maintenanceAlert: 'view:facilities',
+    attendanceAlert: 'view:attendance',
+    systemAlerts: 'view:settings',
+  };
 
-  const Toggle = ({ on, onClick }: { on: boolean; onClick: () => void }) => (
-    <button
-      onClick={onClick}
-      className={`relative w-9 h-5 rounded-full transition-all shrink-0 ${on ? 'bg-blue-600' : 'bg-[#0f1117] border border-[#1e2536]'}`}
-    >
-      <span
-        className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${on ? 'left-4' : 'left-0.5'}`}
-      />
-    </button>
-  );
+  const { data, isLoading } = useNotificationPreferences();
+  const updatePrefs = useUpdateNotificationPreferences();
+  const { can } = usePermissions();
+  const [prefs, setPrefs] = useState(defaultPrefs);
+  const [saved, setSaved] = useState(false);
+
+  const toggle = (key: keyof typeof prefs, channel: 'email' | 'inApp' | 'push') => {
+    setPrefs((p) => ({ ...p, [key]: { ...p[key], [channel]: !p[key][channel] } }));
+    setSaved(false);
+  };
+
+  const handleSave = async () => {
+    const payload = (Object.keys(prefs) as NotificationEvent[]).map((event) => ({
+      event,
+      channelEmail: prefs[event].email,
+      channelInApp: prefs[event].inApp,
+      channelPush: prefs[event].push,
+    }));
+    await updatePrefs.mutateAsync(payload);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2500);
+  };
+
+  useEffect(() => {
+    if (!data) return;
+    setPrefs((current) => {
+      const next = { ...current };
+      for (const pref of data) {
+        next[pref.event] = {
+          email: pref.channelEmail,
+          inApp: pref.channelInApp,
+          push: pref.channelPush,
+        };
+      }
+      return next;
+    });
+  }, [data]);
+
+  const visibleKeys = (Object.keys(prefs) as NotificationEvent[]).filter((key) => {
+    const required = eventPermissions[key];
+    return !required || can(required);
+  });
 
   return (
     <div className="space-y-5">
@@ -669,7 +725,16 @@ function NotificationsTab() {
             Push
           </span>
         </div>
-        {(Object.keys(prefs) as (keyof typeof prefs)[]).map((key, i, arr) => {
+        {isLoading && (
+          <div className="px-5 py-6 text-sm text-slate-500">Loading preferences...</div>
+        )}
+        {!isLoading && visibleKeys.length === 0 && (
+          <div className="px-5 py-6 text-sm text-slate-500">
+            No notification types are available for your current role.
+          </div>
+        )}
+        {!isLoading &&
+          visibleKeys.map((key, i, arr) => {
           const { label, sub } = labels[key];
           const p = prefs[key];
           return (
@@ -682,13 +747,28 @@ function NotificationsTab() {
                 <p className="text-xs text-slate-600 mt-0.5">{sub}</p>
               </div>
               <div className="flex justify-center w-16">
-                <Toggle on={p.email} onClick={() => toggle(key, 'email')} />
+                <Switch
+                  checked={p.email}
+                  onCheckedChange={() => toggle(key, 'email')}
+                  className="data-[state=checked]:bg-blue-600 data-[state=unchecked]:bg-[#0f1117] border border-[#1e2536]"
+                  aria-label={`${label} email`}
+                />
               </div>
               <div className="flex justify-center w-16">
-                <Toggle on={p.inApp} onClick={() => toggle(key, 'inApp')} />
+                <Switch
+                  checked={p.inApp}
+                  onCheckedChange={() => toggle(key, 'inApp')}
+                  className="data-[state=checked]:bg-blue-600 data-[state=unchecked]:bg-[#0f1117] border border-[#1e2536]"
+                  aria-label={`${label} in-app`}
+                />
               </div>
               <div className="flex justify-center w-16">
-                <Toggle on={p.push} onClick={() => toggle(key, 'push')} />
+                <Switch
+                  checked={p.push}
+                  onCheckedChange={() => toggle(key, 'push')}
+                  className="data-[state=checked]:bg-blue-600 data-[state=unchecked]:bg-[#0f1117] border border-[#1e2536]"
+                  aria-label={`${label} push`}
+                />
               </div>
             </div>
           );
@@ -698,7 +778,10 @@ function NotificationsTab() {
       <div className="flex justify-end">
         <button
           onClick={handleSave}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${saved ? 'bg-emerald-600 text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}
+          disabled={updatePrefs.isPending}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+            saved ? 'bg-emerald-600 text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'
+          } ${updatePrefs.isPending ? 'opacity-70 cursor-not-allowed' : ''}`}
         >
           {saved ? (
             <>
@@ -710,6 +793,96 @@ function NotificationsTab() {
             </>
           )}
         </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Permissions Tab ─────────────────────────────────────────────────────────
+function PermissionsTab() {
+  const { permissions, role, ready } = usePermissions();
+  const user = useAuthStore((s) => s.user);
+  const grants = user?.permissionOverrides?.grants ?? [];
+  const denies = user?.permissionOverrides?.denies ?? [];
+
+  return (
+    <div className="space-y-5">
+      <div className="bg-[#161b27] border border-[#1e2536] rounded-xl p-5">
+        <p className="text-xs text-slate-500 uppercase tracking-wider font-medium mb-3">
+          Role & Access
+        </p>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-sm text-slate-200">Role:</span>
+          <span
+            className={`text-xs px-2.5 py-0.5 rounded-full font-medium border ${roleColors[role] ?? roleColors.STAFF}`}
+          >
+            {role}
+          </span>
+          <span className="text-xs text-slate-500">Effective permissions shown below</span>
+        </div>
+      </div>
+
+      <div className="bg-[#161b27] border border-[#1e2536] rounded-xl p-5">
+        <p className="text-xs text-slate-500 uppercase tracking-wider font-medium mb-4">
+          Effective Permissions
+        </p>
+        {!ready ? (
+          <p className="text-sm text-slate-500">Loading permissions...</p>
+        ) : permissions.length === 0 ? (
+          <p className="text-sm text-slate-500">No permissions assigned.</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {permissions.map((p) => (
+              <span
+                key={p}
+                className="text-xs px-2.5 py-1 rounded-full bg-white/5 border border-[#1e2536] text-slate-300"
+              >
+                {p}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="bg-[#161b27] border border-[#1e2536] rounded-xl p-5">
+          <p className="text-xs text-slate-500 uppercase tracking-wider font-medium mb-3">
+            Extra Grants
+          </p>
+          {grants.length === 0 ? (
+            <p className="text-sm text-slate-500">No additional grants.</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {grants.map((p) => (
+                <span
+                  key={p}
+                  className="text-xs px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-300"
+                >
+                  {p}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="bg-[#161b27] border border-[#1e2536] rounded-xl p-5">
+          <p className="text-xs text-slate-500 uppercase tracking-wider font-medium mb-3">
+            Explicit Denies
+          </p>
+          {denies.length === 0 ? (
+            <p className="text-sm text-slate-500">No explicit denies.</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {denies.map((p) => (
+                <span
+                  key={p}
+                  className="text-xs px-2.5 py-1 rounded-full bg-red-500/10 border border-red-500/20 text-red-300"
+                >
+                  {p}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -811,7 +984,12 @@ function SessionsTab({ lastLogin }: { lastLogin: string }) {
 
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 export default function MyAccountPage() {
-  const [tab, setTab] = useState<Tab>('profile');
+  const searchParams = useSearchParams();
+  const validTabs: Tab[] = ['profile', 'password', 'notifications', 'sessions', 'permissions'];
+  const [tab, setTab] = useState<Tab>(() => {
+    const t = searchParams.get('tab') as Tab | null;
+    return t && validTabs.includes(t) ? t : 'profile';
+  });
   const { user: storeUser } = useAuthStore();
   const { data, isLoading } = useMe();
 
@@ -841,6 +1019,11 @@ export default function MyAccountPage() {
     .filter(Boolean)
     .map((n) => n[0])
     .join('');
+
+  useEffect(() => {
+    const t = searchParams.get('tab') as Tab | null;
+    if (t && validTabs.includes(t)) setTab(t);
+  }, [searchParams]);
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -897,6 +1080,13 @@ export default function MyAccountPage() {
           onClick={() => setTab('notifications')}
         />
         <TabBtn
+          id="permissions"
+          label="Permissions"
+          icon={Shield}
+          active={tab === 'permissions'}
+          onClick={() => setTab('permissions')}
+        />
+        <TabBtn
           id="sessions"
           label="Sessions"
           icon={Monitor}
@@ -909,6 +1099,7 @@ export default function MyAccountPage() {
       {tab === 'profile' && <ProfileTab user={currentUser} />}
       {tab === 'password' && <PasswordTab />}
       {tab === 'notifications' && <NotificationsTab />}
+      {tab === 'permissions' && <PermissionsTab />}
       {tab === 'sessions' && <SessionsTab lastLogin={currentUser.lastLogin} />}
     </div>
   );

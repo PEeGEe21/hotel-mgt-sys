@@ -12,7 +12,10 @@ import {
 export function usePermissions() {
   const user = useAuthStore(s => s.user);
   const { data } = useMe();
-  const liveUser = data?.user ?? user;
+  const liveUser =
+    data?.user && user && data.user.id !== user.id
+      ? user
+      : data?.user ?? user;
   const ready = !!liveUser;
   const role = (liveUser?.role ?? 'STAFF') as Role;
 
