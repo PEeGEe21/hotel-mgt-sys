@@ -43,6 +43,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, string[]> = {
     'view:reports',
     'export:reports',
     'view:facilities',
+    'create:facilities',
     'manage:facilities',
     'view:settings',
     'manage:settings',
@@ -93,6 +94,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, string[]> = {
     'view:reports',
     'export:reports',
     'view:facilities',
+    'create:facilities',
     'manage:facilities',
     'view:settings',
     'manage:settings',
@@ -135,6 +137,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, string[]> = {
     'view:reports',
     'export:reports',
     'view:facilities',
+    'create:facilities',
     'manage:facilities',
     'view:settings',
     'view:hr',
@@ -157,6 +160,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, string[]> = {
     'view:pos',
     'create:pos',
     'view:facilities',
+    'create:facilities',
   ],
 
   HOUSEKEEPING: [
@@ -164,6 +168,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, string[]> = {
     'view:rooms',
     'view:housekeeping',
     'manage:housekeeping',
+    'view:facilities',
     'clock:self',
   ],
 
@@ -173,6 +178,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, string[]> = {
     'create:pos',
     'void:pos',
     'view:finance',
+    'view:facilities',
+    'create:facilities',
     'clock:self',
   ],
 

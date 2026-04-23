@@ -29,7 +29,7 @@ import {
   type RoomType,
 } from '@/lib/rooms-data';
 import { useDebounce } from '@/hooks/useDebounce';
-import { ApiRoom, useCreateRoom, useRooms } from '@/hooks/useRooms';
+import { ApiRoom, useCreateRoom, useRooms } from '@/hooks/room/useRooms';
 import { useFloors } from '@/hooks/useFloors';
 
 import {

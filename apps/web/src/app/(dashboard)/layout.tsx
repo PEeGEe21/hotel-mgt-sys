@@ -18,14 +18,14 @@ function AuthOverlay({ label }: { label: string }) {
 
   return (
     <div className="fixed inset-0 z-50 bg-[#0f1117] flex flex-col items-center justify-center">
-      <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center overflow-hidden shadow-lg mb-4">
+      {/* <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center overflow-hidden shadow-lg mb-4">
         {hotel?.logo ? (
           <img src={hotel.logo} alt={hotel.name} className="w-full h-full object-cover" />
         ) : (
           <Hotel size={26} className="text-white" />
         )}
       </div>
-      <p className="text-white font-semibold text-lg">{hotel?.name ?? 'HotelOS'}</p>
+      <p className="text-white font-semibold text-lg">{hotel?.name ?? 'HotelOS'}</p> */}
       <p className="text-slate-500 text-sm mt-1">{label}</p>
       <div className="mt-5 w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin" />
     </div>

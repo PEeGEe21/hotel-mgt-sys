@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Hotel, MapPin, ShieldCheck, Timer, UserCheck } from 'lucide-react';
-import { useHotelBranding } from '@/hooks/useHotelBranding';
+import { useHotelBranding } from '@/hooks/hotel/useHotelBranding';
 
 type KioskStaff = {
   id: string;
@@ -28,7 +28,7 @@ type KioskResponse = KioskStatus & {
 const API_BASE = process.env.API_URL || 'http://localhost:4000/api/v1';
 
 async function postJson<T>(path: string, body: unknown): Promise<T> {
-  console.log(API_BASE, 'API_BASE')
+  console.log(API_BASE, 'API_BASE');
   const res = await fetch(`${API_BASE}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -149,8 +149,8 @@ export default function AttendanceClockPage() {
         <div className="w-full max-w-md bg-[#161b27] border border-[#1e2536] rounded-2xl p-6 text-center">
           <h1 className="text-xl font-bold text-white">Kiosk Clock Disabled</h1>
           <p className="text-slate-500 text-sm mt-2">
-            This location has disabled kiosk clocking. Please use the personal clock page or
-            contact HR.
+            This location has disabled kiosk clocking. Please use the personal clock page or contact
+            HR.
           </p>
         </div>
       </div>

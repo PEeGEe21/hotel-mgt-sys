@@ -1,4 +1,17 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Patch, Post, Put, Query, Request, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Patch,
+  Post,
+  Put,
+  Query,
+  Request,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { StaffService } from '../services/staff.service';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
@@ -25,6 +38,12 @@ export class StaffController {
   @ApiOperation({ summary: 'List available roles (from enum)' })
   getRoles() {
     return this.staffService.getRoles();
+  }
+
+  @Get('all')
+  @ApiOperation({ summary: 'List housekeeping staff with active task count' })
+  getStaff(@Request() req: any) {
+    return this.staffService.getStaff(req.user.hotelId);
   }
 
   @Get()

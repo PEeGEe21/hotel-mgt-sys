@@ -1,7 +1,11 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { PosTerminal, usePosTerminalGroups, useUpdatePosTerminal } from '@/hooks/usePosTerminals';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  PosTerminal,
+  usePosTerminalGroups,
+  useUpdatePosTerminal,
+} from '@/hooks/pos/usePosTerminals';
 import { useAllUserAccounts, useUserAccounts } from '@/hooks/useUserAccounts';
 import {
   Dialog,
@@ -21,7 +25,7 @@ export default function EditPosTerminal({
   onClose: () => void;
   terminal: PosTerminal | null;
 }) {
-  console.log(terminal, 'terminal')
+  console.log(terminal, 'terminal');
   const { data: terminalGroups = [], isLoading: terminalGroupsLoading } = usePosTerminalGroups();
   const [assignForm, setAssignForm] = useState({
     device: terminal?.device,
@@ -31,6 +35,16 @@ export default function EditPosTerminal({
   });
   const updateTerminal = useUpdatePosTerminal(terminal?.id ?? '');
   const { data: users = [] } = useAllUserAccounts();
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setAssignForm({
+      device: terminal?.device,
+      status: terminal?.status,
+      staffId: terminal?.staffId ?? '',
+      terminalGroupId: terminal?.terminalGroupId ?? '',
+    });
+  }, [isOpen, terminal?.device, terminal?.status, terminal?.staffId, terminal?.terminalGroupId]);
 
   const staffOptions = useMemo(
     () =>
@@ -49,7 +63,9 @@ export default function EditPosTerminal({
         >
           <DialogHeader className="flex flex-row items-center justify-between pb-4 border-b border-[#1e2536]">
             <div>
-              <DialogTitle className="text-base font-bold text-white">Manage Assignment</DialogTitle>
+              <DialogTitle className="text-base font-bold text-white">
+                Manage Assignment
+              </DialogTitle>
               <p className="text-xs text-slate-500 mt-0.5">Update device, status, or staff.</p>
             </div>
             <button

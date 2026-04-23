@@ -1,22 +1,24 @@
 import { Controller, Get, UseGuards, Query, Request } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { FinanceService } from './finance.service';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { JwtAuthGuard, Permissions, PermissionsGuard } from '../auth/guards';
 
 @ApiTags('Finance')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('finance')
 export class FinanceController {
   constructor(private financeService: FinanceService) {}
 
   @Get('overview')
+  @Permissions('view:finance')
   @ApiOperation({ summary: 'Finance overview for a date range (defaults to current month)' })
   getOverview(@Request() req: any, @Query('from') from?: string, @Query('to') to?: string) {
     return this.financeService.getOverview(req.user.hotelId, { from, to });
   }
 
   @Get('invoices')
+  @Permissions('view:finance')
   @ApiOperation({ summary: 'List invoices for a date range with filters' })
   listInvoices(
     @Request() req: any,
@@ -40,6 +42,7 @@ export class FinanceController {
   }
 
   @Get('payments')
+  @Permissions('view:finance')
   @ApiOperation({ summary: 'List payments for a date range with filters' })
   listPayments(
     @Request() req: any,

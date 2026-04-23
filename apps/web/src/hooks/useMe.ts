@@ -17,6 +17,11 @@ export type UpdateMeInput = {
   avatar?: string | null;
 };
 
+export type ChangePasswordInput = {
+  currentPassword: string;
+  newPassword: string;
+};
+
 export function useMe() {
   return useQuery<MeResponse>({
     queryKey: ['auth', 'me'],
@@ -55,6 +60,21 @@ export function useResetAttendancePin() {
       const current = useAuthStore.getState().user;
       if (current) setUser({ ...current, attendancePinSet: true });
       return data;
+    },
+  });
+}
+
+export function useChangePassword() {
+  const qc = useQueryClient();
+  const setUser = useAuthStore((s) => s.setUser);
+
+  return useMutation({
+    mutationFn: (dto: ChangePasswordInput) =>
+      api.patch('/auth/change-password', dto).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['auth', 'me'] });
+      const current = useAuthStore.getState().user;
+      if (current) setUser({ ...current, mustChangePassword: false });
     },
   });
 }

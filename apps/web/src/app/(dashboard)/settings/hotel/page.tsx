@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Hotel, Save, Check, MapPin, ShieldCheck, Camera, X } from 'lucide-react';
-import { useHotelProfile, useUpdateHotelProfile } from '@/hooks/useHotelProfile';
+import { useHotelProfile, useUpdateHotelProfile } from '@/hooks/hotel/useHotelProfile';
 import dynamic from 'next/dynamic';
 import openToast from '@/components/ToastComponent';
 

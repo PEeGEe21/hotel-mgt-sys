@@ -4,23 +4,25 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { LedgerService } from './ledger.service';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { JwtAuthGuard, Permissions, PermissionsGuard } from '../auth/guards';
 
 @ApiTags('Ledger')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('ledger')
 export class LedgerController {
   constructor(private svc: LedgerService) {}
 
   // ── Chart of Accounts ─────────────────────────────────────────────────────
   @Get('accounts')
+  @Permissions('view:finance')
   @ApiOperation({ summary: 'List chart of accounts with running balances' })
   listAccounts(@Request() req: any, @Query('type') type?: string) {
     return this.svc.listAccounts(req.user.hotelId, type);
   }
 
   @Post('accounts')
+  @Permissions('edit:finance')
   @ApiOperation({ summary: 'Add a custom account' })
   createAccount(@Request() req: any, @Body() dto: {
     code: string; name: string; type: string;
@@ -30,6 +32,7 @@ export class LedgerController {
   }
 
   @Put('accounts/:id')
+  @Permissions('edit:finance')
   @ApiOperation({ summary: 'Update account name / description / active status' })
   updateAccount(
     @Request() req: any,
@@ -40,6 +43,7 @@ export class LedgerController {
   }
 
   @Post('accounts/seed')
+  @Permissions('edit:finance')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Seed standard hotel chart of accounts (run once)' })
   seedCoa(@Request() req: any) {
@@ -48,6 +52,7 @@ export class LedgerController {
 
   // ── Journal Entries ───────────────────────────────────────────────────────
   @Post('entries')
+  @Permissions('create:finance')
   @ApiOperation({ summary: 'Post a manual journal entry' })
   postEntry(@Request() req: any, @Body() dto: {
     description: string;
@@ -64,6 +69,7 @@ export class LedgerController {
 
   // ── Reports ───────────────────────────────────────────────────────────────
   @Get('day-book')
+  @Permissions('view:finance')
   @ApiOperation({ summary: 'Day book — all journal entries for a date' })
   getDayBook(
     @Request()    req: any,
@@ -80,12 +86,14 @@ export class LedgerController {
   }
 
   @Get('trial-balance')
+  @Permissions('view:finance')
   @ApiOperation({ summary: 'Trial balance as of a date' })
   getTrialBalance(@Request() req: any, @Query('asOf') asOf?: string) {
     return this.svc.getTrialBalance(req.user.hotelId, asOf);
   }
 
   @Get('profit-loss')
+  @Permissions('view:finance')
   @ApiOperation({ summary: 'Profit & Loss for a date range' })
   getProfitAndLoss(
     @Request()         req: any,
@@ -103,6 +111,7 @@ export class LedgerController {
   }
 
   @Get('accounts/:code/statement')
+  @Permissions('view:finance')
   @ApiOperation({ summary: 'Account statement with running balance' })
   getStatement(
     @Request()     req: any,

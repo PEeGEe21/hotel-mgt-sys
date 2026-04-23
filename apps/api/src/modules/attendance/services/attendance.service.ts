@@ -246,9 +246,22 @@ export class AttendanceService {
     return this.getTodayStatusByStaffId(staffId);
   }
 
-  async getAttendanceReport(staffId: string, from: Date, to: Date) {
+  async getAttendanceReport(
+    requesterStaffId: string | undefined,
+    requesterUserId: string | undefined,
+    staffId: string,
+    from: Date,
+    to: Date,
+  ) {
+    const hotelId = await this.getStaffHotelId(requesterStaffId, requesterUserId);
+    const staff = await this.prisma.staff.findFirst({
+      where: { id: staffId, hotelId },
+      select: { id: true },
+    });
+    if (!staff) throw new BadRequestException('Staff not found.');
+
     return this.prisma.attendance.findMany({
-      where: { staffId, timestamp: { gte: from, lte: to } },
+      where: { staffId, hotelId, timestamp: { gte: from, lte: to } },
       orderBy: { timestamp: 'asc' },
     });
   }

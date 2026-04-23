@@ -33,8 +33,8 @@ import {
   UsersRound,
 } from 'lucide-react';
 import { STATUS_CONFIG, TYPE_CONFIG, ALL_ROOM_STATUSES, type RoomStatus } from '@/lib/rooms-data';
-import { useRoom, useUpdateRoomStatus } from '@/hooks/useRooms';
-import { useRoomReservations } from '@/hooks/useRoomReservations';
+import { useRoom, useUpdateRoomStatus } from '@/hooks/room/useRooms';
+import { useRoomReservations } from '@/hooks/room/useRoomReservations';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Dialog,

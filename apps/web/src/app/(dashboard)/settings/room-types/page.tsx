@@ -9,7 +9,7 @@ import {
   useRoomTypes,
   useUpdateRoomType,
   type RoomTypeConfig,
-} from '@/hooks/useRoomTypes';
+} from '@/hooks/room/useRoomTypes';
 
 const colorOptions = [
   'bg-blue-500',
@@ -249,61 +249,61 @@ export default function RoomTypesPage() {
               key={rt.id}
               className="bg-[#161b27] border border-[#1e2536] hover:border-slate-600 rounded-xl p-5 transition-colors"
             >
-            <div className="flex items-start justify-between mb-3">
-              <div className="flex items-center gap-3">
-                <div
-                  className={`w-10 h-10 rounded-xl ${rt.color} flex items-center justify-center shrink-0`}
-                >
-                  <BedDouble size={16} className="text-white" />
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`w-10 h-10 rounded-xl ${rt.color} flex items-center justify-center shrink-0`}
+                  >
+                    <BedDouble size={16} className="text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-slate-200">{rt.name}</p>
+                    <p className="text-xs text-slate-500">{rt.description}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-bold text-slate-200">{rt.name}</p>
-                  <p className="text-xs text-slate-500">{rt.description}</p>
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => setModal({ open: true, rt })}
+                    className="p-1.5 rounded-lg text-slate-500 hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
+                  >
+                    <Pencil size={13} />
+                  </button>
+                  <button
+                    onClick={() => remove(rt.id)}
+                    className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                  >
+                    <Trash2 size={13} />
+                  </button>
                 </div>
               </div>
-              <div className="flex gap-1">
-                <button
-                  onClick={() => setModal({ open: true, rt })}
-                  className="p-1.5 rounded-lg text-slate-500 hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
-                >
-                  <Pencil size={13} />
-                </button>
-                <button
-                  onClick={() => remove(rt.id)}
-                  className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                >
-                  <Trash2 size={13} />
-                </button>
+              <div className="grid grid-cols-3 gap-2 mb-3">
+                {[
+                  { label: 'Base Rate', value: `$${rt.baseRate}/night` },
+                  { label: 'Capacity', value: `${rt.capacity} guests` },
+                  { label: 'Total Rooms', value: rt.count },
+                ].map(({ label, value }) => (
+                  <div
+                    key={label}
+                    className="bg-[#0f1117] border border-[#1e2536] rounded-lg p-2 text-center"
+                  >
+                    <p className="text-xs text-slate-600">{label}</p>
+                    <p className="text-sm font-bold text-slate-200 mt-0.5">{value}</p>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-slate-500 mb-2">{rt.beds}</p>
+              <div className="flex flex-wrap gap-1.5">
+                {rt.amenities.map((a) => (
+                  <span
+                    key={a}
+                    className="text-xs bg-[#0f1117] border border-[#1e2536] text-slate-400 px-2 py-0.5 rounded-md"
+                  >
+                    {a}
+                  </span>
+                ))}
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-2 mb-3">
-              {[
-                { label: 'Base Rate', value: `$${rt.baseRate}/night` },
-                { label: 'Capacity', value: `${rt.capacity} guests` },
-                { label: 'Total Rooms', value: rt.count },
-              ].map(({ label, value }) => (
-                <div
-                  key={label}
-                  className="bg-[#0f1117] border border-[#1e2536] rounded-lg p-2 text-center"
-                >
-                  <p className="text-xs text-slate-600">{label}</p>
-                  <p className="text-sm font-bold text-slate-200 mt-0.5">{value}</p>
-                </div>
-              ))}
-            </div>
-            <p className="text-xs text-slate-500 mb-2">{rt.beds}</p>
-            <div className="flex flex-wrap gap-1.5">
-              {rt.amenities.map((a) => (
-                <span
-                  key={a}
-                  className="text-xs bg-[#0f1117] border border-[#1e2536] text-slate-400 px-2 py-0.5 rounded-md"
-                >
-                  {a}
-                </span>
-              ))}
-            </div>
-          </div>
-        ))
+          ))
         )}
       </div>
 

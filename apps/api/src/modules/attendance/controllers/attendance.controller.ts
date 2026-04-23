@@ -66,7 +66,7 @@ export class AttendanceController {
     @Query('from') from?: string,
     @Query('to') to?: string,
   ) {
-    return this.attendanceService.getTodayList(req.user.staffId, req.user.id, {
+    return this.attendanceService.getTodayList(req.user.staffId, req.user.sub, {
       page,
       limit,
       search,
@@ -81,7 +81,7 @@ export class AttendanceController {
   @Post('admin/clock-in')
   @Permissions('manage:attendance')
   adminClockIn(@Request() req: any, @Body() body: AdminAttendanceDto) {
-    return this.attendanceService.adminClockIn(req.user.staffId, req.user.id, body);
+    return this.attendanceService.adminClockIn(req.user.staffId, req.user.sub, body);
   }
 
   @ApiBearerAuth()
@@ -89,7 +89,7 @@ export class AttendanceController {
   @Post('admin/clock-out')
   @Permissions('manage:attendance')
   adminClockOut(@Request() req: any, @Body() body: AdminAttendanceDto) {
-    return this.attendanceService.adminClockOut(req.user.staffId, req.user.id, body);
+    return this.attendanceService.adminClockOut(req.user.staffId, req.user.sub, body);
   }
 
   @ApiBearerAuth()
@@ -97,10 +97,17 @@ export class AttendanceController {
   @Get('report/:staffId')
   @Permissions('view:attendance')
   getReport(
+    @Request() req: any,
     @Param('staffId') staffId: string,
     @Query('from') from: string,
     @Query('to') to: string,
   ) {
-    return this.attendanceService.getAttendanceReport(staffId, new Date(from), new Date(to));
+    return this.attendanceService.getAttendanceReport(
+      req.user.staffId,
+      req.user.sub,
+      staffId,
+      new Date(from),
+      new Date(to),
+    );
   }
 }

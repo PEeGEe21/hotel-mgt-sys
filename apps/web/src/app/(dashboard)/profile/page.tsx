@@ -22,7 +22,7 @@ import {
   X,
   Copy,
 } from 'lucide-react';
-import { useMe, useResetAttendancePin, useUpdateMe } from '@/hooks/useMe';
+import { useChangePassword, useMe, useResetAttendancePin, useUpdateMe } from '@/hooks/useMe';
 import { useAuthStore } from '@/store/auth.store';
 import openToast from '@/components/ToastComponent';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -34,7 +34,6 @@ import {
 } from '@/hooks/useNotificationPreferences';
 import { useSearchParams } from 'next/navigation';
 import { type Permission } from '@/lib/permissions';
-import api from '@/lib/api';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 type Tab = 'profile' | 'password' | 'notifications' | 'sessions' | 'permissions';
@@ -154,6 +153,47 @@ const inputCls =
   'w-full bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 outline-none focus:border-blue-500 transition-colors';
 const disabledCls =
   'w-full bg-[#0a0d14] border border-[#1e2536] rounded-lg px-3 py-2.5 text-sm text-slate-500 cursor-not-allowed';
+
+type PasswordFormKey = 'current' | 'newPw' | 'confirm';
+
+function PasswordField({
+  label,
+  fieldKey,
+  placeholder,
+  value,
+  visible,
+  onChange,
+  onToggleVisibility,
+}: {
+  label: string;
+  fieldKey: PasswordFormKey;
+  placeholder: string;
+  value: string;
+  visible: boolean;
+  onChange: (field: PasswordFormKey, value: string) => void;
+  onToggleVisibility: (field: PasswordFormKey) => void;
+}) {
+  return (
+    <Field label={label}>
+      <div className="relative">
+        <input
+          type={visible ? 'text' : 'password'}
+          value={value}
+          onChange={(e) => onChange(fieldKey, e.target.value)}
+          placeholder={placeholder}
+          className={`${inputCls} pr-10`}
+        />
+        <button
+          type="button"
+          onClick={() => onToggleVisibility(fieldKey)}
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+        >
+          {visible ? <EyeOff size={14} /> : <Eye size={14} />}
+        </button>
+      </div>
+    </Field>
+  );
+}
 
 // ─── Toast ─────────────────────────────────────────────────────────────────────
 function Toast({ msg, type }: { msg: string; type: 'success' | 'error' }) {
@@ -458,8 +498,7 @@ function PasswordTab() {
   const [show, setShow] = useState({ current: false, newPw: false, confirm: false });
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
-  const user = useAuthStore((s) => s.user);
-  const setUser = useAuthStore((s) => s.setUser);
+  const changePassword = useChangePassword();
 
   const strength = (() => {
     const p = form.newPw;
@@ -492,11 +531,10 @@ function PasswordTab() {
     }
     setSaving(true);
     try {
-      await api.patch('/auth/change-password', {
+      await changePassword.mutateAsync({
         currentPassword: form.current,
-        newPassword: form.newPw,
+        newPassword: form.newPw,  
       });
-      if (user) setUser({ ...user, mustChangePassword: false });
       setForm({ current: '', newPw: '', confirm: '' });
       setToast({ msg: 'Password changed successfully', type: 'success' });
       openToast('success', 'Password changed successfully');
@@ -511,34 +549,13 @@ function PasswordTab() {
     }
   };
 
-  const PwField = ({
-    label,
-    key2,
-    placeholder,
-  }: {
-    label: string;
-    key2: 'current' | 'newPw' | 'confirm';
-    placeholder: string;
-  }) => (
-    <Field label={label}>
-      <div className="relative">
-        <input
-          type={show[key2] ? 'text' : 'password'}
-          value={form[key2]}
-          onChange={(e) => setForm((f) => ({ ...f, [key2]: e.target.value }))}
-          placeholder={placeholder}
-          className={`${inputCls} pr-10`}
-        />
-        <button
-          type="button"
-          onClick={() => setShow((s) => ({ ...s, [key2]: !s[key2] }))}
-          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
-        >
-          {show[key2] ? <EyeOff size={14} /> : <Eye size={14} />}
-        </button>
-      </div>
-    </Field>
-  );
+  const updatePasswordField = (field: PasswordFormKey, value: string) => {
+    setForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const togglePasswordVisibility = (field: PasswordFormKey) => {
+    setShow((current) => ({ ...current, [field]: !current[field] }));
+  };
 
   return (
     <div className="space-y-5">
@@ -547,8 +564,24 @@ function PasswordTab() {
           Change Password
         </p>
 
-        <PwField label="Current Password" key2="current" placeholder="Enter current password" />
-        <PwField label="New Password" key2="newPw" placeholder="Min 8 characters" />
+        <PasswordField
+          label="Current Password"
+          fieldKey="current"
+          placeholder="Enter current password"
+          value={form.current}
+          visible={show.current}
+          onChange={updatePasswordField}
+          onToggleVisibility={togglePasswordVisibility}
+        />
+        <PasswordField
+          label="New Password"
+          fieldKey="newPw"
+          placeholder="Min 8 characters"
+          value={form.newPw}
+          visible={show.newPw}
+          onChange={updatePasswordField}
+          onToggleVisibility={togglePasswordVisibility}
+        />
 
         {/* Strength meter */}
         {form.newPw && (
@@ -585,7 +618,15 @@ function PasswordTab() {
           </div>
         )}
 
-        <PwField label="Confirm New Password" key2="confirm" placeholder="Re-enter new password" />
+        <PasswordField
+          label="Confirm New Password"
+          fieldKey="confirm"
+          placeholder="Re-enter new password"
+          value={form.confirm}
+          visible={show.confirm}
+          onChange={updatePasswordField}
+          onToggleVisibility={togglePasswordVisibility}
+        />
 
         {form.confirm && form.newPw && (
           <p
@@ -832,14 +873,17 @@ function PermissionsTab() {
           <p className="text-sm text-slate-500">No permissions assigned.</p>
         ) : (
           <div className="flex flex-wrap gap-2">
-            {permissions.map((p) => (
+            {permissions.map((p) => {
+              const permission = String(p);
+              return (
               <span
-                key={p}
+                key={permission}
                 className="text-xs px-2.5 py-1 rounded-full bg-white/5 border border-[#1e2536] text-slate-300"
               >
-                {p}
+                {permission}
               </span>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

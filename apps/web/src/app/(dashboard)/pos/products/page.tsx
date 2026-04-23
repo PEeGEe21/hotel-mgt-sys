@@ -32,11 +32,11 @@ import {
   type CreateProductInput,
   type ProductType,
   type ProductIngredient,
-} from '@/hooks/usePosProducts';
+} from '@/hooks/pos/usePosProducts';
 import openToast from '@/components/ToastComponent';
 import { useDebounce } from '@/hooks/useDebounce';
 import Pagination from '@/components/ui/pagination';
-import { usePosProductCategories } from '@/hooks/usePosProductCategories';
+import { usePosProductCategories } from '@/hooks/pos/usePosProductCategories';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmtMoney(n: number) {
@@ -385,18 +385,18 @@ function ProductModal({ product, onClose }: { product?: ApiProduct | null; onClo
                 className={inputCls}
               />
             ) : ( */}
-              <select
-                value={form.categoryId}
-                onChange={(e) => set('categoryId', e.target.value)}
-                className={inputCls}
-              >
-                <option value="">Select category…</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+            <select
+              value={form.categoryId}
+              onChange={(e) => set('categoryId', e.target.value)}
+              className={inputCls}
+            >
+              <option value="">Select category…</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
             {/* )} */}
           </div>
 

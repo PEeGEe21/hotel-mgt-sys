@@ -4,7 +4,7 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Copy, Monitor, Loader2, RefreshCw } from 'lucide-react';
-import { useGenerateSetupCode, type SetupCodeResult } from '@/hooks/useTerminalAuth';
+import { useGenerateSetupCode, type SetupCodeResult } from '@/hooks/pos/useTerminalAuth';
 import openToast from '@/components/ToastComponent';
 import {
   Dialog,
@@ -73,7 +73,7 @@ export function SetupCodeModal({
         </DialogHeader>
 
         <div className="px-3 py-6 space-y-5">
-          <div className='flex items-center justify-between gap-3'>
+          <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-sm text-slate-400">Terminal</p>
               <p className="text-white font-semibold mt-0.5">{terminalName}</p>

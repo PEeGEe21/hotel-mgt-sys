@@ -7,6 +7,6 @@ export class UpdateRoomTypeDto {
   @ApiPropertyOptional() @IsNumber() @Min(0) @IsOptional() baseRate?: number;
   @ApiPropertyOptional() @IsNumber() @Min(1) @IsOptional() capacity?: number;
   @ApiPropertyOptional() @IsString() @IsOptional() beds?: string;
-  @ApiPropertyOptional({ type: [String] }) @IsArray() @IsOptional() amenities?: string[];
+  @ApiPropertyOptional({ type: [String] }) @IsArray() @IsString({ each: true }) @IsOptional() amenities?: string[];
   @ApiPropertyOptional() @IsString() @IsOptional() color?: string;
 }

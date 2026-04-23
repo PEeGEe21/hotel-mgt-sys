@@ -1,8 +1,22 @@
-import { IsString, IsOptional, IsInt, IsBoolean, Min } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Transform } from 'class-transformer';
+import { Type } from 'class-transformer';
+import { IsArray, IsInt, IsString, Min, ValidateNested } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
+
+export class ReorderTableItemDto {
+  @ApiProperty()
+  @IsString()
+  id!: string;
+
+  @ApiProperty()
+  @IsInt()
+  @Min(0)
+  sortOrder!: number;
+}
 
 export class ReorderTablesDto {
-  @ApiProperty({ type: [Object], description: 'Array of { id, sortOrder }' })
-  items!: { id: string; sortOrder: number }[];
+  @ApiProperty({ type: [ReorderTableItemDto], description: 'Array of { id, sortOrder }' })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ReorderTableItemDto)
+  items!: ReorderTableItemDto[];
 }

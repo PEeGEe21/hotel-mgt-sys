@@ -21,15 +21,15 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { usePosOrders, useZReport, type ApiOrder } from '@/hooks/usePosOrders';
-import { useInventoryItemOptions } from '@/hooks/usePosProducts';
-import { usePosTerminals, usePosTerminalGroups } from '@/hooks/usePosTerminals';
+import { usePosOrders, useZReport, type ApiOrder } from '@/hooks/pos/usePosOrders';
+import { useInventoryItemOptions } from '@/hooks/pos/usePosProducts';
+import { usePosTerminals, usePosTerminalGroups } from '@/hooks/pos/usePosTerminals';
 import { usePermissions } from '@/hooks/usePermissions';
 import AddPosTerminal from '../_components/AddPosTerminal';
 import EditPosTerminal from '../_components/EditPosTerminal';
 import DeleteConfirm from '../_components/DeleteConfirm';
-import { type PosTerminal } from '@/hooks/usePosTerminals';
-import { useUpdatePosTerminal } from '@/hooks/usePosTerminals';
+import { type PosTerminal } from '@/hooks/pos/usePosTerminals';
+import { useUpdatePosTerminal } from '@/hooks/pos/usePosTerminals';
 import { useDebounce } from '@/hooks/useDebounce';
 import Pagination from '@/components/ui/pagination';
 

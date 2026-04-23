@@ -3,6 +3,7 @@ import type { NextRequest } from 'next/server';
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  const publicAuthRoutes = ['/login', '/forgot-password', '/reset-password'];
 
   // Always allow Next.js internals and API routes
   if (
@@ -17,8 +18,8 @@ export function middleware(req: NextRequest) {
   const refresh = req.cookies.get('hotel_refresh_token')?.value;
   const isLoggedIn = !!(access || refresh);
 
-  // Already logged in — redirect away from login
-  if (pathname === '/login') {
+  // Already logged in — redirect away from auth-only pages
+  if (publicAuthRoutes.includes(pathname)) {
     return isLoggedIn
       ? NextResponse.redirect(new URL('/dashboard', req.url))
       : NextResponse.next();

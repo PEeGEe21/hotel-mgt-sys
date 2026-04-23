@@ -7,6 +7,17 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { Role } from '@prisma/client';
 import { DEFAULT_ROLE_PERMISSIONS } from '../../../common/constants/role-permissions';
 import { UpdateMeDto } from '../dtos/update-me.dto';
+import { EmailService } from '../../../common/email/email.service';
+
+type PasswordResetTokenRow = {
+  id: string;
+  userId: string;
+  expiresAt: Date;
+  usedAt: Date | null;
+  email: string;
+  isActive: boolean;
+  hotelId: string | null;
+};
 
 @Injectable()
 export class AuthService {
@@ -14,6 +25,7 @@ export class AuthService {
     private prisma: PrismaService,
     private jwt: JwtService,
     private config: ConfigService,
+    private email: EmailService,
   ) {}
 
   // ─── Validate user credentials (called by LocalStrategy) ──────────────────
@@ -226,7 +238,10 @@ export class AuthService {
 
   // ─── Change password ───────────────────────────────────────────────────────
   async changePassword(userId: string, currentPassword: string, newPassword: string) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { staff: true },
+    });
     if (!user) throw new UnauthorizedException('User not found.');
 
     const valid = await bcrypt.compare(currentPassword, user.passwordHash);
@@ -237,12 +252,112 @@ export class AuthService {
     }
 
     const passwordHash = await bcrypt.hash(newPassword, 10);
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { passwordHash, mustChangePassword: false },
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: userId },
+        data: { passwordHash, mustChangePassword: false },
+      }),
+      this.prisma.refreshToken.deleteMany({ where: { userId } }),
+      this.markPasswordResetTokensUsed(userId),
+    ]);
+
+    await this.logAudit({
+      actorUserId: user.id,
+      hotelId: user.staff?.hotelId ?? null,
+      action: 'auth.password.change',
     });
 
     return { message: 'Password changed successfully.' };
+  }
+
+  async requestPasswordReset(
+    email: string,
+    meta?: { ipAddress?: string | null; userAgent?: string | null },
+  ) {
+    const generic = {
+      message: 'If an account exists for that email, a password reset link has been sent.',
+    };
+    const normalizedEmail = email.trim().toLowerCase();
+    const user = await this.prisma.user.findFirst({
+      where: { email: { equals: normalizedEmail, mode: 'insensitive' } },
+      include: { staff: { include: { hotel: true } } },
+    });
+
+    if (!user || !user.isActive) {
+      return generic;
+    }
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const tokenHash = this.hashPasswordResetToken(token);
+    const expiresAt = new Date(Date.now() + 1000 * 60 * 30);
+
+    await this.prisma.$transaction([
+      this.markPasswordResetTokensUsed(user.id),
+      this.createPasswordResetToken(user.id, tokenHash, expiresAt),
+    ]);
+
+    const resetUrl = this.buildPasswordResetUrl(token);
+    await this.email.sendEmail({
+      to: user.email,
+      subject: 'Reset your HotelOS password',
+      text: `Reset your password: ${resetUrl}\n\nThis link expires in 30 minutes. If you did not request this, you can ignore this email.`,
+      html: this.buildPasswordResetEmail({
+        hotelName: user.staff?.hotel?.name ?? 'HotelOS',
+        resetUrl,
+      }),
+    });
+
+    await this.logAudit({
+      actorUserId: user.id,
+      hotelId: user.staff?.hotelId ?? null,
+      action: 'auth.password_reset.request',
+      ipAddress: meta?.ipAddress ?? null,
+      userAgent: meta?.userAgent ?? null,
+    });
+
+    return process.env.NODE_ENV === 'production' ? generic : { ...generic, resetUrl };
+  }
+
+  async resetPasswordWithToken(
+    token: string,
+    newPassword: string,
+    meta?: { ipAddress?: string | null; userAgent?: string | null },
+  ) {
+    if (newPassword.length < 8) {
+      throw new BadRequestException('Password must be at least 8 characters.');
+    }
+
+    const tokenHash = this.hashPasswordResetToken(token);
+    const resetToken = await this.findPasswordResetToken(tokenHash);
+
+    if (!resetToken || resetToken.usedAt || resetToken.expiresAt < new Date()) {
+      throw new BadRequestException('Password reset link is invalid or expired.');
+    }
+
+    if (!resetToken.isActive) {
+      throw new BadRequestException('Password reset link is invalid or expired.');
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: resetToken.userId },
+        data: { passwordHash, mustChangePassword: false },
+      }),
+      this.markPasswordResetTokenUsed(resetToken.id),
+      this.markOtherPasswordResetTokensUsed(resetToken.userId, resetToken.id),
+      this.prisma.refreshToken.deleteMany({ where: { userId: resetToken.userId } }),
+    ]);
+
+    await this.logAudit({
+      actorUserId: resetToken.userId,
+      hotelId: resetToken.hotelId,
+      action: 'auth.password_reset.complete',
+      ipAddress: meta?.ipAddress ?? null,
+      userAgent: meta?.userAgent ?? null,
+    });
+
+    return { message: 'Password reset successfully. You can now sign in.' };
   }
 
   // ─── Reset attendance PIN (current user) ─────────────────────────────────
@@ -303,6 +418,81 @@ export class AuthService {
     });
 
     return token;
+  }
+
+  private hashPasswordResetToken(token: string) {
+    return crypto.createHash('sha256').update(token).digest('hex');
+  }
+
+  private markPasswordResetTokensUsed(userId: string) {
+    return this.prisma.$executeRaw`
+      UPDATE "PasswordResetToken"
+      SET "usedAt" = NOW()
+      WHERE "userId" = ${userId} AND "usedAt" IS NULL
+    `;
+  }
+
+  private createPasswordResetToken(userId: string, tokenHash: string, expiresAt: Date) {
+    return this.prisma.$executeRaw`
+      INSERT INTO "PasswordResetToken" ("id", "tokenHash", "userId", "expiresAt")
+      VALUES (${crypto.randomUUID()}, ${tokenHash}, ${userId}, ${expiresAt})
+    `;
+  }
+
+  private async findPasswordResetToken(tokenHash: string) {
+    const rows = await this.prisma.$queryRaw<PasswordResetTokenRow[]>`
+      SELECT
+        prt."id",
+        prt."userId",
+        prt."expiresAt",
+        prt."usedAt",
+        u."email",
+        u."isActive",
+        s."hotelId"
+      FROM "PasswordResetToken" prt
+      INNER JOIN "User" u ON u."id" = prt."userId"
+      LEFT JOIN "Staff" s ON s."userId" = u."id"
+      WHERE prt."tokenHash" = ${tokenHash}
+      LIMIT 1
+    `;
+
+    return rows[0] ?? null;
+  }
+
+  private markPasswordResetTokenUsed(id: string) {
+    return this.prisma.$executeRaw`
+      UPDATE "PasswordResetToken"
+      SET "usedAt" = NOW()
+      WHERE "id" = ${id}
+    `;
+  }
+
+  private markOtherPasswordResetTokensUsed(userId: string, usedTokenId: string) {
+    return this.prisma.$executeRaw`
+      UPDATE "PasswordResetToken"
+      SET "usedAt" = NOW()
+      WHERE "userId" = ${userId} AND "id" <> ${usedTokenId} AND "usedAt" IS NULL
+    `;
+  }
+
+  private buildPasswordResetUrl(token: string) {
+    const frontendUrl = this.config.get<string>('frontendUrl') || 'http://localhost:3000';
+    return `${frontendUrl.replace(/\/$/, '')}/reset-password?token=${encodeURIComponent(token)}`;
+  }
+
+  private buildPasswordResetEmail(params: { hotelName: string; resetUrl: string }) {
+    return `
+      <div style="font-family:Arial,sans-serif;line-height:1.6;color:#111827">
+        <h2 style="margin:0 0 12px">Reset your ${params.hotelName} password</h2>
+        <p>We received a request to reset your HotelOS password.</p>
+        <p>
+          <a href="${params.resetUrl}" style="display:inline-block;background:#2563eb;color:white;text-decoration:none;padding:10px 16px;border-radius:8px;font-weight:700">
+            Reset password
+          </a>
+        </p>
+        <p>This link expires in 30 minutes. If you did not request this, you can ignore this email.</p>
+      </div>
+    `;
   }
 
   async impersonate(

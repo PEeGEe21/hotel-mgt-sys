@@ -6,7 +6,7 @@ import {
   PosTerminalGroup,
   useCreatePosTerminal,
   usePosTerminalGroups,
-} from '@/hooks/usePosTerminals';
+} from '@/hooks/pos/usePosTerminals';
 import { useAllUserAccounts, useUserAccounts } from '@/hooks/useUserAccounts';
 import {
   Dialog,

@@ -25,7 +25,7 @@ import {
   type StaffRole,
   type ApiStaff,
   type CreateStaffInput,
-} from '@/hooks/useStaff';
+} from '@/hooks/staff/useStaff';
 import openToast from '@/components/ToastComponent';
 import { useDebounce } from '@/hooks/useDebounce';
 import Pagination from '@/components/ui/pagination';

@@ -17,6 +17,9 @@ import { JwtAuthGuard, LocalAuthGuard, Roles, RolesGuard } from '../guards/index
 import { RefreshDto } from '../dtos/refresh.dto';
 import { LogoutDto } from '../dtos/logout.dto';
 import { UpdateMeDto } from '../dtos/update-me.dto';
+import { ForgotPasswordDto } from '../dtos/forgot-password.dto';
+import { ResetPasswordDto } from '../dtos/reset-password.dto';
+import { ChangePasswordDto } from '../dtos/change-password.dto';
 import { getRequestIp, getUserAgent } from '../../../common/utils/request.utils';
 
 // ─── Controller ────────────────────────────────────────────────────────────────
@@ -47,6 +50,26 @@ export class AuthController {
   @ApiOperation({ summary: 'Refresh access token' })
   refresh(@Body() dto: RefreshDto) {
     return this.authService.refresh(dto.refreshToken);
+  }
+
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Request a password reset email' })
+  forgotPassword(@Request() req: any, @Body() dto: ForgotPasswordDto) {
+    return this.authService.requestPasswordReset(dto.email, {
+      ipAddress: getRequestIp(req),
+      userAgent: getUserAgent(req),
+    });
+  }
+
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Reset password using an email token' })
+  resetPassword(@Request() req: any, @Body() dto: ResetPasswordDto) {
+    return this.authService.resetPasswordWithToken(dto.token, dto.newPassword, {
+      ipAddress: getRequestIp(req),
+      userAgent: getUserAgent(req),
+    });
   }
 
   @ApiBearerAuth()
@@ -98,7 +121,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Change own password (clears mustChangePassword flag)' })
   changePassword(
     @Request() req: any,
-    @Body() body: { currentPassword: string; newPassword: string },
+    @Body() body: ChangePasswordDto,
   ) {
     return this.authService.changePassword(req.user.sub, body.currentPassword, body.newPassword);
   }

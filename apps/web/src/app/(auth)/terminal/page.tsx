@@ -29,24 +29,24 @@ import {
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { usePosStore, type TerminalStaff } from '@/store/pos.store';
-import { usePersistedCart } from '@/hooks/usePersistedCart';
-import { usePosProducts } from '@/hooks/usePosProducts';
-import { usePosTables, type PosTable } from '@/hooks/usePosTables';
+import { usePersistedCart } from '@/hooks/pos/usePersistedCart';
+import { usePosProducts } from '@/hooks/pos/usePosProducts';
+import { usePosTables, type PosTable } from '@/hooks/pos/usePosTables';
 import {
   useCreateOrder,
   useDeliverOrder,
   usePayOrderById,
   usePosOrders,
-} from '@/hooks/usePosOrders';
+} from '@/hooks/pos/usePosOrders';
 import {
   useAuthenticateTerminal,
   useStaffPinLogin,
   useStaffLogout,
   useTerminalStatus,
-} from '@/hooks/useTerminalAuth';
+} from '@/hooks/pos/useTerminalAuth';
 import openToast from '@/components/ToastComponent';
 import { useDebounce } from '@/hooks/useDebounce';
-import { usePosProductCategories } from '@/hooks/usePosProductCategories';
+import { usePosProductCategories } from '@/hooks/pos/usePosProductCategories';
 import { useAppStore } from '@/store/app.store';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

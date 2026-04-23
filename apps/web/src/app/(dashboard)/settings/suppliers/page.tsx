@@ -9,11 +9,15 @@ import {
   useSuppliers,
   useUpdateSupplier,
   type Supplier,
-} from '@/hooks/useSuppliers';
+} from '@/hooks/inventory/useSuppliers';
 
 const allCategories = ['Spirits', 'Beer', 'Wine', 'Cocktails', 'Soft Drinks', 'Food'];
 
-function SupplierModal({ supplier, onClose, onSave }: {
+function SupplierModal({
+  supplier,
+  onClose,
+  onSave,
+}: {
   supplier?: Supplier;
   onClose: () => void;
   onSave: (s: Omit<Supplier, 'id'>) => void;
@@ -25,14 +29,14 @@ function SupplierModal({ supplier, onClose, onSave }: {
     email: supplier?.email ?? '',
     address: supplier?.address ?? '',
     notes: supplier?.notes ?? '',
-    categories: supplier?.categories ?? [] as string[],
+    categories: supplier?.categories ?? ([] as string[]),
   });
 
   const toggleCat = (cat: string) =>
-    setForm(f => ({
+    setForm((f) => ({
       ...f,
       categories: f.categories.includes(cat)
-        ? f.categories.filter(c => c !== cat)
+        ? f.categories.filter((c) => c !== cat)
         : [...f.categories, cat],
     }));
 
@@ -40,8 +44,15 @@ function SupplierModal({ supplier, onClose, onSave }: {
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-[#161b27] border border-[#1e2536] rounded-2xl p-6 w-full max-w-lg shadow-2xl">
         <div className="flex items-center justify-between mb-5">
-          <h2 className="text-lg font-bold text-white">{supplier ? 'Edit Supplier' : 'New Supplier'}</h2>
-          <button onClick={onClose} className="text-slate-500 hover:text-slate-300 transition-colors"><X size={18} /></button>
+          <h2 className="text-lg font-bold text-white">
+            {supplier ? 'Edit Supplier' : 'New Supplier'}
+          </h2>
+          <button
+            onClick={onClose}
+            className="text-slate-500 hover:text-slate-300 transition-colors"
+          >
+            <X size={18} />
+          </button>
         </div>
         <div className="grid grid-cols-2 gap-4">
           {[
@@ -50,33 +61,59 @@ function SupplierModal({ supplier, onClose, onSave }: {
             { label: 'Phone', key: 'phone', col: 1, placeholder: '+234...' },
             { label: 'Email', key: 'email', col: 1, placeholder: 'supplier@email.com' },
             { label: 'Address', key: 'address', col: 1, placeholder: 'City, State' },
-            { label: 'Notes', key: 'notes', col: 2, placeholder: 'Delivery schedule, payment terms...' },
+            {
+              label: 'Notes',
+              key: 'notes',
+              col: 2,
+              placeholder: 'Delivery schedule, payment terms...',
+            },
           ].map(({ label, key, col, placeholder }) => (
             <div key={key} className={col === 2 ? 'col-span-2' : ''}>
-              <label className="text-xs text-slate-500 uppercase tracking-wider mb-1.5 block">{label}</label>
-              <input value={(form as any)[key]} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
+              <label className="text-xs text-slate-500 uppercase tracking-wider mb-1.5 block">
+                {label}
+              </label>
+              <input
+                value={(form as any)[key]}
+                onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
                 placeholder={placeholder}
-                className="w-full bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 outline-none focus:border-blue-500 transition-colors" />
+                className="w-full bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 outline-none focus:border-blue-500 transition-colors"
+              />
             </div>
           ))}
           <div className="col-span-2">
-            <label className="text-xs text-slate-500 uppercase tracking-wider mb-1.5 block">Supplies</label>
+            <label className="text-xs text-slate-500 uppercase tracking-wider mb-1.5 block">
+              Supplies
+            </label>
             <div className="flex gap-2 flex-wrap">
-              {allCategories.map(cat => (
-                <button key={cat} onClick={() => toggleCat(cat)}
+              {allCategories.map((cat) => (
+                <button
+                  key={cat}
+                  onClick={() => toggleCat(cat)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
                     form.categories.includes(cat)
                       ? 'bg-blue-600/20 border-blue-500/30 text-blue-400'
                       : 'bg-[#0f1117] border-[#1e2536] text-slate-400 hover:text-slate-200'
-                  }`}>{cat}</button>
+                  }`}
+                >
+                  {cat}
+                </button>
               ))}
             </div>
           </div>
         </div>
         <div className="flex gap-3 mt-5">
-          <button onClick={onClose} className="flex-1 bg-white/5 hover:bg-white/10 text-slate-300 rounded-lg py-2.5 text-sm font-medium transition-colors">Cancel</button>
-          <button onClick={() => form.name && onSave(form)}
-            className="flex-1 bg-blue-600 hover:bg-blue-500 text-white rounded-lg py-2.5 text-sm font-semibold transition-colors">Save</button>
+          <button
+            onClick={onClose}
+            className="flex-1 bg-white/5 hover:bg-white/10 text-slate-300 rounded-lg py-2.5 text-sm font-medium transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => form.name && onSave(form)}
+            className="flex-1 bg-blue-600 hover:bg-blue-500 text-white rounded-lg py-2.5 text-sm font-semibold transition-colors"
+          >
+            Save
+          </button>
         </div>
       </div>
     </div>
@@ -86,17 +123,27 @@ function SupplierModal({ supplier, onClose, onSave }: {
 export default function SuppliersPage() {
   const router = useRouter();
   const [modal, setModal] = useState<{ open: boolean; supplier?: Supplier }>({ open: false });
+  const [deleteTarget, setDeleteTarget] = useState<Supplier | null>(null);
   const { data: suppliers = [], isLoading } = useSuppliers();
   const createSupplier = useCreateSupplier();
   const updateSupplier = useUpdateSupplier(modal.supplier?.id ?? '');
   const deleteSupplier = useDeleteSupplier();
 
   const save = async (data: Omit<Supplier, 'id'>) => {
+    const payload = {
+      name: data.name,
+      contact: data.contact ?? undefined,
+      phone: data.phone ?? undefined,
+      email: data.email ?? undefined,
+      address: data.address ?? undefined,
+      notes: data.notes ?? undefined,
+      categories: data.categories,
+    };
     try {
       if (modal.supplier) {
-        await updateSupplier.mutateAsync(data);
+        await updateSupplier.mutateAsync(payload);
       } else {
-        await createSupplier.mutateAsync(data);
+        await createSupplier.mutateAsync(payload);
       }
       setModal({ open: false });
     } catch {
@@ -104,10 +151,11 @@ export default function SuppliersPage() {
     }
   };
 
-  const remove = async (id: string) => {
-    if (!confirm('Delete this supplier?')) return;
+  const remove = async () => {
+    if (!deleteTarget) return;
     try {
-      await deleteSupplier.mutateAsync(id);
+      await deleteSupplier.mutateAsync(deleteTarget.id);
+      setDeleteTarget(null);
     } catch {
       // handled by toast
     }
@@ -117,8 +165,10 @@ export default function SuppliersPage() {
     <div className="space-y-6 max-w-4xl">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <button onClick={() => router.push('/settings')}
-            className="w-9 h-9 rounded-lg bg-[#161b27] border border-[#1e2536] flex items-center justify-center text-slate-400 hover:text-slate-200 transition-colors">
+          <button
+            onClick={() => router.push('/settings')}
+            className="w-9 h-9 rounded-lg bg-[#161b27] border border-[#1e2536] flex items-center justify-center text-slate-400 hover:text-slate-200 transition-colors"
+          >
             <ArrowLeft size={16} />
           </button>
           <div>
@@ -126,8 +176,10 @@ export default function SuppliersPage() {
             <p className="text-slate-500 text-sm mt-0.5">{suppliers.length} suppliers</p>
           </div>
         </div>
-        <button onClick={() => setModal({ open: true })}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors">
+        <button
+          onClick={() => setModal({ open: true })}
+          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
+        >
           <Plus size={15} /> Add Supplier
         </button>
       </div>
@@ -142,8 +194,11 @@ export default function SuppliersPage() {
             No suppliers yet
           </div>
         ) : (
-          suppliers.map(sup => (
-            <div key={sup.id} className="bg-[#161b27] border border-[#1e2536] rounded-xl p-5 hover:border-slate-600 transition-colors">
+          suppliers.map((sup) => (
+            <div
+              key={sup.id}
+              className="bg-[#161b27] border border-[#1e2536] rounded-xl p-5 hover:border-slate-600 transition-colors"
+            >
               <div className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-orange-500/15 border border-orange-500/20 flex items-center justify-center shrink-0">
@@ -155,34 +210,94 @@ export default function SuppliersPage() {
                   </div>
                 </div>
                 <div className="flex gap-1">
-                  <button onClick={() => setModal({ open: true, supplier: sup })}
-                    className="p-1.5 rounded-lg text-slate-500 hover:text-blue-400 hover:bg-blue-500/10 transition-colors"><Pencil size={13} /></button>
-                  <button onClick={() => remove(sup.id)}
-                    className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"><Trash2 size={13} /></button>
+                  <button
+                    onClick={() => setModal({ open: true, supplier: sup })}
+                    className="p-1.5 rounded-lg text-slate-500 hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
+                  >
+                    <Pencil size={13} />
+                  </button>
+                  <button
+                    onClick={() => setDeleteTarget(sup)}
+                    className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                  >
+                    <Trash2 size={13} />
+                  </button>
                 </div>
               </div>
 
               <div className="space-y-1.5 mb-3">
-                <p className="text-xs text-slate-500 flex items-center gap-1.5"><Phone size={10} />{sup.phone}</p>
-                <p className="text-xs text-slate-500 flex items-center gap-1.5"><Mail size={10} />{sup.email}</p>
-                <p className="text-xs text-slate-500 flex items-center gap-1.5"><MapPin size={10} />{sup.address}</p>
+                <p className="text-xs text-slate-500 flex items-center gap-1.5">
+                  <Phone size={10} />
+                  {sup.phone}
+                </p>
+                <p className="text-xs text-slate-500 flex items-center gap-1.5">
+                  <Mail size={10} />
+                  {sup.email}
+                </p>
+                <p className="text-xs text-slate-500 flex items-center gap-1.5">
+                  <MapPin size={10} />
+                  {sup.address}
+                </p>
               </div>
 
               <div className="flex flex-wrap gap-1.5">
-                {sup.categories.map(cat => (
-                  <span key={cat} className="text-xs bg-[#0f1117] border border-[#1e2536] text-slate-400 px-2 py-0.5 rounded-md">{cat}</span>
+                {sup.categories.map((cat) => (
+                  <span
+                    key={cat}
+                    className="text-xs bg-[#0f1117] border border-[#1e2536] text-slate-400 px-2 py-0.5 rounded-md"
+                  >
+                    {cat}
+                  </span>
                 ))}
               </div>
 
               {sup.notes && (
-                <p className="text-xs text-amber-400/70 mt-2 bg-amber-500/5 border border-amber-500/10 rounded-lg px-3 py-2">{sup.notes}</p>
+                <p className="text-xs text-amber-400/70 mt-2 bg-amber-500/5 border border-amber-500/10 rounded-lg px-3 py-2">
+                  {sup.notes}
+                </p>
               )}
             </div>
           ))
         )}
       </div>
 
-      {modal.open && <SupplierModal supplier={modal.supplier} onClose={() => setModal({ open: false })} onSave={save} />}
+      {modal.open && (
+        <SupplierModal
+          supplier={modal.supplier}
+          onClose={() => setModal({ open: false })}
+          onSave={save}
+        />
+      )}
+      {deleteTarget && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-[#161b27] border border-[#1e2536] rounded-2xl p-6 w-full max-w-md shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-white">Delete Supplier</h2>
+              <button onClick={() => setDeleteTarget(null)} className="text-slate-500 hover:text-slate-300">
+                <X size={18} />
+              </button>
+            </div>
+            <p className="text-sm text-slate-400">
+              Delete {deleteTarget.name}? This action cannot be undone.
+            </p>
+            <div className="flex gap-3 mt-5">
+              <button
+                onClick={() => setDeleteTarget(null)}
+                className="flex-1 bg-white/5 hover:bg-white/10 text-slate-300 rounded-lg py-2.5 text-sm font-medium transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={remove}
+                disabled={deleteSupplier.isPending}
+                className="flex-1 bg-red-600 hover:bg-red-500 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-lg py-2.5 text-sm font-semibold transition-colors"
+              >
+                {deleteSupplier.isPending ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -80,7 +80,7 @@ export class InventoryController {
   ) {
     return this.inventoryService.recordMovement(req.user.hotelId, id, {
       ...dto,
-      staffId: dto.staffId ?? req.user.staffId,
+      staffId: req.user.staffId,
     });
   }
 

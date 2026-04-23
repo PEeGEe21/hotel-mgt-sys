@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { Search, Download, Plus, Loader2 } from 'lucide-react';
-import { useFinancePayments, FinancePayment } from '@/hooks/useFinance';
+import { useFinancePayments, FinancePayment } from '@/hooks/finance/useFinance';
 
 type PaymentMethod =
   | 'Cash'

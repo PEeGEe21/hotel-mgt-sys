@@ -26,7 +26,7 @@ import {
   usePostManualEntry,
   type Account,
   type AccountType,
-} from '@/hooks/useLedger';
+} from '@/hooks/finance/useLedger';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmtMoney(n: number) {

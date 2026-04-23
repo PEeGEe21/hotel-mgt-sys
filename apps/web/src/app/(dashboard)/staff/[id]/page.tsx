@@ -34,7 +34,7 @@ import {
   type ApiStaff,
   type CreateStaffInput,
   type StaffRole,
-} from '@/hooks/useStaff';
+} from '@/hooks/staff/useStaff';
 import openToast from '@/components/ToastComponent';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

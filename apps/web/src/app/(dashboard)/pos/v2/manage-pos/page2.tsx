@@ -22,9 +22,9 @@ import {
   usePosTerminals,
   useRenamePosTerminalGroup,
   useUpdatePosTerminal,
-} from '@/hooks/usePosTerminals';
+} from '@/hooks/pos/usePosTerminals';
 import { useUserAccounts } from '@/hooks/useUserAccounts';
-import { useInventoryList } from '@/hooks/useInventoryItems';
+import { useInventoryList } from '@/hooks/inventory/useInventoryItems';
 import EditPosTerminal from '../../_components/EditPosTerminal';
 import DeleteConfirm from '../../_components/DeleteConfirm';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -132,7 +132,8 @@ export default function PosPage() {
   const [groupOrder, setGroupOrder] = useState<string[]>([]);
   const { data: terminalGroups = [], isLoading: terminalGroupsLoading } = usePosTerminalGroups();
   const { data: terminals = [], isLoading: terminalsLoading } = usePosTerminals();
-  const { data: inventoryItems = [], isLoading: inventoryLoading } = useInventoryList();
+  const { data: inventoryData, isLoading: inventoryLoading } = useInventoryList();
+  const inventoryItems = inventoryData?.items ?? [];
   const updateTerminal = useUpdatePosTerminal(assignTarget?.id ?? '');
   const renameGroup = useRenamePosTerminalGroup();
   const { data: users = [] } = useUserAccounts();
@@ -240,7 +241,7 @@ export default function PosPage() {
               Sales overview, terminal configuration, and reporting.
             </p>
           </div>
-          <div className='flex items-center gap-3'>
+          <div className="flex items-center gap-3">
             <Link
               href="/pos/products"
               className="border border-blue-600 hover:bg-white hover:text-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2"

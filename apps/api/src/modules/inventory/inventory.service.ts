@@ -218,6 +218,14 @@ export class InventoryService {
       throw new BadRequestException('Quantity must be greater than 0.');
     }
 
+    if (dto.staffId) {
+      const staff = await this.prisma.staff.findFirst({
+        where: { id: dto.staffId, hotelId },
+        select: { id: true },
+      });
+      if (!staff) throw new BadRequestException('Staff not found.');
+    }
+
     // For OUT/WASTAGE — check we have enough stock
     if (['OUT', 'WASTAGE'].includes(dto.type)) {
       if (Number(item.quantity) < dto.quantity) {

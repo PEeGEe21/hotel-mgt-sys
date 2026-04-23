@@ -320,4 +320,24 @@ export class StaffService {
   getRoles() {
     return Object.values(Role).filter((r) => r !== 'SUPER_ADMIN');
   }
+
+  async getStaff(hotelId: string) {
+    return this.prisma.staff.findMany({
+      where: {
+        hotelId,
+        user: { isActive: true },
+        OR: [
+          { user: { role: { notIn: ['ADMIN', 'SUPER_ADMIN'] } } },
+        ],
+      },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        avatar: true,
+        position: true,
+      },
+      orderBy: { firstName: 'asc' },
+    });
+  }
 }

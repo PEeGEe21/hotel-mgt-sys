@@ -104,6 +104,16 @@ export function useStaff(filters: StaffFilters = {}) {
   });
 }
 
+export function useStaffAll() {
+  return useQuery<ApiStaff[]>({
+    queryKey: ['staff'],
+    queryFn: async () => {
+      const { data } = await api.get(`/staff/all`);
+      return data;
+    },
+  });
+}
+
 export function useStaffMember(id: string) {
   return useQuery<ApiStaff>({
     queryKey: ['staff', id],

@@ -22,16 +22,16 @@ import {
   BedDouble,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { usePersistedCart } from '@/hooks/usePersistedCart';
-import { usePosProducts } from '@/hooks/usePosProducts';
+import { usePersistedCart } from '@/hooks/pos/usePersistedCart';
+import { usePosProducts } from '@/hooks/pos/usePosProducts';
 import {
   useCreateOrder,
   useDeliverOrder,
   usePayOrderById,
   usePosOrders,
   type ApiOrder,
-} from '@/hooks/usePosOrders';
-import { usePosTables, useTableOpenOrders, type PosTable } from '@/hooks/usePosTables';
+} from '@/hooks/pos/usePosOrders';
+import { usePosTables, useTableOpenOrders, type PosTable } from '@/hooks/pos/usePosTables';
 import openToast from '@/components/ToastComponent';
 import { useDebounce } from '@/hooks/useDebounce';
 

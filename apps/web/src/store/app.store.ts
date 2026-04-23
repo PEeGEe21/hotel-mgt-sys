@@ -25,9 +25,11 @@ export type HotelInfo = {
 
 interface AppState {
   hotel: HotelInfo | null;
+  hasHydrated: boolean;
   // Actions
   setHotel: (hotel: HotelInfo) => void;
   clearHotel: () => void;
+  setHasHydrated: (hasHydrated: boolean) => void;
 }
 
 // ─── Store ────────────────────────────────────────────────────────────────────
@@ -38,11 +40,16 @@ export const useAppStore = create<AppState>()(
   persist(
     (set) => ({
       hotel: null,
+      hasHydrated: false,
       setHotel: (hotel) => set({ hotel }),
       clearHotel: () => set({ hotel: null }),
+      setHasHydrated: (hasHydrated) => set({ hasHydrated }),
     }),
     {
       name: 'hotel-app', // localStorage key
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true);
+      },
     },
   ),
 );

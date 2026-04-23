@@ -8,5 +8,5 @@ export class CreateSupplierDto {
   @ApiPropertyOptional() @IsString() @IsOptional() email?: string;
   @ApiPropertyOptional() @IsString() @IsOptional() address?: string;
   @ApiPropertyOptional() @IsString() @IsOptional() notes?: string;
-  @ApiPropertyOptional({ type: [String] }) @IsArray() @IsOptional() categories?: string[];
+  @ApiPropertyOptional({ type: [String] }) @IsArray() @IsString({ each: true }) @IsOptional() categories?: string[];
 }

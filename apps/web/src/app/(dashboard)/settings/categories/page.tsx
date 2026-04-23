@@ -9,7 +9,7 @@ import {
   useInventoryCategories,
   useUpdateInventoryCategory,
   type InventoryCategory,
-} from '@/hooks/useInventoryCategories';
+} from '@/hooks/inventory/useInventoryCategories';
 
 const colorOptions = [
   'bg-blue-500',

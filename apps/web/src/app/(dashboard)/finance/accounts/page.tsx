@@ -27,7 +27,7 @@ import {
   usePostManualEntry,
   type Account,
   type AccountType,
-} from '@/hooks/useLedger';
+} from '@/hooks/finance/useLedger';
 import api from '@/lib/api';
 import Pagination from '@/components/ui/pagination';
 

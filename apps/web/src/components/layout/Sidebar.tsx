@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   BedDouble,
   CalendarCheck,
+  CalendarDays,
   Users,
   UserCheck,
   Clock,
@@ -87,7 +88,7 @@ const nav: NavEntry[] = [
     permission: 'view:facilities',
     children: [
       { label: 'Facility List', href: '/facilities/list', icon: Building2 },
-      { label: 'Reservations', href: '/facilities/reservations', icon: Lock },
+      { label: 'Bookings', href: '/facilities/bookings', icon: CalendarDays },
       { label: 'Complaints', href: '/facilities/complaints', icon: AlertTriangle },
       { label: 'Inspections', href: '/facilities/inspections', icon: ClipboardList },
       { label: 'Maintenance', href: '/facilities/maintenance', icon: Wrench },

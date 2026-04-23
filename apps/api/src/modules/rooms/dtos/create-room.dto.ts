@@ -11,6 +11,6 @@ export class CreateRoomDto {
   @ApiProperty() @IsNumber() @Min(0) baseRate!: number;
   @ApiPropertyOptional() @IsInt() @Min(1) @IsOptional() maxGuests?: number;
   @ApiPropertyOptional() @IsString() @IsOptional() description?: string;
-  @ApiPropertyOptional() @IsArray() @IsOptional() amenities?: string[];
-  @ApiPropertyOptional() @IsArray() @IsOptional() images?: string[];
+  @ApiPropertyOptional() @IsArray() @IsString({ each: true }) @IsOptional() amenities?: string[];
+  @ApiPropertyOptional() @IsArray() @IsString({ each: true }) @IsOptional() images?: string[];
 }

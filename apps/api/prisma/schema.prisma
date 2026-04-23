@@ -35,6 +35,12 @@ enum RoomStatus {
   HOUSEKEEPING
 }
 
+enum FacilityStatus {
+  ACTIVE
+  INACTIVE
+  MAINTENANCE
+}
+
 enum RoomType {
   STANDARD
   DELUXE
@@ -151,6 +157,14 @@ model Hotel {
   guests           Guest[]
   reservations     Reservation[]
   facilities       Facility[]
+  facilityBookings FacilityBooking[]
+  facilityRequisitions FacilityRequisition[]
+  maintenanceRequests MaintenanceRequest[]
+  facilityComplaints FacilityComplaint[]
+  facilityInspections FacilityInspection[]
+  facilityTypes   FacilityType[]
+  facilityLocations FacilityLocation[]
+  facilityDepartments FacilityDepartment[]
   posOrders        PosOrder[]
   posProducts      PosProduct[]
   posTerminals     PosTerminal[]
@@ -194,11 +208,26 @@ model User {
 
   staff         Staff?
   refreshTokens RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
   permissionAuditActor PermissionAuditLog[] @relation("PermissionAuditActor")
   permissionAuditTarget PermissionAuditLog[] @relation("PermissionAuditTarget")
   auditLogsActor AuditLog[] @relation("AuditActor")
   auditLogsTarget AuditLog[] @relation("AuditTarget")
   notificationPreferences NotificationPreference[]
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  tokenHash String   @unique
+  userId    String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 model RefreshToken {
@@ -320,6 +349,16 @@ model Staff {
   tasks      HousekeepingTask[]
   posTerminals PosTerminal[]
   posOrders PosOrder[]
+  facilityBookingsCreated FacilityBooking[] @relation("FacilityBookingCreatedBy")
+  facilityBookingsApproved FacilityBooking[] @relation("FacilityBookingApprovedBy")
+  facilityDepartmentsHeaded FacilityDepartment[] @relation("FacilityDepartmentHead")
+  facilitiesManaged Facility[] @relation("FacilityManager")
+  facilityRequisitionsRequested FacilityRequisition[] @relation("FacilityRequisitionRequestedBy")
+  facilityRequisitionsApproved FacilityRequisition[] @relation("FacilityRequisitionApprovedBy")
+  maintenanceRequestsReported MaintenanceRequest[] @relation("MaintenanceRequestReportedBy")
+  maintenanceRequestsAssigned MaintenanceRequest[] @relation("MaintenanceRequestAssignedTo")
+  facilityComplaintsReported FacilityComplaint[] @relation("FacilityComplaintReportedBy")
+  facilityInspectionsScheduled FacilityInspection[] @relation("FacilityInspectionScheduledBy")
 }
 
 model Attendance {
@@ -492,6 +531,8 @@ model Room {
   floor             Floor?             @relation(fields: [floorId], references: [id])
   reservations      Reservation[]
   housekeepingTasks HousekeepingTask[]
+  maintenanceRequests MaintenanceRequest[]
+  facilityComplaints FacilityComplaint[]
 
   @@unique([hotelId, number])
   @@index([hotelId, status])
@@ -566,6 +607,8 @@ model Guest {
   hotel              Hotel              @relation(fields: [hotelId], references: [id])
   reservations       Reservation[]      // reservations where this guest is primary
   reservationGuests  ReservationGuest[] // all reservations this guest appears on
+  facilityBookings   FacilityBooking[]
+  facilityComplaints FacilityComplaint[]
 
   @@index([hotelId])
   @@index([hotelId, email])
@@ -603,6 +646,7 @@ model Reservation {
   groupBooking GroupBooking?      @relation(fields: [groupBookingId], references: [id])
   guests       ReservationGuest[] // full guest list including primary
   invoices     Invoice[]
+  facilityBookings FacilityBooking[]
   folioItems   FolioItem[]
   posOrders    PosOrder[]
 
@@ -636,6 +680,7 @@ model Invoice {
   hotelId       String
   reservationId String?       // null for walk-in / POS-only invoices
   posOrderId    String?
+  facilityBookingId String?   @unique
   invoiceNo     String        @unique
   issuedAt      DateTime      @default(now())
   dueAt         DateTime?
@@ -649,10 +694,12 @@ model Invoice {
 
   reservation Reservation? @relation(fields: [reservationId], references: [id])
   posOrder    PosOrder?    @relation(fields: [posOrderId], references: [id])
+  facilityBooking FacilityBooking? @relation("FacilityBookingInvoice", fields: [facilityBookingId], references: [id])
   payments    Payment[]
 
   @@index([hotelId])
   @@index([hotelId, paymentStatus])
+  @@index([hotelId, facilityBookingId])
 }
 
 model Payment {
@@ -674,6 +721,7 @@ model FolioItem {
   id            String   @id @default(uuid())
   hotelId       String
   reservationId String
+  facilityBookingId String?
   description   String
   amount        Decimal
   quantity      Int      @default(1)
@@ -682,8 +730,10 @@ model FolioItem {
   createdAt     DateTime @default(now())
 
   reservation Reservation @relation(fields: [reservationId], references: [id])
+  facilityBooking FacilityBooking? @relation(fields: [facilityBookingId], references: [id])
 
   @@index([hotelId])
+  @@index([hotelId, facilityBookingId])
 }
 
 // ─── POS / STORE ──────────────────────────────────────────────────────────────
@@ -935,39 +985,271 @@ model HousekeepingTask {
 
 // ─── FACILITIES ───────────────────────────────────────────────────────────────
 
+model FacilityType {
+  id          String   @id @default(uuid())
+  hotelId     String
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  hotel      Hotel     @relation(fields: [hotelId], references: [id])
+  facilities Facility[]
+
+  @@unique([hotelId, name])
+  @@index([hotelId])
+}
+
+model FacilityLocation {
+  id          String   @id @default(uuid())
+  hotelId     String
+  name        String
+  building    String?
+  floor       String?
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  hotel      Hotel     @relation(fields: [hotelId], references: [id])
+  facilities Facility[]
+
+  @@unique([hotelId, name])
+  @@index([hotelId])
+}
+
+model FacilityDepartment {
+  id          String   @id @default(uuid())
+  hotelId     String
+  name        String
+  headId      String?
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  hotel      Hotel     @relation(fields: [hotelId], references: [id])
+  head       Staff?   @relation("FacilityDepartmentHead", fields: [headId], references: [id])
+  facilities Facility[]
+
+  @@unique([hotelId, name])
+  @@index([hotelId])
+}
+
 model Facility {
   id          String   @id @default(uuid())
   hotelId     String
   name        String
-  type        String   // POOL, GYM, SPA, CONFERENCE, RESTAURANT
+  typeId      String?
   description String?
   capacity    Int?
-  isActive    Boolean  @default(true)
+  status      FacilityStatus @default(ACTIVE)
   openTime    String?
   closeTime   String?
+  operatingSchedule Json?
+  baseRate    Decimal?
+  rateUnit    String?  // PER_HOUR, PER_SESSION, PER_DAY, FLAT
+  requiresApproval Boolean @default(false)
+  minDurationMins Int?
+  maxDurationMins Int?
+  images      String[]
+  amenities   String[]
+  locationId  String?
+  departmentId String?
+  managerId   String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   hotel    Hotel             @relation(fields: [hotelId], references: [id])
+  type     FacilityType?     @relation(fields: [typeId], references: [id])
+  location FacilityLocation? @relation(fields: [locationId], references: [id])
+  department FacilityDepartment? @relation(fields: [departmentId], references: [id])
+  manager  Staff?            @relation("FacilityManager", fields: [managerId], references: [id])
   bookings FacilityBooking[]
+  requisitions FacilityRequisition[]
+  maintenanceRequests MaintenanceRequest[]
+  complaints FacilityComplaint[]
+  inspections FacilityInspection[]
 
   @@index([hotelId])
+  @@index([hotelId, typeId])
+  @@index([hotelId, locationId])
+  @@index([hotelId, departmentId])
+  @@index([hotelId, managerId])
 }
 
 model FacilityBooking {
   id         String   @id @default(uuid())
   hotelId    String
   facilityId String
+  reservationId String?
+  guestId    String?
   guestName  String
   roomNo     String?
   startTime  DateTime
   endTime    DateTime
+  durationMins Int
+  status     String   // PENDING, CONFIRMED, IN_PROGRESS, COMPLETED, CANCELLED, NO_SHOW
+  pax        Int      @default(1)
+  amount     Decimal
+  chargeType String   // ROOM_CHARGE, DIRECT_PAYMENT, COMPLIMENTARY
+  isPaid     Boolean  @default(false)
+  invoiceId  String?
+  approvedBy String?
+  approvedAt DateTime?
   notes      String?
+  cancelledAt DateTime?
+  cancelReason String?
+  refundMethod String?
+  creditNoteId String?
+  refundId   String?
+  createdBy  String?
   createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  facility Facility @relation(fields: [facilityId], references: [id])
+  hotel     Hotel     @relation(fields: [hotelId], references: [id])
+  facility  Facility  @relation(fields: [facilityId], references: [id])
+  reservation Reservation? @relation(fields: [reservationId], references: [id])
+  guest     Guest?    @relation(fields: [guestId], references: [id])
+  invoice   Invoice?  @relation("FacilityBookingInvoice")
+  approvedByStaff Staff? @relation("FacilityBookingApprovedBy", fields: [approvedBy], references: [id])
+  createdByStaff  Staff? @relation("FacilityBookingCreatedBy", fields: [createdBy], references: [id])
+  folioItems FolioItem[]
 
   @@index([hotelId])
+  @@index([hotelId, facilityId])
+  @@index([hotelId, reservationId])
+}
+
+model FacilityRequisition {
+  id          String   @id @default(uuid())
+  hotelId     String
+  facilityId  String
+  requestedBy String
+  title       String
+  description String?
+  priority    String   // LOW, NORMAL, HIGH, URGENT
+  status      String   // PENDING, APPROVED, REJECTED, FULFILLED, CANCELLED
+  items       Json
+  estimatedTotal Decimal?
+  approvedBy  String?
+  approvedAt  DateTime?
+  fulfilledAt DateTime?
+  rejectionReason String?
+  inventoryLinked Boolean @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  hotel     Hotel    @relation(fields: [hotelId], references: [id])
+  facility  Facility @relation(fields: [facilityId], references: [id])
+  requestedByStaff Staff @relation("FacilityRequisitionRequestedBy", fields: [requestedBy], references: [id])
+  approvedByStaff  Staff? @relation("FacilityRequisitionApprovedBy", fields: [approvedBy], references: [id])
+
+  @@index([hotelId])
+  @@index([hotelId, facilityId])
+  @@index([hotelId, status])
+}
+
+model MaintenanceRequest {
+  id          String   @id @default(uuid())
+  hotelId     String
+  facilityId  String?
+  roomId      String?
+  requestNo   String
+  title       String
+  description String
+  category    String   // PLUMBING, ELECTRICAL, HVAC, FURNITURE, EQUIPMENT, STRUCTURAL, OTHER
+  priority    String   // LOW, NORMAL, HIGH, URGENT
+  status      String   // OPEN, ASSIGNED, IN_PROGRESS, PENDING_PARTS, RESOLVED, CLOSED
+  reportedBy  String?
+  assignedTo  String?
+  assignedAt  DateTime?
+  startedAt   DateTime?
+  resolvedAt  DateTime?
+  closedAt    DateTime?
+  estimatedMins Int?
+  actualMins  Int?
+  partsUsed   Json?
+  totalCost   Decimal?
+  images      String[]
+  notes       String?
+  inspectionId String?
+  verificationInspectionId String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  hotel     Hotel     @relation(fields: [hotelId], references: [id])
+  facility  Facility? @relation(fields: [facilityId], references: [id])
+  room      Room?     @relation(fields: [roomId], references: [id])
+  reportedByStaff Staff? @relation("MaintenanceRequestReportedBy", fields: [reportedBy], references: [id])
+  assignedToStaff Staff? @relation("MaintenanceRequestAssignedTo", fields: [assignedTo], references: [id])
+  complaint FacilityComplaint? @relation("ComplaintMaintenance")
+  inspection FacilityInspection? @relation("InspectionFindings", fields: [inspectionId], references: [id])
+  verificationInspection FacilityInspection? @relation("InspectionVerification", fields: [verificationInspectionId], references: [id])
+
+  @@unique([hotelId, requestNo])
+  @@index([hotelId])
+  @@index([hotelId, status])
+  @@index([hotelId, facilityId])
+}
+
+model FacilityComplaint {
+  id          String   @id @default(uuid())
+  hotelId     String
+  complaintNo String
+  reporterType String // GUEST, STAFF
+  reporterStaffId String?
+  reporterGuestId String?
+  channel     String   // IN_PERSON, PHONE, EMAIL, WEB
+  facilityId  String?
+  roomId      String?
+  title       String
+  description String
+  category    String
+  priority    String
+  status      String   // NEW, ACKNOWLEDGED, IN_PROGRESS, RESOLVED, CLOSED
+  maintenanceRequestId String? @unique
+  createdAt   DateTime @default(now())
+  resolvedAt  DateTime?
+  updatedAt   DateTime @updatedAt
+
+  hotel     Hotel     @relation(fields: [hotelId], references: [id])
+  facility  Facility? @relation(fields: [facilityId], references: [id])
+  room      Room?     @relation(fields: [roomId], references: [id])
+  reporterStaff Staff? @relation("FacilityComplaintReportedBy", fields: [reporterStaffId], references: [id])
+  reporterGuest Guest? @relation(fields: [reporterGuestId], references: [id])
+  maintenanceRequest MaintenanceRequest? @relation("ComplaintMaintenance", fields: [maintenanceRequestId], references: [id])
+
+  @@unique([hotelId, complaintNo])
+  @@index([hotelId])
+  @@index([hotelId, status])
+}
+
+model FacilityInspection {
+  id          String   @id @default(uuid())
+  hotelId     String
+  inspectionNo String
+  inspectionType String // INTERNAL, THIRD_PARTY, REGULATORY
+  scheduledBy String
+  inspectorName String?
+  inspectorOrganization String?
+  facilityId  String?
+  area        String?
+  scheduledAt DateTime
+  checklist   Json?
+  findings    String?
+  score       Int?
+  status      String   // SCHEDULED, IN_PROGRESS, SUBMITTED, CLOSED
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  hotel     Hotel     @relation(fields: [hotelId], references: [id])
+  facility  Facility? @relation(fields: [facilityId], references: [id])
+  scheduledByStaff Staff @relation("FacilityInspectionScheduledBy", fields: [scheduledBy], references: [id])
+  maintenanceRequests MaintenanceRequest[] @relation("InspectionFindings")
+  verificationRequests MaintenanceRequest[] @relation("InspectionVerification")
+
+  @@unique([hotelId, inspectionNo])
+  @@index([hotelId])
+  @@index([hotelId, status])
 }
 
 

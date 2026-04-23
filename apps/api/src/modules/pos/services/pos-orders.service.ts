@@ -71,7 +71,6 @@ export class PosOrdersService {
       const todayStart = rangeStart.toDate();
       const todayEnd = rangeEnd.toDate();
 
-      console.log(filters.dateFrom);
       where.createdAt = { gte: todayStart, lte: todayEnd };
     }
 
@@ -162,6 +161,8 @@ export class PosOrdersService {
       throw new BadRequestException('Order must have at least one item.');
     }
 
+    await this.validateOrderOwnershipFields(hotelId, dto);
+
     // Validate reservation if provided
     if (dto.reservationId) {
       const res = await this.prisma.reservation.findFirst({
@@ -245,6 +246,31 @@ export class PosOrdersService {
     });
 
     return order;
+  }
+
+  private async validateOrderOwnershipFields(hotelId: string, dto: CreateOrderDto) {
+    const [staff, terminal] = await Promise.all([
+      dto.staffId
+        ? this.prisma.staff.findFirst({
+            where: { id: dto.staffId, hotelId },
+            select: { id: true },
+          })
+        : Promise.resolve(null),
+      dto.posTerminalId
+        ? this.prisma.posTerminal.findFirst({
+            where: { id: dto.posTerminalId, hotelId },
+            select: { id: true },
+          })
+        : Promise.resolve(null),
+    ]);
+
+    if (dto.staffId && !staff) {
+      throw new BadRequestException('Staff not found for this hotel.');
+    }
+
+    if (dto.posTerminalId && !terminal) {
+      throw new BadRequestException('POS terminal not found for this hotel.');
+    }
   }
 
   // ── Add item to existing order ─────────────────────────────────────────────

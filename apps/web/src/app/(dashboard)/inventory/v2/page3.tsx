@@ -45,9 +45,9 @@ import {
   useGerateItemSku,
   useInventoryList,
   useUpdateInventoryItem,
-} from '@/hooks/useInventoryItems';
-import { useInventoryCategories } from '@/hooks/useInventoryCategories';
-import { useSuppliers } from '@/hooks/useSuppliers';
+} from '@/hooks/inventory/useInventoryItems';
+import { useInventoryCategories } from '@/hooks/inventory/useInventoryCategories';
+import { useSuppliers } from '@/hooks/inventory/useSuppliers';
 import openToast from '@/components/ToastComponent';
 
 // ─── Types ────────────────────────────────────────────────────────────────────

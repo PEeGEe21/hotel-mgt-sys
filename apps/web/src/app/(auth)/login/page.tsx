@@ -1,10 +1,11 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { Hotel, Lock, Mail, Eye, EyeOff, MapPin } from 'lucide-react';
+import Link from 'next/link';
 import { useAuthStore } from '@/store/auth.store';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAppStore } from '@/store/app.store';
-import { useHotelBranding } from '@/hooks/useHotelBranding';
+import { useHotelBranding } from '@/hooks/hotel/useHotelBranding';
 import openToast from '@/components/ToastComponent';
 
 export default function LoginPage() {
@@ -40,7 +41,7 @@ export default function LoginPage() {
       if (result.hotel) setHotel(result.hotel);
 
       openToast('success', 'Logged In Successfully');
-      
+
       if (result.user?.mustChangePassword) {
         router.push('/change-password');
         return;
@@ -118,9 +119,14 @@ export default function LoginPage() {
               </div>
             </div>
             <div>
-              <label className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1.5 block">
-                Password
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-medium text-slate-400 uppercase tracking-wider block">
+                  Password
+                </label>
+                <Link href="/forgot-password" className="text-xs font-semibold text-blue-400 hover:text-blue-300">
+                  Forgot password?
+                </Link>
+              </div>
               <div className="relative">
                 <Lock
                   size={15}

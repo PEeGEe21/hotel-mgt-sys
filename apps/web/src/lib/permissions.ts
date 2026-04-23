@@ -70,6 +70,7 @@ export type Permission =
   | 'export:reports'
   // Facilities
   | 'view:facilities'
+  | 'create:facilities'
   | 'manage:facilities'
   // Settings
   | 'view:settings'
@@ -165,6 +166,15 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     ],
   },
   {
+    label: 'Facilities',
+    key: 'facilities',
+    permissions: [
+      { key: 'view:facilities', label: 'View', description: 'Access facilities module' },
+      { key: 'create:facilities', label: 'Create', description: 'Create bookings, requisitions, and complaints' },
+      { key: 'manage:facilities', label: 'Manage', description: 'Manage facilities, approvals, and assignments' },
+    ],
+  },
+  {
     label: 'Staff & HR',
     key: 'hr',
     permissions: [
@@ -248,6 +258,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'view:reports',
     'export:reports',
     'view:facilities',
+    'create:facilities',
     'manage:facilities',
     'view:settings',
     'manage:settings',
@@ -298,6 +309,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'view:reports',
     'export:reports',
     'view:facilities',
+    'create:facilities',
     'manage:facilities',
     'view:settings',
     'manage:settings',
@@ -340,6 +352,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'view:reports',
     'export:reports',
     'view:facilities',
+    'create:facilities',
     'manage:facilities',
     'view:settings',
     'view:hr',
@@ -362,6 +375,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'view:pos',
     'create:pos',
     'view:facilities',
+    'create:facilities',
   ],
 
   HOUSEKEEPING: [
@@ -369,10 +383,21 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'view:rooms',
     'view:housekeeping',
     'manage:housekeeping',
+    'view:facilities',
     'clock:self',
   ],
 
-  CASHIER: ['view:dashboard', 'view:pos', 'create:pos', 'void:pos', 'manage:pos', 'view:finance', 'clock:self'],
+  CASHIER: [
+    'view:dashboard',
+    'view:pos',
+    'create:pos',
+    'void:pos',
+    'manage:pos',
+    'view:finance',
+    'view:facilities',
+    'create:facilities',
+    'clock:self',
+  ],
 
   BARTENDER: ['view:dashboard', 'view:pos', 'create:pos', 'view:inventory', 'clock:self', 'manage:pos'],
 
@@ -394,6 +419,8 @@ export const NAV_PERMISSIONS: Record<string, Permission> = {
   '/finance': 'view:finance',
   '/reports': 'view:reports',
   '/facilities': 'view:facilities',
+  '/facilities/bookings': 'view:facilities',
+  '/facilities/reservations': 'view:facilities',
   '/settings': 'view:settings',
   '/hr': 'view:hr',
 };

@@ -31,30 +31,34 @@ export default function GeofenceMap({ latitude, longitude, radiusMeters, enabled
   }
 
   const center: [number, number] = [latitude as number, longitude as number];
+  const TypedMapContainer = MapContainer as any;
+  const TypedTileLayer = TileLayer as any;
+  const TypedCircle = Circle as any;
+  const TypedCircleMarker = CircleMarker as any;
 
   return (
     <div className="h-56 rounded-xl overflow-hidden border border-[#1e2536]">
-      <MapContainer
+      <TypedMapContainer
         center={center}
         zoom={16}
         scrollWheelZoom={false}
         className="h-full w-full"
       >
-        <TileLayer
+        <TypedTileLayer
           attribution="&copy; OpenStreetMap contributors &copy; CARTO"
           url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
         />
-        <Circle
+        <TypedCircle
           center={center}
           radius={radius}
           pathOptions={{ color: '#22c55e', weight: 2, fillColor: '#22c55e', fillOpacity: 0.15 }}
         />
-        <CircleMarker
+        <TypedCircleMarker
           center={center}
           radius={6}
           pathOptions={{ color: '#22c55e', fillColor: '#22c55e', fillOpacity: 1 }}
         />
-      </MapContainer>
+      </TypedMapContainer>
     </div>
   );
 }

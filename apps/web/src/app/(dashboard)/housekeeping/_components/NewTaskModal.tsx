@@ -10,7 +10,7 @@ import {
   type TaskType,
 } from '@/hooks/useHousekeeping';
 import { useFloors } from '@/hooks/useFloors';
-import { useRooms } from '@/hooks/useRooms';
+import { useRooms } from '@/hooks/room/useRooms';
 import {
   Dialog,
   DialogClose,

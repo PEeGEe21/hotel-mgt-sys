@@ -6,7 +6,7 @@ import { Trash2, Loader2 } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import openToast from '@/components/ToastComponent';
 import { Dialog, DialogContent, DialogOverlay, DialogTitle } from '@/components/ui/dialog';
-import { PosTerminal, useDeletePosTerminal } from '@/hooks/usePosTerminals';
+import { PosTerminal, useDeletePosTerminal } from '@/hooks/pos/usePosTerminals';
 
 export default function DeleteConfirm({
   isOpen,

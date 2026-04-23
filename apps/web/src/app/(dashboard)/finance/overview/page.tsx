@@ -11,7 +11,7 @@ import {
   ArrowUpRight,
   Loader2,
 } from 'lucide-react';
-import { useFinanceOverview } from '@/hooks/useFinance';
+import { useFinanceOverview } from '@/hooks/finance/useFinance';
 
 function formatRangeLabel(range?: { from: string; to: string }) {
   if (!range) return '—';

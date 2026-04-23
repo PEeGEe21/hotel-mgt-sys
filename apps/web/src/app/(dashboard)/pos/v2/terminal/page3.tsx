@@ -22,7 +22,7 @@ import {
   BedDouble,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { usePosProducts } from '@/hooks/usePosProducts';
+import { usePosProducts } from '@/hooks/pos/usePosProducts';
 import {
   useCreateOrder,
   useDeliverOrder,
@@ -31,7 +31,7 @@ import {
   usePosOrders,
   useUpdateOrderStatus,
   type ApiOrder,
-} from '@/hooks/usePosOrders';
+} from '@/hooks/pos/usePosOrders';
 import openToast from '@/components/ToastComponent';
 import { useDebounce } from '@/hooks/useDebounce';
 

@@ -128,6 +128,9 @@ export class HousekeepingService {
     // Verify room belongs to hotel
     const room = await this.prisma.room.findFirst({ where: { id: dto.roomId, hotelId } });
     if (!room) throw new NotFoundException('Room not found.');
+    if (dto.assignedTo) {
+      await this.assertStaffBelongsToHotel(hotelId, dto.assignedTo);
+    }
 
     return this.prisma.housekeepingTask.create({
       data: {
@@ -147,6 +150,9 @@ export class HousekeepingService {
   // ── Update ─────────────────────────────────────────────────────────────────
   async update(hotelId: string, id: string, dto: UpdateTaskDto) {
     await this.findOne(hotelId, id);
+    if (dto.assignedTo) {
+      await this.assertStaffBelongsToHotel(hotelId, dto.assignedTo);
+    }
 
     const completedAt = dto.status === TaskStatus.DONE ? new Date() : undefined;
 
@@ -197,6 +203,10 @@ export class HousekeepingService {
   // ── Assign ─────────────────────────────────────────────────────────────────
   async assign(hotelId: string, id: string, staffId: string | null) {
     await this.findOne(hotelId, id);
+    if (staffId) {
+      await this.assertStaffBelongsToHotel(hotelId, staffId);
+    }
+
     return this.prisma.housekeepingTask.update({
       where: { id },
       data: { assignedTo: staffId },
@@ -206,6 +216,17 @@ export class HousekeepingService {
 
   // ── Bulk create (e.g. after checkouts) ─────────────────────────────────────
   async bulkCreate(hotelId: string, roomIds: string[], type: string, priority: TaskPriority) {
+    const rooms = await this.prisma.room.findMany({
+      where: { id: { in: roomIds }, hotelId },
+      select: { id: true },
+    });
+    const foundRoomIds = new Set(rooms.map((room) => room.id));
+    const missingRoomIds = roomIds.filter((roomId) => !foundRoomIds.has(roomId));
+
+    if (missingRoomIds.length > 0) {
+      throw new NotFoundException(`Rooms not found: ${missingRoomIds.join(', ')}`);
+    }
+
     const tasks = roomIds.map((roomId) => ({
       hotelId,
       roomId,
@@ -215,6 +236,15 @@ export class HousekeepingService {
     }));
     await this.prisma.housekeepingTask.createMany({ data: tasks });
     return { created: tasks.length };
+  }
+
+  private async assertStaffBelongsToHotel(hotelId: string, staffId: string) {
+    const staff = await this.prisma.staff.findFirst({
+      where: { id: staffId, hotelId },
+      select: { id: true },
+    });
+
+    if (!staff) throw new NotFoundException('Staff not found.');
   }
 
   // ── Get housekeeping staff ─────────────────────────────────────────────────

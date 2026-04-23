@@ -27,7 +27,7 @@ import {
   usePostManualEntry,
   type Account,
   type AccountType,
-} from '@/hooks/useLedger';
+} from '@/hooks/finance/useLedger';
 
 // Need to import api for AddAccountModal
 import api from '@/lib/api';

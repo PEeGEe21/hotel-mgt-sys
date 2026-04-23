@@ -43,9 +43,9 @@ import {
   useInventoryMovements,
   useInventoryValuation,
   useGerateItemSku,
-} from '@/hooks/useInventoryItems';
-import { useInventoryCategories } from '@/hooks/useInventoryCategories';
-import { useSuppliers } from '@/hooks/useSuppliers';
+} from '@/hooks/inventory/useInventoryItems';
+import { useInventoryCategories } from '@/hooks/inventory/useInventoryCategories';
+import { useSuppliers } from '@/hooks/inventory/useSuppliers';
 import openToast from '@/components/ToastComponent';
 import Pagination from '@/components/ui/pagination';
 import { useDebounce } from '@/hooks/useDebounce';

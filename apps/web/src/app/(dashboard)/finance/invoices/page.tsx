@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { Search, Plus, Download, ChevronRight, Receipt, Loader2 } from 'lucide-react';
-import { useFinanceInvoices, FinanceInvoice } from '@/hooks/useFinance';
+import { useFinanceInvoices, FinanceInvoice } from '@/hooks/finance/useFinance';
 
 type InvoiceStatus = 'Unpaid' | 'Partial' | 'Paid' | 'Overdue' | 'Refunded';
 

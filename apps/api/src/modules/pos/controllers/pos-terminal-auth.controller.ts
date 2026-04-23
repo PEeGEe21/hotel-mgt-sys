@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { PosTerminalAuthService } from '../services/pos-terminal-auth.service';
-import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { JwtAuthGuard, Permissions, PermissionsGuard } from '../../auth/guards';
 import { TerminalSetupDto } from '../dtos/terminals/terminal-setup.dto';
 import { StaffPinLoginDto } from '../dtos/terminals/staff-pin-login.dto';
 
@@ -54,10 +54,11 @@ export class PosTerminalAuthController {
   }
 
   // ── Protected — manager only ───────────────────────────────────────────────
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
   @ApiBearerAuth()
   @Post(':id/setup-code')
   @HttpCode(HttpStatus.OK)
+  @Permissions('manage:pos')
   @ApiOperation({ summary: 'Generate a one-time setup code for a terminal (manager action)' })
   generateSetupCode(@Request() req: any, @Param('id') id: string) {
     return this.svc.generateSetupCode(req.user.hotelId, id);

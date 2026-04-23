@@ -9,7 +9,7 @@ import {
   usePosProductCategories,
   useUpdatePosProductCategory,
   type PosProductCategory,
-} from '@/hooks/usePosProductCategories';
+} from '@/hooks/pos/usePosProductCategories';
 
 const colorOptions = [
   'bg-blue-500',
@@ -159,7 +159,9 @@ export default function PosProductCategoriesPage() {
             <ArrowLeft size={16} />
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-white tracking-tight">POS Products Categories</h1>
+            <h1 className="text-2xl font-bold text-white tracking-tight">
+              POS Products Categories
+            </h1>
             <p className="text-slate-500 text-sm mt-0.5">{categories.length} categories</p>
           </div>
         </div>

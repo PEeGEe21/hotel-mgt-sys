@@ -27,7 +27,7 @@ import {
   useSeedTables,
   type PosTable,
   type CreateTableInput,
-} from '@/hooks/usePosTables';
+} from '@/hooks/pos/usePosTables';
 
 // ─── Table Modal ──────────────────────────────────────────────────────────────
 function TableModal({

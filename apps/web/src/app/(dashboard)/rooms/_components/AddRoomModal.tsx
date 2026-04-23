@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom';
 import { X, Check } from 'lucide-react';
 import { TYPE_CONFIG, ALL_ROOM_TYPES, ALL_AMENITIES, type RoomType } from '@/lib/rooms-data';
 import { useFloors } from '@/hooks/useFloors';
-import { useCreateRoom } from '@/hooks/useRooms';
+import { useCreateRoom } from '@/hooks/room/useRooms';
 import { Dialog, DialogContent, DialogOverlay, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import openToast from '@/components/ToastComponent';
