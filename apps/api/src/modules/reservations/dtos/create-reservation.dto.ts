@@ -18,5 +18,5 @@ export class CreateReservationDto {
   @IsEnum(BookingType)
   @IsOptional()
   bookingType?: BookingType;
-  @ApiPropertyOptional() @IsNumber() @IsOptional() totalAmount?: number;
+  @ApiPropertyOptional() @IsNumber() @Min(0) @IsOptional() totalAmount?: number;
 }

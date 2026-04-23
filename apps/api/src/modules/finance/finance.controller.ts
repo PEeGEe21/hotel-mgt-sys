@@ -2,6 +2,11 @@ import { Controller, Get, UseGuards, Query, Request } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { FinanceService } from './finance.service';
 import { JwtAuthGuard, Permissions, PermissionsGuard } from '../auth/guards';
+import {
+  FinanceRangeQueryDto,
+  InvoiceListQueryDto,
+  PaymentListQueryDto,
+} from './dtos/finance-query.dto';
 
 @ApiTags('Finance')
 @ApiBearerAuth()
@@ -13,51 +18,21 @@ export class FinanceController {
   @Get('overview')
   @Permissions('view:finance')
   @ApiOperation({ summary: 'Finance overview for a date range (defaults to current month)' })
-  getOverview(@Request() req: any, @Query('from') from?: string, @Query('to') to?: string) {
-    return this.financeService.getOverview(req.user.hotelId, { from, to });
+  getOverview(@Request() req: any, @Query() query: FinanceRangeQueryDto) {
+    return this.financeService.getOverview(req.user.hotelId, query);
   }
 
   @Get('invoices')
   @Permissions('view:finance')
   @ApiOperation({ summary: 'List invoices for a date range with filters' })
-  listInvoices(
-    @Request() req: any,
-    @Query('from') from?: string,
-    @Query('to') to?: string,
-    @Query('search') search?: string,
-    @Query('status') status?: string,
-    @Query('type') type?: string,
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
-  ) {
-    return this.financeService.listInvoices(req.user.hotelId, {
-      from,
-      to,
-      search,
-      status,
-      type,
-      page: page ? Number(page) : undefined,
-      limit: limit ? Number(limit) : undefined,
-    });
+  listInvoices(@Request() req: any, @Query() query: InvoiceListQueryDto) {
+    return this.financeService.listInvoices(req.user.hotelId, query);
   }
 
   @Get('payments')
   @Permissions('view:finance')
   @ApiOperation({ summary: 'List payments for a date range with filters' })
-  listPayments(
-    @Request() req: any,
-    @Query('from') from?: string,
-    @Query('to') to?: string,
-    @Query('search') search?: string,
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
-  ) {
-    return this.financeService.listPayments(req.user.hotelId, {
-      from,
-      to,
-      search,
-      page: page ? Number(page) : undefined,
-      limit: limit ? Number(limit) : undefined,
-    });
+  listPayments(@Request() req: any, @Query() query: PaymentListQueryDto) {
+    return this.financeService.listPayments(req.user.hotelId, query);
   }
 }

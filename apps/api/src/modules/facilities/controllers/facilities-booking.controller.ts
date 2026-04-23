@@ -15,6 +15,7 @@ import { FacilitiesService } from '../services/facilities.service';
 import { CreateFacilityBookingDto } from '../dtos/booking/create-facility-booking.dto';
 import { UpdateFacilityBookingDto } from '../dtos/booking/update-facility-booking.dto';
 import { CancelFacilityBookingDto } from '../dtos/booking/cancel-facility-booking.dto';
+import { FacilityBookingFilterDto } from '../dtos/filter.dto';
 
 @ApiTags('FacilitiesBooking')
 @ApiBearerAuth()
@@ -26,7 +27,7 @@ export class FacilitiesBookingController {
   @Get('list')
   @Permissions('view:facilities')
   @ApiOperation({ summary: 'List facility bookings' })
-  listBookings(@Request() req: any, @Query() filters: any) {
+  listBookings(@Request() req: any, @Query() filters: FacilityBookingFilterDto) {
     return this.facilitiesService.listBookings(req.user.hotelId, filters);
   }
 
@@ -49,7 +50,7 @@ export class FacilitiesBookingController {
   }
 
   @Post(':id/cancel')
-  @Permissions('create:facilities')
+  @Permissions('manage:facilities')
   @ApiOperation({ summary: 'Cancel facility booking' })
   cancelBooking(
     @Request() req: any,

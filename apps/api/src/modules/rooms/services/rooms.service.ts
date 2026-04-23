@@ -17,6 +17,15 @@ import { RoomReservationsDto } from '../dtos/room-reservations.dto';
 export class RoomsService {
   constructor(private prisma: PrismaService) {}
 
+  private async assertFloorBelongsToHotel(hotelId: string, floorId?: string | null) {
+    if (!floorId) return;
+    const floor = await this.prisma.floor.findFirst({
+      where: { id: floorId, hotelId },
+      select: { id: true },
+    });
+    if (!floor) throw new BadRequestException('Floor not found for this hotel.');
+  }
+
   async findAll(hotelId: string, filters: RoomFilterDto) {
     const where: any = { hotelId };
 
@@ -141,6 +150,9 @@ export class RoomsService {
   }
 
   async create(hotelId: string, dto: CreateRoomDto) {
+    const floorId = dto.floorId?.trim() || null;
+    await this.assertFloorBelongsToHotel(hotelId, floorId);
+
     const existing = await this.prisma.room.findUnique({
       where: { hotelId_number: { hotelId, number: dto.number } },
     });
@@ -150,7 +162,7 @@ export class RoomsService {
       data: {
         hotelId,
         number: dto.number,
-        floorId: dto.floorId ?? null,
+        floorId,
         type: dto.type,
         baseRate: dto.baseRate,
         maxGuests: dto.maxGuests ?? 2,
@@ -163,8 +175,21 @@ export class RoomsService {
   }
 
   async update(hotelId: string, id: string, dto: UpdateRoomDto) {
-    await this.findOne(hotelId, id);
-    return this.prisma.room.update({ where: { id }, data: dto });
+    const room = await this.findOne(hotelId, id);
+    const data = { ...dto, floorId: dto.floorId === undefined ? undefined : dto.floorId.trim() || null };
+    await this.assertFloorBelongsToHotel(hotelId, data.floorId);
+
+    if (data.number && data.number !== room.number) {
+      const existing = await this.prisma.room.findUnique({
+        where: { hotelId_number: { hotelId, number: data.number } },
+        select: { id: true },
+      });
+      if (existing && existing.id !== room.id) {
+        throw new ConflictException(`Room ${data.number} already exists.`);
+      }
+    }
+
+    return this.prisma.room.update({ where: { id: room.id }, data });
   }
 
   async updateStatus(hotelId: string, id: string, status: RoomStatus) {
@@ -175,7 +200,7 @@ export class RoomsService {
   async remove(hotelId: string, id: string) {
     const room = await this.findOne(hotelId, id);
     const active = await this.prisma.reservation.count({
-      where: { roomId: id, status: { in: ['CONFIRMED', 'CHECKED_IN'] } },
+      where: { hotelId, roomId: id, status: { in: ['CONFIRMED', 'CHECKED_IN'] } },
     });
     if (active > 0) throw new BadRequestException('Cannot delete a room with active reservations.');
     await this.prisma.room.delete({ where: { id } });

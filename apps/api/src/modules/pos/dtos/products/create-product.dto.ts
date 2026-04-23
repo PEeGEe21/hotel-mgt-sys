@@ -20,7 +20,7 @@ export class CreateProductDto {
   @ApiPropertyOptional() @IsString() @IsOptional() unit?: string;
   @ApiPropertyOptional() @IsString() @IsOptional() image?: string;
   @ApiPropertyOptional() @IsBoolean() @IsOptional() isAvailable?: boolean;
-  @ApiPropertyOptional() @IsNumber() @IsOptional() stock?: number;
+  @ApiPropertyOptional() @IsNumber() @Min(0) @IsOptional() stock?: number;
   @ApiProperty({ default: 'PHYSICAL' }) @IsString() type!: string; // PHYSICAL | SERVICE | BUNDLE
   @ApiPropertyOptional({ type: [IngredientDto] })
   @IsArray()

@@ -4,6 +4,8 @@ import { Transform } from 'class-transformer';
 import { RoomStatus, RoomType } from '@prisma/client';
 
 export class UpdateRoomDto {
+  @ApiPropertyOptional() @IsString() @IsOptional() number?: string;
+  @ApiPropertyOptional() @IsString() @IsOptional() floorId?: string;
   @ApiPropertyOptional({ enum: RoomType }) @IsEnum(RoomType) @IsOptional() type?: RoomType;
   @ApiPropertyOptional({ enum: RoomStatus }) @IsEnum(RoomStatus) @IsOptional() status?: RoomStatus;
   @ApiPropertyOptional() @IsNumber() @Min(0) @IsOptional() baseRate?: number;

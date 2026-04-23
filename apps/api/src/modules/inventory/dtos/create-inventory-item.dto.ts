@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNumber, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsNumber, IsOptional, IsString, Min, MinLength } from 'class-validator';
 
 export class CreateInventoryItemDto {
   @IsString()
@@ -24,16 +24,20 @@ export class CreateInventoryItemDto {
   unit!: string;
 
   @IsNumber()
+  @Min(0)
   quantity!: number;
 
   @IsNumber()
+  @Min(0)
   minStock!: number;
 
   @IsNumber()
+  @Min(0)
   costPrice!: number;
 
   @ApiPropertyOptional()
   @IsNumber()
+  @Min(0)
   @IsOptional()
   sellPrice?: number;
 

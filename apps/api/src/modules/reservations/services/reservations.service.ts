@@ -38,6 +38,76 @@ export class ReservationsService {
     private ledger: LedgerService,
   ) {}
 
+  private async assertGuestBelongsToHotel(hotelId: string, guestId?: string | null) {
+    if (!guestId) return;
+    const guest = await this.prisma.guest.findFirst({
+      where: { id: guestId, hotelId },
+      select: { id: true },
+    });
+    if (!guest) throw new NotFoundException('Guest not found.');
+  }
+
+  private async assertCompanyBelongsToHotel(hotelId: string, companyId?: string | null) {
+    if (!companyId) return;
+    const company = await this.prisma.company.findFirst({
+      where: { id: companyId, hotelId },
+      select: { id: true },
+    });
+    if (!company) throw new NotFoundException('Company not found.');
+  }
+
+  private async assertGroupBookingBelongsToHotel(hotelId: string, groupBookingId?: string | null) {
+    if (!groupBookingId) return;
+    const groupBooking = await this.prisma.groupBooking.findFirst({
+      where: { id: groupBookingId, hotelId },
+      select: { id: true },
+    });
+    if (!groupBooking) throw new NotFoundException('Group booking not found.');
+  }
+
+  private async getAvailableRoomForReservation(
+    hotelId: string,
+    roomId: string,
+    checkIn: Date,
+    checkOut: Date,
+    excludeReservationId?: string,
+  ) {
+    const room = await this.prisma.room.findFirst({
+      where: { id: roomId, hotelId },
+    });
+    if (!room) throw new NotFoundException('Room not found.');
+    if (room.status === RoomStatus.MAINTENANCE || room.status === RoomStatus.OUT_OF_ORDER) {
+      throw new BadRequestException(`Room ${room.number} is not available.`);
+    }
+
+    const overlap = await this.prisma.reservation.findFirst({
+      where: {
+        hotelId,
+        roomId,
+        id: excludeReservationId ? { not: excludeReservationId } : undefined,
+        status: { in: ['PENDING', 'CONFIRMED', 'CHECKED_IN'] },
+        checkIn: { lt: checkOut },
+        checkOut: { gt: checkIn },
+      },
+    });
+    if (overlap) {
+      throw new ConflictException(
+        `Room is already booked ${overlap.reservationNo} for those dates.`,
+      );
+    }
+
+    return room;
+  }
+
+  private normalizeOptionalRelations<T extends Record<string, any>>(dto: T) {
+    return {
+      ...dto,
+      companyId: dto.companyId === undefined ? undefined : dto.companyId?.trim() || null,
+      groupBookingId:
+        dto.groupBookingId === undefined ? undefined : dto.groupBookingId?.trim() || null,
+    };
+  }
+
   // ── List ────────────────────────────────────────────────────────────────────
   async findAll(hotelId: string, filters: ReservationFilterDto) {
     const page = filters.page ?? 1;
@@ -171,38 +241,18 @@ export class ReservationsService {
 
   // ── Create ──────────────────────────────────────────────────────────────────
   async create(hotelId: string, dto: CreateReservationDto) {
+    const data = this.normalizeOptionalRelations(dto);
     const checkIn = new Date(dto.checkIn);
     const checkOut = new Date(dto.checkOut);
 
     if (checkOut <= checkIn) throw new BadRequestException('Check-out must be after check-in.');
 
-    // Confirm room exists and belongs to hotel
-    const room = await this.prisma.room.findFirst({
-      where: { id: dto.roomId, hotelId },
-    });
-    if (!room) throw new NotFoundException('Room not found.');
-    if (room.status === RoomStatus.MAINTENANCE || room.status === RoomStatus.OUT_OF_ORDER) {
-      throw new BadRequestException(`Room ${room.number} is not available.`);
-    }
-
-    // Confirm guest exists
-    const guest = await this.prisma.guest.findFirst({ where: { id: dto.guestId, hotelId } });
-    if (!guest) throw new NotFoundException('Guest not found.');
-
-    // Overlap check
-    const overlap = await this.prisma.reservation.findFirst({
-      where: {
-        hotelId,
-        roomId: dto.roomId,
-        status: { in: ['PENDING', 'CONFIRMED', 'CHECKED_IN'] },
-        checkIn: { lt: checkOut },
-        checkOut: { gt: checkIn },
-      },
-    });
-    if (overlap)
-      throw new ConflictException(
-        `Room is already booked ${overlap.reservationNo} for those dates.`,
-      );
+    const room = await this.getAvailableRoomForReservation(hotelId, dto.roomId, checkIn, checkOut);
+    await Promise.all([
+      this.assertGuestBelongsToHotel(hotelId, data.guestId),
+      this.assertCompanyBelongsToHotel(hotelId, data.companyId),
+      this.assertGroupBookingBelongsToHotel(hotelId, data.groupBookingId),
+    ]);
 
     const nights = nightsBetween(checkIn, checkOut);
     const totalAmount = dto.totalAmount ?? nights * Number(room.baseRate);
@@ -219,10 +269,10 @@ export class ReservationsService {
     const reservation = await this.prisma.reservation.create({
       data: {
         hotelId,
-        guestId: dto.guestId,
-        roomId: dto.roomId,
-        companyId: dto.companyId,
-        groupBookingId: dto.groupBookingId,
+        guestId: data.guestId,
+        roomId: data.roomId,
+        companyId: data.companyId,
+        groupBookingId: data.groupBookingId,
         bookingType: dto.bookingType ?? BookingType.INDIVIDUAL,
         reservationNo: reservationNo!,
         checkIn,
@@ -242,7 +292,7 @@ export class ReservationsService {
 
     // Add primary guest to ReservationGuest
     await this.prisma.reservationGuest.create({
-      data: { reservationId: reservation.id, guestId: dto.guestId, role: 'PRIMARY' },
+      data: { reservationId: reservation.id, guestId: data.guestId, role: 'PRIMARY' },
     });
 
     // Mark room as RESERVED
@@ -256,16 +306,53 @@ export class ReservationsService {
 
   // ── Update ──────────────────────────────────────────────────────────────────
   async update(hotelId: string, id: string, dto: UpdateReservationDto) {
-    await this.findOne(hotelId, id);
-    return this.prisma.reservation.update({
-      where: { id },
-      data: {
-        ...dto,
-        checkIn: dto.checkIn ? new Date(dto.checkIn) : undefined,
-        checkOut: dto.checkOut ? new Date(dto.checkOut) : undefined,
-      },
-      include: RESERVATION_INCLUDE as any,
+    const data = this.normalizeOptionalRelations(dto);
+    const current = await this.findOne(hotelId, id);
+    const nextRoomId = data.roomId ?? current.roomId;
+    const nextCheckIn = data.checkIn ? new Date(data.checkIn) : current.checkIn;
+    const nextCheckOut = data.checkOut ? new Date(data.checkOut) : current.checkOut;
+    const roomOrDateChanged =
+      nextRoomId !== current.roomId ||
+      nextCheckIn.getTime() !== current.checkIn.getTime() ||
+      nextCheckOut.getTime() !== current.checkOut.getTime();
+
+    if (nextCheckOut <= nextCheckIn) {
+      throw new BadRequestException('Check-out must be after check-in.');
+    }
+
+    if (roomOrDateChanged && !['PENDING', 'CONFIRMED'].includes(current.status)) {
+      throw new BadRequestException(`Cannot change room or dates for status ${current.status}.`);
+    }
+
+    await Promise.all([
+      this.assertGuestBelongsToHotel(hotelId, data.guestId),
+      this.assertCompanyBelongsToHotel(hotelId, data.companyId),
+      this.assertGroupBookingBelongsToHotel(hotelId, data.groupBookingId),
+      roomOrDateChanged
+        ? this.getAvailableRoomForReservation(hotelId, nextRoomId, nextCheckIn, nextCheckOut, id)
+        : Promise.resolve(null),
+    ]);
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const reservation = await tx.reservation.update({
+        where: { id: current.id },
+        data: {
+          ...data,
+          checkIn: data.checkIn ? nextCheckIn : undefined,
+          checkOut: data.checkOut ? nextCheckOut : undefined,
+        },
+        include: RESERVATION_INCLUDE as any,
+      });
+
+      if (data.roomId && data.roomId !== current.roomId && ['PENDING', 'CONFIRMED'].includes(reservation.status)) {
+        await tx.room.update({ where: { id: current.roomId }, data: { status: RoomStatus.AVAILABLE } });
+        await tx.room.update({ where: { id: data.roomId }, data: { status: RoomStatus.RESERVED } });
+      }
+
+      return reservation;
     });
+
+    return updated;
   }
 
   // ── Check In ────────────────────────────────────────────────────────────────

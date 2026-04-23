@@ -6,6 +6,10 @@ import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { InventoryService } from './inventory.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Permissions, PermissionsGuard } from '../auth/guards';
+import { CreateInventoryItemDto } from './dtos/create-inventory-item.dto';
+import { UpdateInventoryItemDto } from './dtos/update-inventory-item.dto';
+import { InventoryListQueryDto, InventoryMovementQueryDto } from './dtos/inventory-query.dto';
+import { RecordStockMovementDto } from './dtos/record-stock-movement.dto';
 
 @ApiTags('Inventory')
 @ApiBearerAuth()
@@ -16,30 +20,14 @@ export class InventoryController {
 
   @Get()
   @Permissions('view:inventory')
-  list(
-    @Request() req: any,
-    @Query('page')     page?: string,
-    @Query('limit')    limit?: string,
-    @Query('search')   search?: string,
-    @Query('category') category?: string,
-  ) {
-    return this.inventoryService.list(req.user.hotelId, { page, limit, search, category });
+  list(@Request() req: any, @Query() query: InventoryListQueryDto) {
+    return this.inventoryService.list(req.user.hotelId, query);
   }
 
   @Get('movements')
   @Permissions('view:inventory')
-  getMovements(
-    @Request() req: any,
-    @Query('itemId')   itemId?: string,
-    @Query('type')     type?: string,
-    @Query('dateFrom') dateFrom?: string,
-    @Query('dateTo')   dateTo?: string,
-    @Query('page')     page?: string,
-    @Query('limit')    limit?: string,
-  ) {
-    return this.inventoryService.getMovements(req.user.hotelId, {
-      itemId, type, dateFrom, dateTo, page, limit,
-    });
+  getMovements(@Request() req: any, @Query() query: InventoryMovementQueryDto) {
+    return this.inventoryService.getMovements(req.user.hotelId, query);
   }
 
   @Get('valuation')
@@ -62,7 +50,7 @@ export class InventoryController {
 
   @Post()
   @Permissions('create:inventory')
-  create(@Request() req: any, @Body() dto: any) {
+  create(@Request() req: any, @Body() dto: CreateInventoryItemDto) {
     return this.inventoryService.create(req.user.hotelId, dto);
   }
 
@@ -71,12 +59,7 @@ export class InventoryController {
   recordMovement(
     @Request() req: any,
     @Param('id') id: string,
-    @Body() dto: {
-      type:      'IN' | 'OUT' | 'WASTAGE' | 'ADJUSTMENT';
-      quantity:  number;
-      note?:     string;
-      staffId?:  string;
-    },
+    @Body() dto: RecordStockMovementDto,
   ) {
     return this.inventoryService.recordMovement(req.user.hotelId, id, {
       ...dto,
@@ -86,7 +69,7 @@ export class InventoryController {
 
   @Patch(':id')
   @Permissions('edit:inventory')
-  update(@Request() req: any, @Param('id') id: string, @Body() dto: any) {
+  update(@Request() req: any, @Param('id') id: string, @Body() dto: UpdateInventoryItemDto) {
     return this.inventoryService.update(req.user.hotelId, id, dto);
   }
 

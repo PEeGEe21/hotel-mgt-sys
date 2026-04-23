@@ -101,6 +101,8 @@ export class PosProductsService {
 
   // ── Create ─────────────────────────────────────────────────────────────────
   async create(hotelId: string, dto: CreateProductDto) {
+    await this.assertCategoryBelongsToHotel(hotelId, dto.categoryId);
+
     // Validate ingredients requirement for non-service products
     if (dto.type !== 'SERVICE' && (!dto.ingredients || dto.ingredients.length === 0)) {
       throw new BadRequestException(
@@ -111,7 +113,7 @@ export class PosProductsService {
     // Check SKU uniqueness
     if (dto.sku) {
       const existing = await this.prisma.posProduct.findUnique({
-        where: { hotelId_sku: { hotelId, sku: dto.sku } },
+        where: { hotelId_sku: { hotelId, sku: dto.sku.trim() } },
       });
       if (existing) throw new ConflictException(`SKU "${dto.sku}" already exists.`);
     }
@@ -128,7 +130,7 @@ export class PosProductsService {
           name: dto.name,
           price: dto.price,
           categoryId: dto.categoryId,
-          sku: dto.sku,
+          sku: dto.sku?.trim(),
           description: dto.description,
           unit: dto.unit ?? 'item',
           image: dto.image,
@@ -163,6 +165,9 @@ export class PosProductsService {
     if (!product) throw new NotFoundException('Product not found.');
 
     const newType = dto.type ?? product.type;
+    if (dto.categoryId) {
+      await this.assertCategoryBelongsToHotel(hotelId, dto.categoryId);
+    }
 
     // Validate ingredients if updating a physical/bundle product
     if (dto.ingredients !== undefined) {
@@ -193,7 +198,7 @@ export class PosProductsService {
 
       // Replace ingredients if provided
       if (dto.ingredients !== undefined) {
-        await tx.productIngredient.deleteMany({ where: { productId: id } });
+        await tx.productIngredient.deleteMany({ where: { productId: id, hotelId } });
         if (dto.ingredients.length > 0) {
           await tx.productIngredient.createMany({
             data: dto.ingredients.map((ing) => ({
@@ -377,5 +382,13 @@ export class PosProductsService {
     if (missing.length > 0) {
       throw new NotFoundException(`Inventory items not found: ${missing.join(', ')}`);
     }
+  }
+
+  private async assertCategoryBelongsToHotel(hotelId: string, categoryId: string) {
+    const category = await this.prisma.posProductCategory.findFirst({
+      where: { id: categoryId, hotelId },
+      select: { id: true },
+    });
+    if (!category) throw new NotFoundException('Product category not found.');
   }
 }

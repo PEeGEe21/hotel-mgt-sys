@@ -3,6 +3,6 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class IngredientDto {
   @ApiProperty() @IsString() inventoryItemId!: string;
-  @ApiProperty() @IsNumber() @Min(0) quantity!: number;
+  @ApiProperty() @IsNumber() @Min(0.01) quantity!: number;
   @ApiPropertyOptional() @IsString() @IsOptional() unit?: string;
 }

@@ -322,6 +322,15 @@ export const PAYMENT_METHOD_ACCOUNT: Record<string, string> = {
 export class LedgerService {
   constructor(private prisma: PrismaService) {}
 
+  private async assertStaffBelongsToHotel(hotelId: string, staffId?: string | null) {
+    if (!staffId) return;
+    const staff = await this.prisma.staff.findFirst({
+      where: { id: staffId, hotelId },
+      select: { id: true },
+    });
+    if (!staff) throw new NotFoundException('Staff not found.');
+  }
+
   // ── Seed COA for a hotel ───────────────────────────────────────────────────
   async seedChartOfAccounts(hotelId: string) {
     const existing = await this.prisma.account.count({ where: { hotelId } });
@@ -389,7 +398,18 @@ export class LedgerService {
       }[];
     },
   ) {
+    await this.assertStaffBelongsToHotel(hotelId, dto.postedBy);
+
     // Validate balanced entry
+    if (!dto.lines?.length || dto.lines.length < 2) {
+      throw new BadRequestException('Journal entry must have at least two lines.');
+    }
+
+    const invalidLines = dto.lines.filter((line) => line.amount <= 0);
+    if (invalidLines.length > 0) {
+      throw new BadRequestException('Journal line amounts must be greater than zero.');
+    }
+
     const totalDebit = dto.lines
       .filter((l) => l.type === 'DEBIT')
       .reduce((s, l) => s + l.amount, 0);
@@ -406,7 +426,7 @@ export class LedgerService {
     // Resolve account codes to IDs
     const codes = dto.lines.map((l) => l.accountCode);
     const accounts = await this.prisma.account.findMany({
-      where: { hotelId, code: { in: codes } },
+      where: { hotelId, code: { in: codes }, isActive: true },
     });
     const accountMap = Object.fromEntries(accounts.map((a) => [a.code, a]));
 
@@ -814,9 +834,10 @@ export class LedgerService {
     const account = await this.prisma.account.findFirst({ where: { hotelId, code: accountCode } });
     if (!account) throw new NotFoundException(`Account ${accountCode} not found.`);
 
-    const where: any = { accountId: account.id };
+    const where: any = { accountId: account.id, journalEntry: { hotelId } };
     if (from || to) {
       where.journalEntry = {
+        hotelId,
         date: {
           ...(from ? { gte: new Date(from) } : {}),
           ...(to ? { lte: new Date(to) } : {}),
@@ -869,11 +890,25 @@ export class LedgerService {
       description?: string;
     },
   ) {
-    const exists = await this.prisma.account.findFirst({ where: { hotelId, code: dto.code } });
-    if (exists) throw new BadRequestException(`Account code ${dto.code} already exists.`);
+    const code = dto.code.trim();
+    const name = dto.name.trim();
+    const description = dto.description?.trim();
+
+    if (!name) throw new BadRequestException('Account name is required.');
+
+    const exists = await this.prisma.account.findFirst({ where: { hotelId, code } });
+    if (exists) throw new BadRequestException(`Account code ${code} already exists.`);
 
     return this.prisma.account.create({
-      data: { hotelId, ...dto, isActive: true, isSystem: false },
+      data: {
+        hotelId,
+        ...dto,
+        code,
+        name,
+        description,
+        isActive: true,
+        isSystem: false,
+      },
     });
   }
 
@@ -891,7 +926,18 @@ export class LedgerService {
     if (account.isSystem && dto.isActive === false) {
       throw new BadRequestException('System accounts cannot be deactivated.');
     }
-    return this.prisma.account.update({ where: { id }, data: dto });
+
+    const data = {
+      ...dto,
+      name: dto.name?.trim(),
+      description: dto.description?.trim(),
+    };
+
+    if (dto.name !== undefined && !data.name) {
+      throw new BadRequestException('Account name is required.');
+    }
+
+    return this.prisma.account.update({ where: { id: account.id }, data });
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────────

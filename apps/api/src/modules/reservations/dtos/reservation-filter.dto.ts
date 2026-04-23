@@ -1,4 +1,4 @@
-import { IsOptional, IsEnum } from 'class-validator';
+import { IsDateString, IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { ReservationStatus } from '@prisma/client';
@@ -8,11 +8,11 @@ export class ReservationFilterDto {
   @IsEnum(ReservationStatus)
   @IsOptional()
   status?: ReservationStatus;
-  @ApiPropertyOptional() @IsOptional() search?: string;
-  @ApiPropertyOptional() @IsOptional() dateFrom?: string;
-  @ApiPropertyOptional() @IsOptional() dateTo?: string;
-  @ApiPropertyOptional() @IsOptional() roomId?: string;
-  @ApiPropertyOptional() @IsOptional() guestId?: string;
-  @ApiPropertyOptional() @IsOptional() @Transform(({ value }) => parseInt(value)) page?: number;
-  @ApiPropertyOptional() @IsOptional() @Transform(({ value }) => parseInt(value)) limit?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() search?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() dateFrom?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() dateTo?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() roomId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() guestId?: string;
+  @ApiPropertyOptional() @IsOptional() @Transform(({ value }) => parseInt(value, 10)) @IsInt() @Min(1) page?: number;
+  @ApiPropertyOptional() @IsOptional() @Transform(({ value }) => parseInt(value, 10)) @IsInt() @Min(1) @Max(100) limit?: number;
 }

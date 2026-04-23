@@ -210,10 +210,20 @@ export class GuestsService {
   }
 
   async update(hotelId: string, id: string, dto: UpdateGuestDto) {
-    await this.findOne(hotelId, id);
+    const guest = await this.findOne(hotelId, id);
     const phoneNormalized = dto.phone ? normalizePhone(dto.phone, 'NG') : undefined;
+    if (phoneNormalized && phoneNormalized !== guest.phoneNormalized) {
+      const byPhone = await this.prisma.guest.findFirst({
+        where: { hotelId, phoneNormalized },
+        select: { id: true },
+      });
+      if (byPhone && byPhone.id !== id) {
+        throw new ConflictException('Another guest already uses this phone number.');
+      }
+    }
+
     return this.prisma.guest.update({
-      where: { id },
+      where: { id: guest.id },
       data: {
         ...dto,
         ...(dto.phone ? { phoneNormalized } : {}),
@@ -233,7 +243,7 @@ export class GuestsService {
   async remove(hotelId: string, id: string) {
     const guest = await this.findOne(hotelId, id);
     const active = await this.prisma.reservation.count({
-      where: { guestId: id, status: { in: ['CONFIRMED', 'CHECKED_IN'] } },
+      where: { hotelId, guestId: id, status: { in: ['CONFIRMED', 'CHECKED_IN'] } },
     });
     if (active > 0) throw new ConflictException('Cannot delete a guest with active reservations.');
     await this.prisma.guest.delete({ where: { id } });

@@ -19,4 +19,5 @@ export class UpdateFacilityDto {
   @IsOptional() @IsString() typeId?: string;
   @IsOptional() @IsString() locationId?: string;
   @IsOptional() @IsString() departmentId?: string;
+  @IsOptional() @IsString() managerId?: string;
 }

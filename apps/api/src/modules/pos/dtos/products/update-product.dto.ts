@@ -4,6 +4,7 @@ import {
   IsNumber,
   IsBoolean,
   IsArray,
+  Min,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -17,7 +18,7 @@ export class UpdateProductDto {
   @ApiPropertyOptional() @IsString() @IsOptional() description?: string;
   @ApiPropertyOptional() @IsString() @IsOptional() unit?: string;
   @ApiPropertyOptional() @IsBoolean() @IsOptional() isAvailable?: boolean;
-  @ApiPropertyOptional() @IsNumber() @IsOptional() stock?: number;
+  @ApiPropertyOptional() @IsNumber() @Min(0) @IsOptional() stock?: number;
   @ApiPropertyOptional() @IsString() @IsOptional() type?: string;
   @ApiPropertyOptional({ type: [IngredientDto] })
   @IsArray()

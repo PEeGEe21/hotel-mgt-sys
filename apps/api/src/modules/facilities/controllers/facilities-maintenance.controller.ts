@@ -14,6 +14,7 @@ import { JwtAuthGuard, Permissions, PermissionsGuard } from '../../auth/guards';
 import { FacilitiesService } from '../services/facilities.service';
 import { CreateMaintenanceRequestDto } from '../dtos/maintenance/create-maintenance-request.dto';
 import { UpdateMaintenanceRequestDto } from '../dtos/maintenance/update-maintenance-request.dto';
+import { FacilityMaintenanceFilterDto } from '../dtos/filter.dto';
 
 @ApiTags('FacilitiesMaintenance')
 @ApiBearerAuth()
@@ -25,7 +26,7 @@ export class FacilitiesMaintenanceController {
   @Get('list')
   @Permissions('view:facilities')
   @ApiOperation({ summary: 'List maintenance requests' })
-  listMaintenance(@Request() req: any, @Query() filters: any) {
+  listMaintenance(@Request() req: any, @Query() filters: FacilityMaintenanceFilterDto) {
     return this.facilitiesService.listMaintenance(req.user.hotelId, filters);
   }
 

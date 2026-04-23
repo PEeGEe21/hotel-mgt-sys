@@ -12,6 +12,14 @@ export class FacilitiesService {
     return `${prefix}-${year}-${rand}`;
   }
 
+  private removeEmptyRelationIds<T extends Record<string, any>>(data: T, fields: string[]) {
+    const normalized = { ...data };
+    for (const field of fields) {
+      if (normalized[field] === '') delete normalized[field];
+    }
+    return normalized;
+  }
+
   private async assertStaffBelongsToHotel(hotelId: string, staffId?: string | null) {
     if (!staffId) return;
     const staff = await this.prisma.staff.findFirst({
@@ -224,7 +232,10 @@ export class FacilitiesService {
   }
 
   async createFacility(hotelId: string, dto: any) {
-    const data: any = { ...dto, hotelId };
+    const data: any = {
+      ...this.removeEmptyRelationIds(dto, ['typeId', 'locationId', 'departmentId', 'managerId']),
+      hotelId,
+    };
 
     if (data.type && !data.typeId) {
       const type = await this.prisma.facilityType.findFirst({
@@ -242,10 +253,21 @@ export class FacilitiesService {
 
   async updateFacility(hotelId: string, id: string, dto: any) {
     const facility = await this.getFacility(hotelId, id);
-    await this.validateFacilityConfigRelations(hotelId, dto);
+    const data: any = this.removeEmptyRelationIds(dto, ['typeId', 'locationId', 'departmentId', 'managerId']);
+
+    if (data.type && !data.typeId) {
+      const type = await this.prisma.facilityType.findFirst({
+        where: { hotelId, name: data.type },
+        select: { id: true },
+      });
+      if (type) data.typeId = type.id;
+    }
+
+    delete data.type;
+    await this.validateFacilityConfigRelations(hotelId, data);
     return this.prisma.facility.update({
       where: { id: facility.id },
-      data: dto,
+      data,
     });
   }
 
@@ -324,29 +346,38 @@ export class FacilitiesService {
   }
 
   async createBooking(hotelId: string, staffId: string, dto: any) {
+    const data = this.removeEmptyRelationIds(dto, [
+      'reservationId',
+      'guestId',
+      'invoiceId',
+      'approvedBy',
+      'creditNoteId',
+      'refundId',
+      'createdBy',
+    ]);
     const facility = await this.prisma.facility.findFirst({
-      where: { id: dto.facilityId, hotelId },
+      where: { id: data.facilityId, hotelId },
       select: { requiresApproval: true },
     });
     if (!facility) throw new NotFoundException('Facility not found');
 
-    const start = new Date(dto.startTime);
-    const end = new Date(dto.endTime);
+    const start = new Date(data.startTime);
+    const end = new Date(data.endTime);
     const durationMins =
-      dto.durationMins ?? Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000));
+      data.durationMins ?? Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000));
 
-    const status = dto.status ?? (facility.requiresApproval ? 'PENDING' : 'CONFIRMED');
-    const createdBy = dto.createdBy ?? staffId;
+    const status = data.status ?? (facility.requiresApproval ? 'PENDING' : 'CONFIRMED');
+    const createdBy = data.createdBy ?? staffId;
     await Promise.all([
-      this.assertReservationBelongsToHotel(hotelId, dto.reservationId),
-      this.assertGuestBelongsToHotel(hotelId, dto.guestId),
+      this.assertReservationBelongsToHotel(hotelId, data.reservationId),
+      this.assertGuestBelongsToHotel(hotelId, data.guestId),
       this.assertStaffBelongsToHotel(hotelId, createdBy),
-      this.assertStaffBelongsToHotel(hotelId, dto.approvedBy),
+      this.assertStaffBelongsToHotel(hotelId, data.approvedBy),
     ]);
 
     return this.prisma.facilityBooking.create({
       data: {
-        ...dto,
+        ...data,
         hotelId,
         durationMins,
         status,
@@ -356,28 +387,37 @@ export class FacilitiesService {
   }
 
   async updateBooking(hotelId: string, id: string, dto: any) {
+    const data = this.removeEmptyRelationIds(dto, [
+      'facilityId',
+      'reservationId',
+      'guestId',
+      'invoiceId',
+      'approvedBy',
+      'creditNoteId',
+      'refundId',
+    ]);
     const booking = await this.prisma.facilityBooking.findFirst({
       where: { id, hotelId },
     });
     if (!booking) throw new NotFoundException('Booking not found');
     await Promise.all([
-      this.assertFacilityBelongsToHotel(hotelId, dto.facilityId),
-      this.assertReservationBelongsToHotel(hotelId, dto.reservationId),
-      this.assertGuestBelongsToHotel(hotelId, dto.guestId),
-      this.assertStaffBelongsToHotel(hotelId, dto.createdBy),
-      this.assertStaffBelongsToHotel(hotelId, dto.approvedBy),
+      this.assertFacilityBelongsToHotel(hotelId, data.facilityId),
+      this.assertReservationBelongsToHotel(hotelId, data.reservationId),
+      this.assertGuestBelongsToHotel(hotelId, data.guestId),
+      this.assertStaffBelongsToHotel(hotelId, data.createdBy),
+      this.assertStaffBelongsToHotel(hotelId, data.approvedBy),
     ]);
 
-    if (dto.startTime || dto.endTime) {
-      const start = new Date(dto.startTime ?? booking.startTime);
-      const end = new Date(dto.endTime ?? booking.endTime);
-      dto.durationMins =
-        dto.durationMins ?? Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000));
+    if (data.startTime || data.endTime) {
+      const start = new Date(data.startTime ?? booking.startTime);
+      const end = new Date(data.endTime ?? booking.endTime);
+      data.durationMins =
+        data.durationMins ?? Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000));
     }
 
     return this.prisma.facilityBooking.update({
       where: { id: booking.id },
-      data: dto,
+      data,
     });
   }
 
@@ -462,37 +502,39 @@ export class FacilitiesService {
   }
 
   async createRequisition(hotelId: string, staffId: string, dto: any) {
-    const requestedBy = dto.requestedBy ?? staffId;
+    const data = this.removeEmptyRelationIds(dto, ['approvedBy', 'requestedBy']);
+    const requestedBy = data.requestedBy ?? staffId;
     await Promise.all([
-      this.assertFacilityBelongsToHotel(hotelId, dto.facilityId),
+      this.assertFacilityBelongsToHotel(hotelId, data.facilityId),
       this.assertStaffBelongsToHotel(hotelId, requestedBy),
-      this.assertStaffBelongsToHotel(hotelId, dto.approvedBy),
+      this.assertStaffBelongsToHotel(hotelId, data.approvedBy),
     ]);
 
     return this.prisma.facilityRequisition.create({
       data: {
-        ...dto,
+        ...data,
         hotelId,
         requestedBy,
-        status: dto.status ?? 'PENDING',
+        status: data.status ?? 'PENDING',
       },
     });
   }
 
   async updateRequisition(hotelId: string, id: string, dto: any) {
+    const data = this.removeEmptyRelationIds(dto, ['facilityId', 'approvedBy', 'requestedBy']);
     const req = await this.prisma.facilityRequisition.findFirst({
       where: { id, hotelId },
     });
     if (!req) throw new NotFoundException('Requisition not found');
     await Promise.all([
-      this.assertFacilityBelongsToHotel(hotelId, dto.facilityId),
-      this.assertStaffBelongsToHotel(hotelId, dto.requestedBy),
-      this.assertStaffBelongsToHotel(hotelId, dto.approvedBy),
+      this.assertFacilityBelongsToHotel(hotelId, data.facilityId),
+      this.assertStaffBelongsToHotel(hotelId, data.requestedBy),
+      this.assertStaffBelongsToHotel(hotelId, data.approvedBy),
     ]);
 
     return this.prisma.facilityRequisition.update({
       where: { id: req.id },
-      data: dto,
+      data,
     });
   }
 
@@ -556,44 +598,60 @@ export class FacilitiesService {
   }
 
   async createMaintenance(hotelId: string, staffId: string, dto: any) {
-    const reportedBy = dto.reportedBy ?? staffId;
+    const data = this.removeEmptyRelationIds(dto, [
+      'facilityId',
+      'roomId',
+      'reportedBy',
+      'assignedTo',
+      'inspectionId',
+      'verificationInspectionId',
+    ]);
+    const reportedBy = data.reportedBy ?? staffId;
     await Promise.all([
-      this.assertFacilityBelongsToHotel(hotelId, dto.facilityId),
-      this.assertRoomBelongsToHotel(hotelId, dto.roomId),
+      this.assertFacilityBelongsToHotel(hotelId, data.facilityId),
+      this.assertRoomBelongsToHotel(hotelId, data.roomId),
       this.assertStaffBelongsToHotel(hotelId, reportedBy),
-      this.assertStaffBelongsToHotel(hotelId, dto.assignedTo),
-      this.assertInspectionBelongsToHotel(hotelId, dto.inspectionId),
-      this.assertInspectionBelongsToHotel(hotelId, dto.verificationInspectionId),
+      this.assertStaffBelongsToHotel(hotelId, data.assignedTo),
+      this.assertInspectionBelongsToHotel(hotelId, data.inspectionId),
+      this.assertInspectionBelongsToHotel(hotelId, data.verificationInspectionId),
     ]);
 
     return this.prisma.maintenanceRequest.create({
       data: {
-        ...dto,
+        ...data,
         hotelId,
-        requestNo: dto.requestNo ?? this.generateCode('MR'),
+        requestNo: data.requestNo ?? this.generateCode('MR'),
         reportedBy,
-        status: dto.status ?? 'OPEN',
+        status: data.status ?? 'OPEN',
       },
     });
   }
 
   async updateMaintenance(hotelId: string, id: string, dto: any) {
+    const data = this.removeEmptyRelationIds(dto, [
+      'facilityId',
+      'roomId',
+      'reportedBy',
+      'assignedTo',
+      'inspectionId',
+      'verificationInspectionId',
+    ]);
     const req = await this.prisma.maintenanceRequest.findFirst({
       where: { id, hotelId },
     });
     if (!req) throw new NotFoundException('Maintenance request not found');
     await Promise.all([
-      this.assertFacilityBelongsToHotel(hotelId, dto.facilityId),
-      this.assertRoomBelongsToHotel(hotelId, dto.roomId),
-      this.assertStaffBelongsToHotel(hotelId, dto.reportedBy),
-      this.assertStaffBelongsToHotel(hotelId, dto.assignedTo),
-      this.assertInspectionBelongsToHotel(hotelId, dto.inspectionId),
-      this.assertInspectionBelongsToHotel(hotelId, dto.verificationInspectionId),
+      this.assertFacilityBelongsToHotel(hotelId, data.facilityId),
+      this.assertRoomBelongsToHotel(hotelId, data.roomId),
+      this.assertStaffBelongsToHotel(hotelId, data.reportedBy),
+      this.assertStaffBelongsToHotel(hotelId, data.assignedTo),
+      this.assertInspectionBelongsToHotel(hotelId, data.inspectionId),
+      this.assertInspectionBelongsToHotel(hotelId, data.verificationInspectionId),
     ]);
 
     return this.prisma.maintenanceRequest.update({
       where: { id: req.id },
-      data: dto,
+      data,
     });
   }
 
@@ -688,43 +746,57 @@ export class FacilitiesService {
   }
 
   async createComplaint(hotelId: string, staffId: string, dto: any) {
+    const data = this.removeEmptyRelationIds(dto, [
+      'reporterStaffId',
+      'reporterGuestId',
+      'facilityId',
+      'roomId',
+      'maintenanceRequestId',
+    ]);
     const reporterStaffId =
-      dto.reporterStaffId ?? (dto.reporterType === 'STAFF' ? staffId : undefined);
+      data.reporterStaffId ?? (data.reporterType === 'STAFF' ? staffId : undefined);
     await Promise.all([
-      this.assertFacilityBelongsToHotel(hotelId, dto.facilityId),
-      this.assertRoomBelongsToHotel(hotelId, dto.roomId),
+      this.assertFacilityBelongsToHotel(hotelId, data.facilityId),
+      this.assertRoomBelongsToHotel(hotelId, data.roomId),
       this.assertStaffBelongsToHotel(hotelId, reporterStaffId),
-      this.assertGuestBelongsToHotel(hotelId, dto.reporterGuestId),
-      this.assertMaintenanceBelongsToHotel(hotelId, dto.maintenanceRequestId),
+      this.assertGuestBelongsToHotel(hotelId, data.reporterGuestId),
+      this.assertMaintenanceBelongsToHotel(hotelId, data.maintenanceRequestId),
     ]);
 
     return this.prisma.facilityComplaint.create({
       data: {
-        ...dto,
+        ...data,
         hotelId,
-        complaintNo: dto.complaintNo ?? this.generateCode('CP'),
-        status: dto.status ?? 'NEW',
+        complaintNo: data.complaintNo ?? this.generateCode('CP'),
+        status: data.status ?? 'NEW',
         reporterStaffId,
       },
     });
   }
 
   async updateComplaint(hotelId: string, id: string, dto: any) {
+    const data = this.removeEmptyRelationIds(dto, [
+      'reporterStaffId',
+      'reporterGuestId',
+      'facilityId',
+      'roomId',
+      'maintenanceRequestId',
+    ]);
     const complaint = await this.prisma.facilityComplaint.findFirst({
       where: { id, hotelId },
     });
     if (!complaint) throw new NotFoundException('Complaint not found');
     await Promise.all([
-      this.assertFacilityBelongsToHotel(hotelId, dto.facilityId),
-      this.assertRoomBelongsToHotel(hotelId, dto.roomId),
-      this.assertStaffBelongsToHotel(hotelId, dto.reporterStaffId),
-      this.assertGuestBelongsToHotel(hotelId, dto.reporterGuestId),
-      this.assertMaintenanceBelongsToHotel(hotelId, dto.maintenanceRequestId),
+      this.assertFacilityBelongsToHotel(hotelId, data.facilityId),
+      this.assertRoomBelongsToHotel(hotelId, data.roomId),
+      this.assertStaffBelongsToHotel(hotelId, data.reporterStaffId),
+      this.assertGuestBelongsToHotel(hotelId, data.reporterGuestId),
+      this.assertMaintenanceBelongsToHotel(hotelId, data.maintenanceRequestId),
     ]);
 
     return this.prisma.facilityComplaint.update({
       where: { id: complaint.id },
-      data: dto,
+      data,
     });
   }
 
@@ -792,36 +864,38 @@ export class FacilitiesService {
   }
 
   async createInspection(hotelId: string, staffId: string, dto: any) {
-    const scheduledBy = dto.scheduledBy ?? staffId;
+    const data = this.removeEmptyRelationIds(dto, ['scheduledBy', 'facilityId']);
+    const scheduledBy = data.scheduledBy ?? staffId;
     await Promise.all([
-      this.assertFacilityBelongsToHotel(hotelId, dto.facilityId),
+      this.assertFacilityBelongsToHotel(hotelId, data.facilityId),
       this.assertStaffBelongsToHotel(hotelId, scheduledBy),
     ]);
 
     return this.prisma.facilityInspection.create({
       data: {
-        ...dto,
+        ...data,
         hotelId,
-        inspectionNo: dto.inspectionNo ?? this.generateCode('INSP'),
+        inspectionNo: data.inspectionNo ?? this.generateCode('INSP'),
         scheduledBy,
-        status: dto.status ?? 'SCHEDULED',
+        status: data.status ?? 'SCHEDULED',
       },
     });
   }
 
   async updateInspection(hotelId: string, id: string, dto: any) {
+    const data = this.removeEmptyRelationIds(dto, ['scheduledBy', 'facilityId']);
     const insp = await this.prisma.facilityInspection.findFirst({
       where: { id, hotelId },
     });
     if (!insp) throw new NotFoundException('Inspection not found');
     await Promise.all([
-      this.assertFacilityBelongsToHotel(hotelId, dto.facilityId),
-      this.assertStaffBelongsToHotel(hotelId, dto.scheduledBy),
+      this.assertFacilityBelongsToHotel(hotelId, data.facilityId),
+      this.assertStaffBelongsToHotel(hotelId, data.scheduledBy),
     ]);
 
     return this.prisma.facilityInspection.update({
       where: { id: insp.id },
-      data: dto,
+      data,
     });
   }
 
@@ -1033,18 +1107,22 @@ export class FacilitiesService {
   }
 
   async createDepartment(hotelId: string, dto: any) {
+    const data = this.removeEmptyRelationIds(dto, ['headId']);
+    await this.assertStaffBelongsToHotel(hotelId, data.headId);
     return this.prisma.facilityDepartment.create({
       data: {
-        ...dto,
+        ...data,
         hotelId,
       },
     });
   }
 
   async updateDepartment(hotelId: string, id: string, dto: any) {
+    const data = this.removeEmptyRelationIds(dto, ['headId']);
     const department = await this.prisma.facilityDepartment.findFirst({ where: { id, hotelId } });
     if (!department) throw new NotFoundException('Facility department not found');
-    return this.prisma.facilityDepartment.update({ where: { id: department.id }, data: dto });
+    await this.assertStaffBelongsToHotel(hotelId, data.headId);
+    return this.prisma.facilityDepartment.update({ where: { id: department.id }, data });
   }
 
   async deleteDepartment(hotelId: string, id: string) {

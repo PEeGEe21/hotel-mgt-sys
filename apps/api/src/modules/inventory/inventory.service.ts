@@ -10,7 +10,7 @@ export class InventoryService {
 
   // ── List items ─────────────────────────────────────────────────────────────
   async list(hotelId: string, query: {
-    page?: string; limit?: string; search?: string; category?: string;
+    page?: string | number; limit?: string | number; search?: string; category?: string;
   }) {
     const page     = Math.max(1, Number(query.page)  || 1);
     const limit    = Math.max(1, Math.min(100, Number(query.limit) || 10));
@@ -188,7 +188,7 @@ export class InventoryService {
 
     // Soft-block if linked to POS products
     const linkedProduct = await this.prisma.productIngredient.findFirst({
-      where: { inventoryItemId: id },
+      where: { inventoryItemId: id, hotelId },
     });
     if (linkedProduct) {
       throw new BadRequestException(
@@ -271,14 +271,21 @@ export class InventoryService {
     type?:      string;
     dateFrom?:  string;
     dateTo?:    string;
-    page?:      string;
-    limit?:     string;
+    page?:      string | number;
+    limit?:     string | number;
   }) {
     const page  = Math.max(1, Number(query.page)  || 1);
     const limit = Math.max(1, Math.min(100, Number(query.limit) || 20));
 
     const where: any = { hotelId };
-    if (query.itemId) where.itemId = query.itemId;
+    if (query.itemId) {
+      const item = await this.prisma.inventoryItem.findFirst({
+        where: { id: query.itemId, hotelId },
+        select: { id: true },
+      });
+      if (!item) throw new NotFoundException('Inventory item not found.');
+      where.itemId = query.itemId;
+    }
     if (query.type)   where.type   = query.type;
     if (query.dateFrom || query.dateTo) {
       where.createdAt = {

@@ -3,7 +3,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class AddFolioItemDto {
   @ApiProperty() @IsString() description!: string;
-  @ApiProperty() @IsNumber() amount!: number;
+  @ApiProperty() @IsNumber() @Min(0.01) amount!: number;
   @ApiProperty() @IsString() category!: string;
   @ApiPropertyOptional() @IsInt() @Min(1) @IsOptional() quantity?: number;
 }

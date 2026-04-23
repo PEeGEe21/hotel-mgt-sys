@@ -82,7 +82,6 @@ export class PosOrdersService {
       ];
     }
 
-    console.log(filters, 'ccw');
     const [orders, total] = await Promise.all([
       this.prisma.posOrder.findMany({
         where,
@@ -309,16 +308,16 @@ export class PosOrdersService {
       throw new BadRequestException('Cannot modify a delivered or cancelled order.');
     }
 
-    if (dto.quantity === 0) {
-      await this.prisma.posOrderItem.delete({ where: { id: itemId } });
-    } else {
-      const item = await this.prisma.posOrderItem.findFirst({
-        where: { id: itemId, orderId },
-      });
-      if (!item) throw new NotFoundException('Item not found.');
+    const item = await this.prisma.posOrderItem.findFirst({
+      where: { id: itemId, orderId },
+    });
+    if (!item) throw new NotFoundException('Item not found.');
 
+    if (dto.quantity === 0) {
+      await this.prisma.posOrderItem.delete({ where: { id: item.id } });
+    } else {
       await this.prisma.posOrderItem.update({
-        where: { id: itemId },
+        where: { id: item.id },
         data: {
           quantity: dto.quantity,
           total: dto.quantity ? Number(item.price) * dto.quantity : undefined,
@@ -377,12 +376,17 @@ export class PosOrdersService {
       // 2. Deduct inventory for each order item
       for (const item of order.items) {
         const ingredients = await tx.productIngredient.findMany({
-          where: { productId: item.productId },
+          where: { productId: item.productId, hotelId },
           include: { inventoryItem: true },
         });
 
         for (const ing of ingredients) {
           const deductQty = Number(ing.quantity) * item.quantity;
+          if (Number(ing.inventoryItem.quantity) < deductQty) {
+            throw new BadRequestException(
+              `Insufficient stock for ${ing.inventoryItem.name}. Available: ${ing.inventoryItem.quantity}.`,
+            );
+          }
 
           // Deduct from inventory
           await tx.inventoryItem.update({
@@ -406,15 +410,18 @@ export class PosOrdersService {
 
         // For products using direct stock (no ingredients)
         const hasIngredients = await tx.productIngredient.count({
-          where: { productId: item.productId },
+          where: { productId: item.productId, hotelId },
         });
         if (hasIngredients === 0) {
           // Deduct direct stock if tracked
-          const product = await tx.posProduct.findUnique({
-            where: { id: item.productId },
+          const product = await tx.posProduct.findFirst({
+            where: { id: item.productId, hotelId },
             select: { stock: true },
           });
           if (product?.stock !== null && product?.stock !== undefined) {
+            if (product.stock < item.quantity) {
+              throw new BadRequestException(`Insufficient direct stock for ${item.name}.`);
+            }
             await tx.posProduct.update({
               where: { id: item.productId },
               data: { stock: { decrement: item.quantity } },
@@ -509,6 +516,9 @@ export class PosOrdersService {
     }
     if (order.reservationId) {
       throw new BadRequestException('Room charge orders are settled at checkout — not here.');
+    }
+    if (dto.method === 'CASH' && dto.amountTendered !== undefined && dto.amountTendered < Number(order.total)) {
+      throw new BadRequestException('Amount tendered cannot be less than order total.');
     }
 
     const result = await this.prisma.$transaction(async (tx) => {
@@ -649,8 +659,22 @@ export class PosOrdersService {
       createdAt: { gte: start, lte: end },
       status: { not: OrderStatus.CANCELLED },
     };
-    if (options.posTerminalId) where.posTerminalId = options.posTerminalId;
-    if (options.staffId) where.staffId = options.staffId;
+    if (options.posTerminalId) {
+      const terminal = await this.prisma.posTerminal.findFirst({
+        where: { id: options.posTerminalId, hotelId },
+        select: { id: true },
+      });
+      if (!terminal) throw new NotFoundException('Terminal not found.');
+      where.posTerminalId = options.posTerminalId;
+    }
+    if (options.staffId) {
+      const staff = await this.prisma.staff.findFirst({
+        where: { id: options.staffId, hotelId },
+        select: { id: true },
+      });
+      if (!staff) throw new NotFoundException('Staff not found.');
+      where.staffId = options.staffId;
+    }
 
     const orders = await this.prisma.posOrder.findMany({
       where,

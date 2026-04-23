@@ -5,6 +5,15 @@ import {
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { LedgerService } from './ledger.service';
 import { JwtAuthGuard, Permissions, PermissionsGuard } from '../auth/guards';
+import {
+  AccountListQueryDto,
+  AsOfQueryDto,
+  CreateAccountDto,
+  DateRangeQueryDto,
+  DayBookQueryDto,
+  PostJournalEntryDto,
+  UpdateAccountDto,
+} from './dtos/ledger.dto';
 
 @ApiTags('Ledger')
 @ApiBearerAuth()
@@ -17,17 +26,14 @@ export class LedgerController {
   @Get('accounts')
   @Permissions('view:finance')
   @ApiOperation({ summary: 'List chart of accounts with running balances' })
-  listAccounts(@Request() req: any, @Query('type') type?: string) {
-    return this.svc.listAccounts(req.user.hotelId, type);
+  listAccounts(@Request() req: any, @Query() query: AccountListQueryDto) {
+    return this.svc.listAccounts(req.user.hotelId, query.type);
   }
 
   @Post('accounts')
   @Permissions('edit:finance')
   @ApiOperation({ summary: 'Add a custom account' })
-  createAccount(@Request() req: any, @Body() dto: {
-    code: string; name: string; type: string;
-    normalBalance: string; description?: string;
-  }) {
+  createAccount(@Request() req: any, @Body() dto: CreateAccountDto) {
     return this.svc.createAccount(req.user.hotelId, dto);
   }
 
@@ -37,7 +43,7 @@ export class LedgerController {
   updateAccount(
     @Request() req: any,
     @Param('id') id: string,
-    @Body() dto: { name?: string; description?: string; isActive?: boolean },
+    @Body() dto: UpdateAccountDto,
   ) {
     return this.svc.updateAccount(req.user.hotelId, id, dto);
   }
@@ -54,12 +60,7 @@ export class LedgerController {
   @Post('entries')
   @Permissions('create:finance')
   @ApiOperation({ summary: 'Post a manual journal entry' })
-  postEntry(@Request() req: any, @Body() dto: {
-    description: string;
-    reference?:  string;
-    date?:       string;
-    lines: { accountCode: string; type: 'DEBIT' | 'CREDIT'; amount: number; description?: string }[];
-  }) {
+  postEntry(@Request() req: any, @Body() dto: PostJournalEntryDto) {
     return this.svc.postEntry(req.user.hotelId, {
       ...dto,
       date:     dto.date ? new Date(dto.date) : undefined,
@@ -73,23 +74,21 @@ export class LedgerController {
   @ApiOperation({ summary: 'Day book — all journal entries for a date' })
   getDayBook(
     @Request()    req: any,
-    @Query('date')  date?: string,
-    @Query('page')  page?: string,
-    @Query('limit') limit?: string,
+    @Query() query: DayBookQueryDto,
   ) {
     return this.svc.getDayBook(
       req.user.hotelId,
-      date ?? new Date().toISOString().slice(0, 10),
-      page  ? Number(page)  : 1,
-      limit ? Number(limit) : 50,
+      query.date ?? new Date().toISOString().slice(0, 10),
+      query.page ?? 1,
+      query.limit ?? 50,
     );
   }
 
   @Get('trial-balance')
   @Permissions('view:finance')
   @ApiOperation({ summary: 'Trial balance as of a date' })
-  getTrialBalance(@Request() req: any, @Query('asOf') asOf?: string) {
-    return this.svc.getTrialBalance(req.user.hotelId, asOf);
+  getTrialBalance(@Request() req: any, @Query() query: AsOfQueryDto) {
+    return this.svc.getTrialBalance(req.user.hotelId, query.asOf);
   }
 
   @Get('profit-loss')
@@ -97,16 +96,15 @@ export class LedgerController {
   @ApiOperation({ summary: 'Profit & Loss for a date range' })
   getProfitAndLoss(
     @Request()         req: any,
-    @Query('from')     from?: string,
-    @Query('to')       to?:   string,
+    @Query() query: DateRangeQueryDto,
   ) {
     const today = new Date().toISOString().slice(0, 10);
     const firstOfMonth = new Date();
     firstOfMonth.setDate(1);
     return this.svc.getProfitAndLoss(
       req.user.hotelId,
-      from ?? firstOfMonth.toISOString().slice(0, 10),
-      to   ?? today,
+      query.from ?? firstOfMonth.toISOString().slice(0, 10),
+      query.to ?? today,
     );
   }
 
@@ -116,9 +114,8 @@ export class LedgerController {
   getStatement(
     @Request()     req: any,
     @Param('code') code: string,
-    @Query('from') from?: string,
-    @Query('to')   to?:   string,
+    @Query() query: DateRangeQueryDto,
   ) {
-    return this.svc.getAccountStatement(req.user.hotelId, code, from, to);
+    return this.svc.getAccountStatement(req.user.hotelId, code, query.from, query.to);
   }
 }

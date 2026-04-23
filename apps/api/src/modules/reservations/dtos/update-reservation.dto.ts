@@ -10,8 +10,12 @@ export class UpdateReservationDto {
   @ApiPropertyOptional() @IsString() @IsOptional() source?: string;
   @ApiPropertyOptional() @IsString() @IsOptional() specialRequests?: string;
   @ApiPropertyOptional() @IsString() @IsOptional() notes?: string;
-  @ApiPropertyOptional() @IsNumber() @IsOptional() totalAmount?: number;
-  @ApiPropertyOptional() @IsNumber() @IsOptional() paidAmount?: number;
+  @ApiPropertyOptional() @IsString() @IsOptional() guestId?: string;
+  @ApiPropertyOptional() @IsString() @IsOptional() roomId?: string;
+  @ApiPropertyOptional() @IsString() @IsOptional() companyId?: string;
+  @ApiPropertyOptional() @IsString() @IsOptional() groupBookingId?: string;
+  @ApiPropertyOptional() @IsNumber() @Min(0) @IsOptional() totalAmount?: number;
+  @ApiPropertyOptional() @IsNumber() @Min(0) @IsOptional() paidAmount?: number;
   @ApiPropertyOptional({ enum: PaymentStatus })
   @IsEnum(PaymentStatus)
   @IsOptional()

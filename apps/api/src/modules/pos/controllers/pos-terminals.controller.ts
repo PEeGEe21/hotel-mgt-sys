@@ -50,11 +50,12 @@ export class PosTerminalsController {
   }
 
   @Post('group')
+  @Permissions('manage:pos')
   createGroup(@Request() req: any, @Body() dto: CreatePosTerminalGroupDto) {
     return this.posTerminalsService.createGroup(req.user.hotelId, dto);
   }
 
-  @Patch('group')
+  @Patch('group/:id')
   @Permissions('manage:pos')
   updateGroup(
     @Request() req: any,
@@ -65,6 +66,7 @@ export class PosTerminalsController {
   }
 
   @Get('groups')
+  @Permissions('view:pos')
   findAll(@Request() req: any) {
     return this.posTerminalsService.findAllGroups(req.user.hotelId);
   }

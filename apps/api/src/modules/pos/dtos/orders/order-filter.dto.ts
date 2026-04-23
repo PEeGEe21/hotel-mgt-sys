@@ -1,27 +1,17 @@
-import {
-  IsString,
-  IsOptional,
-  IsInt,
-  IsNumber,
-  IsArray,
-  IsBoolean,
-  Min,
-  ValidateNested,
-  IsEnum,
-} from 'class-validator';
-import { Type, Transform } from 'class-transformer';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
+import { IsDateString, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 
 // ─── DTOs ────────────
 export class OrderFilterDto {
-  @ApiPropertyOptional() @IsOptional() status?: string;
-  @ApiPropertyOptional() @IsOptional() type?: string;
-  @ApiPropertyOptional() @IsOptional() posTerminalId?: string;
-  @ApiPropertyOptional() @IsOptional() staffId?: string;
-  @ApiPropertyOptional() @IsOptional() tableNo?: string;
-  @ApiPropertyOptional() @IsOptional() dateFrom?: string;
-  @ApiPropertyOptional() @IsOptional() dateTo?: string;
-  @ApiPropertyOptional() @IsOptional() search?: string;
-  @ApiPropertyOptional() @IsOptional() @Transform(({ value }) => parseInt(value)) page?: number;
-  @ApiPropertyOptional() @IsOptional() @Transform(({ value }) => parseInt(value)) limit?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() status?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() type?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() posTerminalId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() staffId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() tableNo?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() dateFrom?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() dateTo?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() search?: string;
+  @ApiPropertyOptional() @IsOptional() @Transform(({ value }) => parseInt(value, 10)) @IsInt() @Min(1) page?: number;
+  @ApiPropertyOptional() @IsOptional() @Transform(({ value }) => parseInt(value, 10)) @IsInt() @Min(1) @Max(100) limit?: number;
 }

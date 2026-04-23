@@ -15,7 +15,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 // ─── DTOs ────────────
 export class PayOrderDto {
   @ApiProperty() @IsString() method!: string; // CASH | CARD | TRANSFER | ROOM_CHARGE
-  @ApiPropertyOptional() @IsNumber() @IsOptional() amountTendered?: number; // for cash change calculation
+  @ApiPropertyOptional() @IsNumber() @Min(0) @IsOptional() amountTendered?: number; // for cash change calculation
   @ApiPropertyOptional() @IsString() @IsOptional() reference?: string;
   @ApiPropertyOptional() @IsString() @IsOptional() note?: string;
 }

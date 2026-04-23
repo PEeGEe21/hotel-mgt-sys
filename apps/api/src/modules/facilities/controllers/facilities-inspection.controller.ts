@@ -14,6 +14,7 @@ import { JwtAuthGuard, Permissions, PermissionsGuard } from '../../auth/guards';
 import { FacilitiesService } from '../services/facilities.service';
 import { CreateFacilityInspectionDto } from '../dtos/inspection/create-facility-inspection.dto';
 import { UpdateFacilityInspectionDto } from '../dtos/inspection/update-facility-inspection.dto';
+import { FacilityInspectionFilterDto } from '../dtos/filter.dto';
 
 @ApiTags('FacilitiesInspection')
 @ApiBearerAuth()
@@ -25,7 +26,7 @@ export class FacilitiesInspectionController {
   @Get('/list')
   @Permissions('view:facilities')
   @ApiOperation({ summary: 'List facility inspections' })
-  listInspections(@Request() req: any, @Query() filters: any) {
+  listInspections(@Request() req: any, @Query() filters: FacilityInspectionFilterDto) {
     return this.facilitiesService.listInspections(req.user.hotelId, filters);
   }
 

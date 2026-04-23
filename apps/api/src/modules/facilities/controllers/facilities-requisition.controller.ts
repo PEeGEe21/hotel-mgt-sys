@@ -14,6 +14,7 @@ import { JwtAuthGuard, Permissions, PermissionsGuard } from '../../auth/guards';
 import { FacilitiesService } from '../services/facilities.service';
 import { CreateFacilityRequisitionDto } from '../dtos/requisition/create-facility-requisition.dto';
 import { UpdateFacilityRequisitionDto } from '../dtos/requisition/update-facility-requisition.dto';
+import { FacilityRequisitionFilterDto } from '../dtos/filter.dto';
 
 @ApiTags('FacilitiesRequisition')
 @ApiBearerAuth()
@@ -25,7 +26,7 @@ export class FacilitiesRequisitionController {
   @Get('list')
   @Permissions('view:facilities')
   @ApiOperation({ summary: 'List facility requisitions' })
-  listRequisitions(@Request() req: any, @Query() filters: any) {
+  listRequisitions(@Request() req: any, @Query() filters: FacilityRequisitionFilterDto) {
     return this.facilitiesService.listRequisitions(req.user.hotelId, filters);
   }
 
