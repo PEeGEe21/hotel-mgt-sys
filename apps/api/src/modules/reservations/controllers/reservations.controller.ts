@@ -70,7 +70,7 @@ export class ReservationsController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Check in a guest' })
   checkIn(@Request() req: any, @Param('id') id: string) {
-    return this.svc.checkIn(req.user.hotelId, id);
+    return this.svc.checkIn(req.user.hotelId, id, req.user.sub);
   }
 
   @Patch(':id/check-out')
@@ -78,7 +78,7 @@ export class ReservationsController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Check out a guest' })
   checkOut(@Request() req: any, @Param('id') id: string) {
-    return this.svc.checkOut(req.user.hotelId, id);
+    return this.svc.checkOut(req.user.hotelId, id, req.user.sub);
   }
 
   @Patch(':id/cancel')

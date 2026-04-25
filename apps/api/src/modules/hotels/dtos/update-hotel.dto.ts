@@ -1,5 +1,12 @@
-import { IsBoolean, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsBoolean, IsInt, IsNumber, IsOptional, IsString, Max, Min, ValidateNested } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
+
+export class UpdateHotelCronSettingsDto {
+  @ApiPropertyOptional() @IsBoolean() @IsOptional() attendanceAbsenceScanEnabled?: boolean;
+  @ApiPropertyOptional() @IsInt() @Min(0) @Max(23) @IsOptional() attendanceAbsenceScanHour?: number;
+  @ApiPropertyOptional() @IsInt() @Min(0) @Max(59) @IsOptional() attendanceAbsenceScanMinute?: number;
+}
 
 export class UpdateHotelDto {
   @ApiPropertyOptional() @IsString() @IsOptional() name?: string;
@@ -22,4 +29,5 @@ export class UpdateHotelDto {
   @ApiPropertyOptional() @IsBoolean() @IsOptional() attendancePinRequired?: boolean;
   @ApiPropertyOptional() @IsBoolean() @IsOptional() attendanceKioskEnabled?: boolean;
   @ApiPropertyOptional() @IsBoolean() @IsOptional() attendancePersonalEnabled?: boolean;
+  @ApiPropertyOptional({ type: UpdateHotelCronSettingsDto }) @ValidateNested() @Type(() => UpdateHotelCronSettingsDto) @IsOptional() cronSettings?: UpdateHotelCronSettingsDto;
 }

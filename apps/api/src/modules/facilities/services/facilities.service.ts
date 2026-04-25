@@ -1,10 +1,16 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { FilterDto } from '../dtos/filter.dto';
+import { NotificationsService } from '../../notifications/notifications.service';
 
 @Injectable()
 export class FacilitiesService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(FacilitiesService.name);
+
+  constructor(
+    private prisma: PrismaService,
+    private notifications: NotificationsService,
+  ) {}
 
   private generateCode(prefix: string) {
     const year = new Date().getFullYear();
@@ -103,6 +109,85 @@ export class FacilitiesService {
     if (dto.locationId && !location) throw new NotFoundException('Facility location not found');
     if (dto.departmentId && !department) throw new NotFoundException('Facility department not found');
     await this.assertStaffBelongsToHotel(hotelId, dto.managerId);
+  }
+
+  private isUrgentMaintenancePriority(priority?: string | null) {
+    return ['HIGH', 'URGENT', 'CRITICAL'].includes((priority ?? '').toUpperCase());
+  }
+
+  private buildMaintenanceAlertEmail(args: {
+    hotelName: string;
+    requestNo: string;
+    title: string;
+    priority: string;
+    facilityName?: string | null;
+    roomNumber?: string | null;
+    assignedToName?: string | null;
+    status: string;
+  }) {
+    const hotelName = escapeHtml(args.hotelName);
+    const requestNo = escapeHtml(args.requestNo);
+    const title = escapeHtml(args.title);
+    const priority = escapeHtml(args.priority);
+    const facilityName = args.facilityName ? escapeHtml(args.facilityName) : null;
+    const roomNumber = args.roomNumber ? escapeHtml(args.roomNumber) : null;
+    const assignedToName = args.assignedToName ? escapeHtml(args.assignedToName) : null;
+    const status = escapeHtml(args.status);
+
+    return {
+      subject: `Urgent maintenance alert: ${requestNo}`,
+      text:
+        `${args.hotelName}: an urgent maintenance request needs attention.\n` +
+        `Request: ${args.requestNo}\n` +
+        `Title: ${args.title}\n` +
+        `Priority: ${args.priority}\n` +
+        `Status: ${args.status}` +
+        (args.facilityName ? `\nFacility: ${args.facilityName}` : '') +
+        (args.roomNumber ? `\nRoom: ${args.roomNumber}` : '') +
+        (args.assignedToName ? `\nAssigned to: ${args.assignedToName}` : ''),
+      html: `
+        <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.6;">
+          <p style="margin: 0 0 12px;">An urgent maintenance request was raised at <strong>${hotelName}</strong>.</p>
+          <table style="border-collapse: collapse;">
+            <tr><td style="padding: 4px 12px 4px 0;"><strong>Request</strong></td><td style="padding: 4px 0;">${requestNo}</td></tr>
+            <tr><td style="padding: 4px 12px 4px 0;"><strong>Title</strong></td><td style="padding: 4px 0;">${title}</td></tr>
+            <tr><td style="padding: 4px 12px 4px 0;"><strong>Priority</strong></td><td style="padding: 4px 0;">${priority}</td></tr>
+            <tr><td style="padding: 4px 12px 4px 0;"><strong>Status</strong></td><td style="padding: 4px 0;">${status}</td></tr>
+            ${facilityName ? `<tr><td style="padding: 4px 12px 4px 0;"><strong>Facility</strong></td><td style="padding: 4px 0;">${facilityName}</td></tr>` : ''}
+            ${roomNumber ? `<tr><td style="padding: 4px 12px 4px 0;"><strong>Room</strong></td><td style="padding: 4px 0;">${roomNumber}</td></tr>` : ''}
+            ${assignedToName ? `<tr><td style="padding: 4px 12px 4px 0;"><strong>Assigned to</strong></td><td style="padding: 4px 0;">${assignedToName}</td></tr>` : ''}
+          </table>
+        </div>
+      `,
+    };
+  }
+
+  private buildMaintenanceAlertInAppNotification(args: {
+    requestNo: string;
+    title: string;
+    priority: string;
+    facilityName?: string | null;
+    roomNumber?: string | null;
+    status: string;
+  }) {
+    const target = args.facilityName
+      ? `facility ${args.facilityName}`
+      : args.roomNumber
+        ? `room ${args.roomNumber}`
+        : 'the property';
+
+    return {
+      title: 'Maintenance alert',
+      message: `${args.priority} maintenance request ${args.requestNo} was opened for ${target}: ${args.title}.`,
+      metadata: {
+        requestNo: args.requestNo,
+        title: args.title,
+        priority: args.priority,
+        facilityName: args.facilityName ?? null,
+        roomNumber: args.roomNumber ?? null,
+        status: args.status,
+      },
+    };
   }
 
   // ============ FACILITIES =========== //
@@ -597,7 +682,7 @@ export class FacilitiesService {
     };
   }
 
-  async createMaintenance(hotelId: string, staffId: string, dto: any) {
+  async createMaintenance(hotelId: string, staffId: string, dto: any, actorUserId?: string) {
     const data = this.removeEmptyRelationIds(dto, [
       'facilityId',
       'roomId',
@@ -616,7 +701,7 @@ export class FacilitiesService {
       this.assertInspectionBelongsToHotel(hotelId, data.verificationInspectionId),
     ]);
 
-    return this.prisma.maintenanceRequest.create({
+    const request = await this.prisma.maintenanceRequest.create({
       data: {
         ...data,
         hotelId,
@@ -624,7 +709,56 @@ export class FacilitiesService {
         reportedBy,
         status: data.status ?? 'OPEN',
       },
+      include: {
+        facility: { select: { id: true, name: true } },
+        room: { select: { id: true, number: true } },
+        assignedToStaff: { select: { id: true, firstName: true, lastName: true } },
+      },
     });
+
+    if (this.isUrgentMaintenancePriority(request.priority)) {
+      try {
+        const hotel = await this.prisma.hotel.findUnique({
+          where: { id: hotelId },
+          select: { name: true },
+        });
+
+        const assignedToName = request.assignedToStaff
+          ? `${request.assignedToStaff.firstName} ${request.assignedToStaff.lastName}`.trim()
+          : null;
+
+        await this.notifications.dispatch({
+          hotelId,
+          event: 'maintenanceAlert',
+          excludeUserIds: actorUserId ? [actorUserId] : undefined,
+          excludeEmailUserIds: actorUserId ? [actorUserId] : undefined,
+          email: this.buildMaintenanceAlertEmail({
+            hotelName: hotel?.name ?? 'HotelOS',
+            requestNo: request.requestNo,
+            title: request.title,
+            priority: request.priority,
+            facilityName: request.facility?.name ?? null,
+            roomNumber: request.room?.number ?? null,
+            assignedToName,
+            status: request.status,
+          }),
+          inApp: this.buildMaintenanceAlertInAppNotification({
+            requestNo: request.requestNo,
+            title: request.title,
+            priority: request.priority,
+            facilityName: request.facility?.name ?? null,
+            roomNumber: request.room?.number ?? null,
+            status: request.status,
+          }),
+        });
+      } catch (error) {
+        this.logger.warn(
+          `Failed to dispatch maintenanceAlert notification for ${request.requestNo}: ${String(error)}`,
+        );
+      }
+    }
+
+    return request;
   }
 
   async updateMaintenance(hotelId: string, id: string, dto: any) {
@@ -1135,4 +1269,13 @@ export class FacilitiesService {
     await this.prisma.facilityDepartment.delete({ where: { id: department.id } });
     return { success: true };
   }
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }

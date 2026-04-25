@@ -34,7 +34,7 @@ export class AttendanceController {
   @Post('clock-in')
   @Permissions('clock:self')
   clockIn(@Request() req: any, @Body() body: { method?: string; note?: string }) {
-    return this.attendanceService.clockIn(req.user.staffId, body.method, body.note);
+    return this.attendanceService.clockIn(req.user.staffId, req.user.sub, body.method, body.note);
   }
 
   @ApiBearerAuth()

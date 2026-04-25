@@ -34,7 +34,12 @@ export class FacilitiesMaintenanceController {
   @Permissions('create:facilities')
   @ApiOperation({ summary: 'Create maintenance request' })
   createMaintenance(@Request() req: any, @Body() dto: CreateMaintenanceRequestDto) {
-    return this.facilitiesService.createMaintenance(req.user.hotelId, req.user.staffId, dto);
+    return this.facilitiesService.createMaintenance(
+      req.user.hotelId,
+      req.user.staffId,
+      dto,
+      req.user.sub,
+    );
   }
 
   @Patch(':id')

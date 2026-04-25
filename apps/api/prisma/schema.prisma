@@ -71,6 +71,10 @@ enum AttendanceType {
   CLOCK_OUT
 }
 
+enum HotelCronJobType {
+  ATTENDANCE_ABSENCE_SCAN
+}
+
 enum OrderStatus {
   PENDING
   PREPARING
@@ -188,6 +192,25 @@ model Hotel {
   notificationPreferences NotificationPreference[]
   notifications Notification[]
   emailDeliveryLogs EmailDeliveryLog[]
+  cronSettings   HotelCronSetting[]
+}
+
+model HotelCronSetting {
+  id              String           @id @default(uuid())
+  hotelId         String
+  jobType         HotelCronJobType
+  enabled         Boolean          @default(true)
+  runAtHour       Int              @default(9)
+  runAtMinute     Int              @default(15)
+  lastTriggeredAt DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  hotel Hotel @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+
+  @@unique([hotelId, jobType])
+  @@index([jobType, enabled])
+  @@index([hotelId])
 }
 
 // ─── USERS & AUTH ─────────────────────────────────────────────────────────────

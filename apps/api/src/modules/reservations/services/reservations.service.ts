@@ -186,6 +186,112 @@ export class ReservationsService {
     };
   }
 
+  private buildCheckInNotificationEmail(args: {
+    hotelName: string;
+    reservationNo: string;
+    guestName: string;
+    roomNumber: string;
+    checkedInAt: Date;
+  }) {
+    const hotelName = escapeHtml(args.hotelName);
+    const reservationNo = escapeHtml(args.reservationNo);
+    const guestName = escapeHtml(args.guestName);
+    const roomNumber = escapeHtml(args.roomNumber);
+    const checkedInAt = fmtDateTime(args.checkedInAt);
+
+    return {
+      subject: `Guest checked in: ${reservationNo}`,
+      text:
+        `${args.hotelName}: a guest has checked in.\n` +
+        `Reservation: ${args.reservationNo}\n` +
+        `Guest: ${args.guestName}\n` +
+        `Room: ${args.roomNumber}\n` +
+        `Checked in at: ${checkedInAt}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.6;">
+          <p style="margin: 0 0 12px;">A guest has checked in at <strong>${hotelName}</strong>.</p>
+          <table style="border-collapse: collapse;">
+            <tr><td style="padding: 4px 12px 4px 0;"><strong>Reservation</strong></td><td style="padding: 4px 0;">${reservationNo}</td></tr>
+            <tr><td style="padding: 4px 12px 4px 0;"><strong>Guest</strong></td><td style="padding: 4px 0;">${guestName}</td></tr>
+            <tr><td style="padding: 4px 12px 4px 0;"><strong>Room</strong></td><td style="padding: 4px 0;">${roomNumber}</td></tr>
+            <tr><td style="padding: 4px 12px 4px 0;"><strong>Checked in at</strong></td><td style="padding: 4px 0;">${checkedInAt}</td></tr>
+          </table>
+        </div>
+      `,
+    };
+  }
+
+  private buildCheckInInAppNotification(args: {
+    reservationNo: string;
+    guestName: string;
+    roomNumber: string;
+    checkedInAt: Date;
+  }) {
+    return {
+      title: 'Guest checked in',
+      message: `${args.guestName} checked into room ${args.roomNumber} on reservation ${args.reservationNo}.`,
+      metadata: {
+        reservationNo: args.reservationNo,
+        guestName: args.guestName,
+        roomNumber: args.roomNumber,
+        checkedInAt: args.checkedInAt.toISOString(),
+      },
+    };
+  }
+
+  private buildCheckOutNotificationEmail(args: {
+    hotelName: string;
+    reservationNo: string;
+    guestName: string;
+    roomNumber: string;
+    checkedOutAt: Date;
+  }) {
+    const hotelName = escapeHtml(args.hotelName);
+    const reservationNo = escapeHtml(args.reservationNo);
+    const guestName = escapeHtml(args.guestName);
+    const roomNumber = escapeHtml(args.roomNumber);
+    const checkedOutAt = fmtDateTime(args.checkedOutAt);
+
+    return {
+      subject: `Guest checked out: ${reservationNo}`,
+      text:
+        `${args.hotelName}: a guest has checked out.\n` +
+        `Reservation: ${args.reservationNo}\n` +
+        `Guest: ${args.guestName}\n` +
+        `Room: ${args.roomNumber}\n` +
+        `Checked out at: ${checkedOutAt}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.6;">
+          <p style="margin: 0 0 12px;">A guest has checked out from <strong>${hotelName}</strong>.</p>
+          <table style="border-collapse: collapse;">
+            <tr><td style="padding: 4px 12px 4px 0;"><strong>Reservation</strong></td><td style="padding: 4px 0;">${reservationNo}</td></tr>
+            <tr><td style="padding: 4px 12px 4px 0;"><strong>Guest</strong></td><td style="padding: 4px 0;">${guestName}</td></tr>
+            <tr><td style="padding: 4px 12px 4px 0;"><strong>Room</strong></td><td style="padding: 4px 0;">${roomNumber}</td></tr>
+            <tr><td style="padding: 4px 12px 4px 0;"><strong>Checked out at</strong></td><td style="padding: 4px 0;">${checkedOutAt}</td></tr>
+          </table>
+        </div>
+      `,
+    };
+  }
+
+  private buildCheckOutInAppNotification(args: {
+    reservationNo: string;
+    guestName: string;
+    roomNumber: string;
+    checkedOutAt: Date;
+  }) {
+    return {
+      title: 'Guest checked out',
+      message: `${args.guestName} checked out of room ${args.roomNumber} from reservation ${args.reservationNo}.`,
+      metadata: {
+        reservationNo: args.reservationNo,
+        guestName: args.guestName,
+        roomNumber: args.roomNumber,
+        checkedOutAt: args.checkedOutAt.toISOString(),
+      },
+    };
+  }
+
   private async assertGuestBelongsToHotel(hotelId: string, guestId?: string | null) {
     if (!guestId) return;
     const guest = await this.prisma.guest.findFirst({
@@ -542,7 +648,7 @@ export class ReservationsService {
   }
 
   // ── Check In ────────────────────────────────────────────────────────────────
-  async checkIn(hotelId: string, id: string) {
+  async checkIn(hotelId: string, id: string, actorUserId?: string) {
     const res = await this.findOne(hotelId, id);
     if (!['CONFIRMED', 'PENDING'].includes(res.status)) {
       throw new BadRequestException(`Cannot check in a reservation with status ${res.status}.`);
@@ -581,11 +687,47 @@ export class ReservationsService {
       folioItemId: folioItem.id,
     });
 
+    const hotel = await this.prisma.hotel.findUnique({
+      where: { id: hotelId },
+      select: { name: true },
+    });
+
+    const reservationDetails = updated as any;
+    const guestName =
+      `${reservationDetails.guest?.firstName ?? ''} ${reservationDetails.guest?.lastName ?? ''}`.trim() ||
+      'Guest';
+
+    try {
+      await this.notifications.dispatch({
+        hotelId,
+        event: 'checkIn',
+        excludeUserIds: actorUserId ? [actorUserId] : undefined,
+        excludeEmailUserIds: actorUserId ? [actorUserId] : undefined,
+        email: this.buildCheckInNotificationEmail({
+          hotelName: hotel?.name ?? 'HotelOS',
+          reservationNo: updated.reservationNo,
+          guestName,
+          roomNumber: reservationDetails.room?.number ?? 'Unassigned',
+          checkedInAt: new Date(),
+        }),
+        inApp: this.buildCheckInInAppNotification({
+          reservationNo: updated.reservationNo,
+          guestName,
+          roomNumber: reservationDetails.room?.number ?? 'Unassigned',
+          checkedInAt: new Date(),
+        }),
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Failed to dispatch checkIn notification for ${updated.reservationNo}: ${String(error)}`,
+      );
+    }
+
     return updated;
   }
 
   // ── Check Out ───────────────────────────────────────────────────────────────
-  async checkOut(hotelId: string, id: string) {
+  async checkOut(hotelId: string, id: string, actorUserId?: string) {
     const res = await this.findOne(hotelId, id);
     if (res.status !== 'CHECKED_IN') {
       throw new BadRequestException(`Cannot check out a reservation with status ${res.status}.`);
@@ -602,6 +744,42 @@ export class ReservationsService {
         data: { status: RoomStatus.DIRTY },
       }),
     ]);
+
+    const hotel = await this.prisma.hotel.findUnique({
+      where: { id: hotelId },
+      select: { name: true },
+    });
+
+    const reservationDetails = updated as any;
+    const guestName =
+      `${reservationDetails.guest?.firstName ?? ''} ${reservationDetails.guest?.lastName ?? ''}`.trim() ||
+      'Guest';
+
+    try {
+      await this.notifications.dispatch({
+        hotelId,
+        event: 'checkOut',
+        excludeUserIds: actorUserId ? [actorUserId] : undefined,
+        excludeEmailUserIds: actorUserId ? [actorUserId] : undefined,
+        email: this.buildCheckOutNotificationEmail({
+          hotelName: hotel?.name ?? 'HotelOS',
+          reservationNo: updated.reservationNo,
+          guestName,
+          roomNumber: reservationDetails.room?.number ?? 'Unassigned',
+          checkedOutAt: new Date(),
+        }),
+        inApp: this.buildCheckOutInAppNotification({
+          reservationNo: updated.reservationNo,
+          guestName,
+          roomNumber: reservationDetails.room?.number ?? 'Unassigned',
+          checkedOutAt: new Date(),
+        }),
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Failed to dispatch checkOut notification for ${updated.reservationNo}: ${String(error)}`,
+      );
+    }
 
     return updated;
   }
@@ -935,6 +1113,16 @@ function fmtDate(value: Date) {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
+  });
+}
+
+function fmtDateTime(value: Date) {
+  return new Date(value).toLocaleString('en-NG', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
   });
 }
 

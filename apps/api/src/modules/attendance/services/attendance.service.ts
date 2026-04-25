@@ -1,12 +1,561 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { AttendanceType, Prisma } from '@prisma/client';
+import { AttendanceType, HotelCronJobType, Prisma } from '@prisma/client';
 import dayjs from 'dayjs';
 import * as bcrypt from 'bcryptjs';
+import { NotificationsService } from '../../notifications/notifications.service';
 
 @Injectable()
 export class AttendanceService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(AttendanceService.name);
+
+  constructor(
+    private prisma: PrismaService,
+    private notifications: NotificationsService,
+  ) {}
+
+  private isLateClockIn(timestamp: Date) {
+    return dayjs(timestamp).hour() >= 9;
+  }
+
+  private buildAttendanceAlertEmail(args: {
+    hotelName: string;
+    staffName: string;
+    employeeCode: string;
+    department?: string | null;
+    position?: string | null;
+    clockedInAt: Date;
+    method: string;
+  }) {
+    const hotelName = escapeHtml(args.hotelName);
+    const staffName = escapeHtml(args.staffName);
+    const employeeCode = escapeHtml(args.employeeCode);
+    const department = args.department ? escapeHtml(args.department) : null;
+    const position = args.position ? escapeHtml(args.position) : null;
+    const clockedInAt = fmtDateTime(args.clockedInAt);
+    const method = escapeHtml(args.method);
+
+    return {
+      subject: `Attendance alert: late clock-in for ${args.staffName}`,
+      text:
+        `${args.hotelName}: a late staff clock-in was recorded.\n` +
+        `Staff: ${args.staffName}\n` +
+        `Employee code: ${args.employeeCode}\n` +
+        `Clocked in at: ${clockedInAt}\n` +
+        `Method: ${args.method}` +
+        (args.department ? `\nDepartment: ${args.department}` : '') +
+        (args.position ? `\nPosition: ${args.position}` : ''),
+      html: `
+        <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.6;">
+          <p style="margin: 0 0 12px;">A late staff clock-in was recorded at <strong>${hotelName}</strong>.</p>
+          <table style="border-collapse: collapse;">
+            <tr><td style="padding: 4px 12px 4px 0;"><strong>Staff</strong></td><td style="padding: 4px 0;">${staffName}</td></tr>
+            <tr><td style="padding: 4px 12px 4px 0;"><strong>Employee code</strong></td><td style="padding: 4px 0;">${employeeCode}</td></tr>
+            <tr><td style="padding: 4px 12px 4px 0;"><strong>Clocked in at</strong></td><td style="padding: 4px 0;">${clockedInAt}</td></tr>
+            <tr><td style="padding: 4px 12px 4px 0;"><strong>Method</strong></td><td style="padding: 4px 0;">${method}</td></tr>
+            ${department ? `<tr><td style="padding: 4px 12px 4px 0;"><strong>Department</strong></td><td style="padding: 4px 0;">${department}</td></tr>` : ''}
+            ${position ? `<tr><td style="padding: 4px 12px 4px 0;"><strong>Position</strong></td><td style="padding: 4px 0;">${position}</td></tr>` : ''}
+          </table>
+        </div>
+      `,
+    };
+  }
+
+  private buildAttendanceAlertInAppNotification(args: {
+    staffName: string;
+    employeeCode: string;
+    clockedInAt: Date;
+    method: string;
+  }) {
+    return {
+      title: 'Attendance alert',
+      message: `${args.staffName} clocked in late at ${fmtTime(args.clockedInAt)} via ${args.method}.`,
+      metadata: {
+        staffName: args.staffName,
+        employeeCode: args.employeeCode,
+        clockedInAt: args.clockedInAt.toISOString(),
+        method: args.method,
+      },
+    };
+  }
+
+  private async dispatchLateClockInAlert(args: {
+    hotelId: string;
+    staffId: string;
+    actorUserId?: string;
+    timestamp: Date;
+    method: string;
+    fallbackStaff?: {
+      employeeCode?: string | null;
+      firstName?: string | null;
+      lastName?: string | null;
+      department?: string | null;
+      position?: string | null;
+    };
+  }) {
+    if (!this.isLateClockIn(args.timestamp)) return;
+
+    try {
+      const [hotel, staff] = await Promise.all([
+        this.prisma.hotel.findUnique({
+          where: { id: args.hotelId },
+          select: { name: true },
+        }),
+        this.prisma.staff.findUnique({
+          where: { id: args.staffId },
+          select: {
+            userId: true,
+            employeeCode: true,
+            firstName: true,
+            lastName: true,
+            department: true,
+            position: true,
+          },
+        }),
+      ]);
+
+      const resolvedStaff = staff ?? args.fallbackStaff;
+      const staffName =
+        `${resolvedStaff?.firstName ?? ''} ${resolvedStaff?.lastName ?? ''}`.trim() || 'Staff member';
+      const employeeCode = resolvedStaff?.employeeCode ?? 'N/A';
+
+      await this.notifications.dispatch({
+        hotelId: args.hotelId,
+        event: 'attendanceAlert',
+        excludeUserIds: [args.actorUserId, staff?.userId].filter(Boolean) as string[],
+        excludeEmailUserIds: [args.actorUserId, staff?.userId].filter(Boolean) as string[],
+        email: this.buildAttendanceAlertEmail({
+          hotelName: hotel?.name ?? 'HotelOS',
+          staffName,
+          employeeCode,
+          department: resolvedStaff?.department ?? null,
+          position: resolvedStaff?.position ?? null,
+          clockedInAt: args.timestamp,
+          method: args.method,
+        }),
+        inApp: this.buildAttendanceAlertInAppNotification({
+          staffName,
+          employeeCode,
+          clockedInAt: args.timestamp,
+          method: args.method,
+        }),
+      });
+    } catch (error) {
+      this.logger.warn(`Failed to dispatch attendanceAlert notification: ${String(error)}`);
+    }
+  }
+
+  private async hasExistingAttendanceAlert(args: {
+    hotelId: string;
+    alertKind: 'late' | 'absence' | 'absenceDigest';
+    alertDate: string;
+    staffId?: string;
+  }) {
+    const metadataPattern = args.staffId
+      ? {
+          targetStaffId: args.staffId,
+          alertKind: args.alertKind,
+          alertDate: args.alertDate,
+        }
+      : {
+          alertKind: args.alertKind,
+          alertDate: args.alertDate,
+        };
+
+    const [notificationMatch, emailLogMatch] = await Promise.all([
+      this.prisma.$queryRaw<Array<{ id: string }>>`
+        SELECT "id"
+        FROM "Notification"
+        WHERE "hotelId" = ${args.hotelId}
+          AND "event" = 'attendanceAlert'
+          AND "metadata" @> ${JSON.stringify(metadataPattern)}::jsonb
+        LIMIT 1
+      `,
+      this.prisma.$queryRaw<Array<{ id: string }>>`
+        SELECT "id"
+        FROM "EmailDeliveryLog"
+        WHERE "hotelId" = ${args.hotelId}
+          AND "event" = 'attendanceAlert'
+          AND "metadata" @> ${JSON.stringify(metadataPattern)}::jsonb
+        LIMIT 1
+      `,
+    ]);
+
+    return Boolean(notificationMatch[0] || emailLogMatch[0]);
+  }
+
+  private async dispatchAbsenceInAppAlert(args: {
+    hotelId: string;
+    staff: {
+      id: string;
+      userId?: string | null;
+      employeeCode?: string | null;
+      firstName?: string | null;
+      lastName?: string | null;
+      department?: string | null;
+      position?: string | null;
+    };
+    alertDate: string;
+  }) {
+    if (
+      await this.hasExistingAttendanceAlert({
+        hotelId: args.hotelId,
+        staffId: args.staff.id,
+        alertKind: 'absence',
+        alertDate: args.alertDate,
+      })
+    ) {
+      return;
+    }
+
+    const staffName =
+      `${args.staff.firstName ?? ''} ${args.staff.lastName ?? ''}`.trim() || 'Staff member';
+    const employeeCode = args.staff.employeeCode ?? 'N/A';
+    const cutoffTime = `${args.alertDate} 09:00`;
+
+    try {
+      const hotel = await this.prisma.hotel.findUnique({
+        where: { id: args.hotelId },
+        select: { name: true },
+      });
+
+      await this.notifications.dispatch({
+        hotelId: args.hotelId,
+        event: 'attendanceAlert',
+        excludeUserIds: args.staff.userId ? [args.staff.userId] : undefined,
+        inApp: {
+          title: 'Attendance alert',
+          message: `${staffName} has not clocked in for ${args.alertDate}.`,
+          metadata: {
+            targetStaffId: args.staff.id,
+            staffName,
+            employeeCode,
+            alertKind: 'absence',
+            alertDate: args.alertDate,
+            expectedBy: cutoffTime,
+          },
+        },
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Failed to dispatch absence attendanceAlert for ${args.staff.id}: ${String(error)}`,
+      );
+    }
+  }
+
+  private buildAbsenceDigestEmail(args: {
+    hotelName: string;
+    alertDate: string;
+    absentStaff: Array<{
+      employeeCode?: string | null;
+      firstName?: string | null;
+      lastName?: string | null;
+      department?: string | null;
+      position?: string | null;
+    }>;
+  }) {
+    const rows = args.absentStaff
+      .map((member) => {
+        const staffName =
+          `${member.firstName ?? ''} ${member.lastName ?? ''}`.trim() || 'Staff member';
+        return {
+          staffName,
+          employeeCode: member.employeeCode ?? 'N/A',
+          department: member.department ?? 'Unassigned',
+          position: member.position ?? 'Unassigned',
+        };
+      })
+      .sort((a, b) => a.staffName.localeCompare(b.staffName));
+
+    const rowsText = rows
+      .map(
+        (member) =>
+          `- ${member.staffName} (${member.employeeCode})${member.department ? ` · ${member.department}` : ''}${member.position ? ` · ${member.position}` : ''}`,
+      )
+      .join('\n');
+
+    const rowsHtml = rows
+      .map(
+        (member) => `
+          <tr>
+            <td style="padding: 6px 12px 6px 0;">${escapeHtml(member.staffName)}</td>
+            <td style="padding: 6px 12px 6px 0;">${escapeHtml(member.employeeCode)}</td>
+            <td style="padding: 6px 12px 6px 0;">${escapeHtml(member.department)}</td>
+            <td style="padding: 6px 0;">${escapeHtml(member.position)}</td>
+          </tr>
+        `,
+      )
+      .join('');
+
+    return {
+      subject: `Attendance summary: ${rows.length} absent staff on ${args.alertDate}`,
+      text:
+        `${args.hotelName}: absence summary for ${args.alertDate}.\n` +
+        `Absent staff count: ${rows.length}\n` +
+        `${rowsText}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.6;">
+          <p style="margin: 0 0 12px;">Attendance absence summary for <strong>${escapeHtml(args.hotelName)}</strong> on <strong>${escapeHtml(args.alertDate)}</strong>.</p>
+          <p style="margin: 0 0 12px;">Absent staff count: <strong>${rows.length}</strong></p>
+          <table style="border-collapse: collapse; width: 100%;">
+            <thead>
+              <tr>
+                <th style="text-align: left; padding: 6px 12px 6px 0;">Staff</th>
+                <th style="text-align: left; padding: 6px 12px 6px 0;">Employee code</th>
+                <th style="text-align: left; padding: 6px 12px 6px 0;">Department</th>
+                <th style="text-align: left; padding: 6px 0;">Position</th>
+              </tr>
+            </thead>
+            <tbody>${rowsHtml}</tbody>
+          </table>
+        </div>
+      `,
+    };
+  }
+
+  private async dispatchAbsenceDigestEmail(args: {
+    hotelId: string;
+    alertDate: string;
+    absentStaff: Array<{
+      id: string;
+      userId?: string | null;
+      employeeCode?: string | null;
+      firstName?: string | null;
+      lastName?: string | null;
+      department?: string | null;
+      position?: string | null;
+    }>;
+  }) {
+    if (!args.absentStaff.length) return;
+    if (
+      await this.hasExistingAttendanceAlert({
+        hotelId: args.hotelId,
+        alertKind: 'absenceDigest',
+        alertDate: args.alertDate,
+      })
+    ) {
+      return;
+    }
+
+    try {
+      const hotel = await this.prisma.hotel.findUnique({
+        where: { id: args.hotelId },
+        select: { name: true },
+      });
+
+      await this.notifications.dispatch({
+        hotelId: args.hotelId,
+        event: 'attendanceAlert',
+        excludeUserIds: args.absentStaff
+          .map((member) => member.userId)
+          .filter(Boolean) as string[],
+        excludeEmailUserIds: args.absentStaff
+          .map((member) => member.userId)
+          .filter(Boolean) as string[],
+        email: this.buildAbsenceDigestEmail({
+          hotelName: hotel?.name ?? 'HotelOS',
+          alertDate: args.alertDate,
+          absentStaff: args.absentStaff,
+        }),
+      });
+    } catch (error) {
+      this.logger.warn(`Failed to dispatch attendance absence digest: ${String(error)}`);
+    }
+  }
+
+  private async dispatchAbsenceAlertsForToday(args: {
+    hotelId: string;
+    staff: Array<{
+      id: string;
+      userId?: string | null;
+      employeeCode?: string | null;
+      firstName?: string | null;
+      lastName?: string | null;
+      department?: string | null;
+      position?: string | null;
+      hireDate?: Date | null;
+    }>;
+    attendanceMap: Map<string, any[]>;
+    leaveSet: Set<string>;
+    rangeStart: dayjs.Dayjs;
+    rangeEnd: dayjs.Dayjs;
+  }) {
+    const now = dayjs();
+    const todayKey = now.format('YYYY-MM-DD');
+    if (
+      args.rangeStart.format('YYYY-MM-DD') !== todayKey ||
+      args.rangeEnd.format('YYYY-MM-DD') !== todayKey ||
+      now.hour() < 9
+    ) {
+      return;
+    }
+
+    const absentStaff = args.staff.filter((member) => {
+      if (args.leaveSet.has(member.id)) return false;
+      if ((args.attendanceMap.get(member.id) ?? []).length > 0) return false;
+      if (member.hireDate && dayjs(member.hireDate).endOf('day').isAfter(now)) return false;
+      return true;
+    });
+
+    for (const member of absentStaff) {
+      await this.dispatchAbsenceInAppAlert({
+        hotelId: args.hotelId,
+        staff: member,
+        alertDate: todayKey,
+      });
+    }
+
+    await this.dispatchAbsenceDigestEmail({
+      hotelId: args.hotelId,
+      alertDate: todayKey,
+      absentStaff,
+    });
+  }
+
+  private async getAbsentStaffForHotelDay(hotelId: string, day: dayjs.Dayjs) {
+    const dayStart = day.startOf('day').toDate();
+    const dayEnd = day.endOf('day').toDate();
+    const now = dayjs();
+
+    const staff = await this.prisma.staff.findMany({
+      where: { hotelId },
+      select: {
+        id: true,
+        userId: true,
+        employeeCode: true,
+        firstName: true,
+        lastName: true,
+        department: true,
+        position: true,
+        hireDate: true,
+      },
+      orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
+    });
+
+    if (!staff.length) return [];
+
+    const staffIds = staff.map((member) => member.id);
+    const [attendance, leaves] = await Promise.all([
+      this.prisma.attendance.findMany({
+        where: {
+          hotelId,
+          staffId: { in: staffIds },
+          timestamp: { gte: dayStart, lte: dayEnd },
+        },
+        orderBy: { timestamp: 'asc' },
+      }),
+      this.prisma.leave.findMany({
+        where: {
+          hotelId,
+          staffId: { in: staffIds },
+          status: 'APPROVED',
+          startDate: { lte: dayEnd },
+          endDate: { gte: dayStart },
+        },
+        select: { staffId: true },
+      }),
+    ]);
+
+    const attendanceMap = new Map<string, any[]>();
+    attendance.forEach((record) => {
+      const list = attendanceMap.get(record.staffId) ?? [];
+      list.push(record);
+      attendanceMap.set(record.staffId, list);
+    });
+    const leaveSet = new Set(leaves.map((leave) => leave.staffId));
+
+    return staff.filter((member) => {
+      if (leaveSet.has(member.id)) return false;
+      if ((attendanceMap.get(member.id) ?? []).length > 0) return false;
+      if (member.hireDate && dayjs(member.hireDate).endOf('day').isAfter(now)) return false;
+      return true;
+    });
+  }
+
+  async runAbsenceDetectionForDate(referenceDate = new Date()) {
+    const reference = new Date(referenceDate);
+    const hotels = await this.prisma.hotel.findMany({
+      include: {
+        cronSettings: {
+          where: { jobType: HotelCronJobType.ATTENDANCE_ABSENCE_SCAN },
+          take: 1,
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    let absentCount = 0;
+    let hotelsProcessed = 0;
+
+    for (const hotel of hotels) {
+      const cronSetting = hotel.cronSettings[0];
+      const enabled = cronSetting?.enabled ?? true;
+      const runAtHour = cronSetting?.runAtHour ?? 9;
+      const runAtMinute = cronSetting?.runAtMinute ?? 15;
+      const timezone = hotel.timezone || 'Africa/Lagos';
+
+      if (!enabled) continue;
+
+      const localNow = getZonedDateParts(reference, timezone);
+      const localMinutes = localNow.hour * 60 + localNow.minute;
+      const scheduledMinutes = runAtHour * 60 + runAtMinute;
+      if (localMinutes < scheduledMinutes) continue;
+
+      const alertDate = localNow.date;
+      if (cronSetting?.lastTriggeredAt) {
+        const lastTriggeredDate = getZonedDateParts(cronSetting.lastTriggeredAt, timezone).date;
+        if (lastTriggeredDate === alertDate) continue;
+      }
+
+      const targetDay = dayjs(`${alertDate}T00:00:00`);
+      const absentStaff = await this.getAbsentStaffForHotelDay(hotel.id, targetDay);
+      absentCount += absentStaff.length;
+      hotelsProcessed += 1;
+
+      for (const member of absentStaff) {
+        await this.dispatchAbsenceInAppAlert({
+          hotelId: hotel.id,
+          staff: member,
+          alertDate: localNow.date,
+        });
+      }
+
+      await this.dispatchAbsenceDigestEmail({
+        hotelId: hotel.id,
+        alertDate: localNow.date,
+        absentStaff,
+      });
+
+      await this.prisma.hotelCronSetting.upsert({
+        where: {
+          hotelId_jobType: {
+            hotelId: hotel.id,
+            jobType: HotelCronJobType.ATTENDANCE_ABSENCE_SCAN,
+          },
+        },
+        update: {
+          enabled,
+          runAtHour,
+          runAtMinute,
+          lastTriggeredAt: reference,
+        },
+        create: {
+          hotelId: hotel.id,
+          jobType: HotelCronJobType.ATTENDANCE_ABSENCE_SCAN,
+          enabled,
+          runAtHour,
+          runAtMinute,
+          lastTriggeredAt: reference,
+        },
+      });
+    }
+
+    return {
+      date: reference.toISOString(),
+      hotelsProcessed,
+      absentStaffCount: absentCount,
+    };
+  }
 
   private async getStaffHotelId(staffId?: string, userId?: string): Promise<string> {
     if (!staffId && !userId) {
@@ -149,6 +698,20 @@ export class AttendanceService {
       },
     });
 
+    await this.dispatchLateClockInAlert({
+      hotelId: staff.hotelId,
+      staffId: staff.id,
+      timestamp: record.timestamp,
+      method: record.method,
+      fallbackStaff: {
+        employeeCode: staff.employeeCode,
+        firstName: staff.firstName,
+        lastName: staff.lastName,
+        department: staff.department,
+        position: staff.position,
+      },
+    });
+
     const status = await this.getTodayStatusByStaffId(staff.id);
     const staffInfo = {
       id: staff.id,
@@ -212,7 +775,7 @@ export class AttendanceService {
     return { staff: staffInfo, record, ...status };
   }
 
-  async clockIn(staffId: string, method = 'PIN', note?: string) {
+  async clockIn(staffId: string, actorUserId?: string, method = 'PIN', note?: string) {
     const hotelId = await this.getStaffHotelId(staffId);
     const today = dayjs().startOf('day').toDate();
     const lastRecord = await this.prisma.attendance.findFirst({
@@ -222,9 +785,19 @@ export class AttendanceService {
     if (lastRecord?.type === AttendanceType.CLOCK_IN) {
       throw new BadRequestException('Already clocked in. Please clock out first.');
     }
-    return this.prisma.attendance.create({
+    const record = await this.prisma.attendance.create({
       data: { staffId, hotelId, type: AttendanceType.CLOCK_IN, method, note },
     });
+
+    await this.dispatchLateClockInAlert({
+      hotelId,
+      staffId,
+      actorUserId,
+      timestamp: record.timestamp,
+      method: record.method,
+    });
+
+    return record;
   }
 
   async clockOut(staffId: string, method = 'PIN', note?: string) {
@@ -332,7 +905,21 @@ export class AttendanceService {
       },
     });
 
-    const allStaff = total ? await this.prisma.staff.findMany({ where, select: { id: true } }) : [];
+    const allStaff = total
+      ? await this.prisma.staff.findMany({
+          where,
+          select: {
+            id: true,
+            userId: true,
+            employeeCode: true,
+            firstName: true,
+            lastName: true,
+            department: true,
+            position: true,
+            hireDate: true,
+          },
+        })
+      : [];
     const staffIds = staff.map((s) => s.id);
     const allStaffIds = allStaff.map((s) => s.id);
 
@@ -512,7 +1099,7 @@ export class AttendanceService {
       throw new BadRequestException('Already clocked in. Please clock out first.');
     }
 
-    return this.prisma.attendance.create({
+    const record = await this.prisma.attendance.create({
       data: {
         staffId: staff.id,
         hotelId: staff.hotelId,
@@ -522,6 +1109,16 @@ export class AttendanceService {
         timestamp,
       },
     });
+
+    await this.dispatchLateClockInAlert({
+      hotelId: staff.hotelId,
+      staffId: staff.id,
+      actorUserId: userId,
+      timestamp: record.timestamp,
+      method: record.method,
+    });
+
+    return record;
   }
 
   async adminClockOut(
@@ -559,4 +1156,51 @@ export class AttendanceService {
       },
     });
   }
+}
+
+function fmtDateTime(value: Date) {
+  return new Date(value).toLocaleString('en-NG', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function fmtTime(value: Date) {
+  return new Date(value).toLocaleTimeString('en-NG', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function getZonedDateParts(value: Date, timezone: string) {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+
+  const parts = formatter.formatToParts(value);
+  const read = (type: string) => parts.find((part) => part.type === type)?.value ?? '00';
+
+  return {
+    date: `${read('year')}-${read('month')}-${read('day')}`,
+    hour: Number(read('hour')),
+    minute: Number(read('minute')),
+  };
 }

@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
+import { BullModule } from '@nestjs/bull';
 import { ConfigModule } from '@nestjs/config';
+import { ConfigService } from '@nestjs/config';
 import appConfig from './config/app.config';
 import { validateEnv } from './config/env.validation';
 import { AuthModule } from './modules/auth/auth.module';
@@ -37,6 +39,23 @@ import { MailingModule } from './modules/mailing/mailing.module';
       isGlobal: true,
       load: [appConfig],
       validate: validateEnv,
+    }),
+    BullModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => {
+        const redisUrl = configService.get<string>('redis.url') || 'redis://localhost:6379';
+        const parsed = new URL(redisUrl);
+        return {
+          redis: {
+            host: parsed.hostname,
+            port: Number(parsed.port || 6379),
+            username: parsed.username || undefined,
+            password: parsed.password || undefined,
+            db: parsed.pathname && parsed.pathname !== '/' ? Number(parsed.pathname.slice(1)) : undefined,
+            tls: parsed.protocol === 'rediss:' ? {} : undefined,
+          },
+        };
+      },
     }),
     PrismaModule,
     HealthModule,
