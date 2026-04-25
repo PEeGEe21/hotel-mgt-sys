@@ -1,12 +1,149 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 // ─── Movement types ───────────────────────────────────────────────────────────
 export type MovementType = 'IN' | 'OUT' | 'WASTAGE' | 'ADJUSTMENT';
 
 @Injectable()
 export class InventoryService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(InventoryService.name);
+
+  constructor(
+    private prisma: PrismaService,
+    private notifications: NotificationsService,
+  ) {}
+
+  private isLowStock(quantity: number, minStock: number) {
+    return quantity <= minStock;
+  }
+
+  private buildLowInventoryNotificationEmail(args: {
+    hotelName: string;
+    itemName: string;
+    sku: string;
+    quantity: number;
+    minStock: number;
+    unit: string;
+    category: string;
+    supplier?: string | null;
+    location?: string | null;
+  }) {
+    const hotelName = escapeHtml(args.hotelName);
+    const itemName = escapeHtml(args.itemName);
+    const sku = escapeHtml(args.sku);
+    const unit = escapeHtml(args.unit);
+    const category = escapeHtml(args.category);
+    const supplier = args.supplier ? escapeHtml(args.supplier) : null;
+    const location = args.location ? escapeHtml(args.location) : null;
+
+    return {
+      subject: `Low inventory alert: ${args.itemName}`,
+      text:
+        `${args.hotelName}: inventory is low for ${args.itemName}.\n` +
+        `SKU: ${args.sku}\n` +
+        `Category: ${args.category}\n` +
+        `Quantity: ${args.quantity} ${args.unit}\n` +
+        `Minimum stock: ${args.minStock} ${args.unit}` +
+        (args.supplier ? `\nSupplier: ${args.supplier}` : '') +
+        (args.location ? `\nLocation: ${args.location}` : ''),
+      html: `
+        <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.6;">
+          <p style="margin: 0 0 12px;">Inventory is low for <strong>${hotelName}</strong>.</p>
+          <table style="border-collapse: collapse;">
+            <tr><td style="padding: 4px 12px 4px 0;"><strong>Item</strong></td><td style="padding: 4px 0;">${itemName}</td></tr>
+            <tr><td style="padding: 4px 12px 4px 0;"><strong>SKU</strong></td><td style="padding: 4px 0;">${sku}</td></tr>
+            <tr><td style="padding: 4px 12px 4px 0;"><strong>Category</strong></td><td style="padding: 4px 0;">${category}</td></tr>
+            <tr><td style="padding: 4px 12px 4px 0;"><strong>Quantity</strong></td><td style="padding: 4px 0;">${args.quantity} ${unit}</td></tr>
+            <tr><td style="padding: 4px 12px 4px 0;"><strong>Minimum stock</strong></td><td style="padding: 4px 0;">${args.minStock} ${unit}</td></tr>
+            ${supplier ? `<tr><td style="padding: 4px 12px 4px 0;"><strong>Supplier</strong></td><td style="padding: 4px 0;">${supplier}</td></tr>` : ''}
+            ${location ? `<tr><td style="padding: 4px 12px 4px 0;"><strong>Location</strong></td><td style="padding: 4px 0;">${location}</td></tr>` : ''}
+          </table>
+        </div>
+      `,
+    };
+  }
+
+  private buildLowInventoryInAppNotification(args: {
+    itemName: string;
+    sku: string;
+    quantity: number;
+    minStock: number;
+    unit: string;
+  }) {
+    return {
+      title: 'Low inventory alert',
+      message:
+        `${args.itemName} (${args.sku}) is low on stock at ` +
+        `${args.quantity} ${args.unit}. Minimum is ${args.minStock} ${args.unit}.`,
+      metadata: {
+        itemName: args.itemName,
+        sku: args.sku,
+        quantity: args.quantity,
+        minStock: args.minStock,
+        unit: args.unit,
+      },
+    };
+  }
+
+  private async maybeDispatchLowInventoryNotification(args: {
+    hotelId: string;
+    actorUserId?: string;
+    beforeQuantity: number;
+    beforeMinStock: number;
+    item: {
+      name: string;
+      sku: string;
+      quantity: number | string;
+      minStock: number | string;
+      unit: string;
+      category: string;
+      supplier?: string | null;
+      location?: string | null;
+    };
+  }) {
+    const wasLow = this.isLowStock(args.beforeQuantity, args.beforeMinStock);
+    const quantity = Number(args.item.quantity);
+    const minStock = Number(args.item.minStock);
+    const isLow = this.isLowStock(quantity, minStock);
+
+    if (wasLow || !isLow) return;
+
+    const hotel = await this.prisma.hotel.findUnique({
+      where: { id: args.hotelId },
+      select: { name: true },
+    });
+
+    try {
+      await this.notifications.dispatch({
+        hotelId: args.hotelId,
+        event: 'lowInventory',
+        excludeEmailUserIds: args.actorUserId ? [args.actorUserId] : undefined,
+        email: this.buildLowInventoryNotificationEmail({
+          hotelName: hotel?.name ?? 'HotelOS',
+          itemName: args.item.name,
+          sku: args.item.sku,
+          quantity,
+          minStock,
+          unit: args.item.unit,
+          category: args.item.category,
+          supplier: args.item.supplier,
+          location: args.item.location,
+        }),
+        inApp: this.buildLowInventoryInAppNotification({
+          itemName: args.item.name,
+          sku: args.item.sku,
+          quantity,
+          minStock,
+          unit: args.item.unit,
+        }),
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Failed to dispatch lowInventory notification for ${args.item.sku}: ${String(error)}`,
+      );
+    }
+  }
 
   // ── List items ─────────────────────────────────────────────────────────────
   async list(hotelId: string, query: {
@@ -93,7 +230,7 @@ export class InventoryService {
   }
 
   // ── Create ─────────────────────────────────────────────────────────────────
-  async create(hotelId: string, dto: any) {
+  async create(hotelId: string, dto: any, actorUserId?: string) {
     const { name, sku, category, unit } = dto;
     if (!name?.trim() || !sku?.trim() || !category?.trim() || !unit?.trim()) {
       throw new BadRequestException('Name, unique ID, category and unit are required.');
@@ -137,11 +274,28 @@ export class InventoryService {
       });
     }
 
+    await this.maybeDispatchLowInventoryNotification({
+      hotelId,
+      actorUserId,
+      beforeQuantity: Number.POSITIVE_INFINITY,
+      beforeMinStock: Number.NEGATIVE_INFINITY,
+      item: {
+        name: item.name,
+        sku: item.sku,
+        quantity: Number(item.quantity),
+        minStock: Number(item.minStock),
+        unit: item.unit,
+        category: item.category,
+        supplier: item.supplier,
+        location: item.location,
+      },
+    });
+
     return this.shape(item);
   }
 
   // ── Update ─────────────────────────────────────────────────────────────────
-  async update(hotelId: string, id: string, dto: any) {
+  async update(hotelId: string, id: string, dto: any, actorUserId?: string) {
     const item = await this.prisma.inventoryItem.findFirst({ where: { id, hotelId } });
     if (!item) throw new NotFoundException('Inventory item not found.');
 
@@ -175,6 +329,24 @@ export class InventoryService {
         location:    dto.location?.trim() ?? item.location,
       },
     });
+
+    await this.maybeDispatchLowInventoryNotification({
+      hotelId,
+      actorUserId,
+      beforeQuantity: Number(item.quantity),
+      beforeMinStock: Number(item.minStock),
+      item: {
+        name: updated.name,
+        sku: updated.sku,
+        quantity: Number(updated.quantity),
+        minStock: Number(updated.minStock),
+        unit: updated.unit,
+        category: updated.category,
+        supplier: updated.supplier,
+        location: updated.location,
+      },
+    });
+
     return this.shape(updated);
   }
 
@@ -206,6 +378,7 @@ export class InventoryService {
     quantity:   number;
     note?:      string;
     staffId?:   string;
+    actorUserId?: string;
     sourceType?: string;
     sourceId?:  string;
   }) {
@@ -235,7 +408,7 @@ export class InventoryService {
       }
     }
 
-    return this.prisma.$transaction(async tx => {
+    const result = await this.prisma.$transaction(async tx => {
       // Update quantity
       const delta    = ['IN', 'ADJUSTMENT'].includes(dto.type) ? dto.quantity : -dto.quantity;
       const updated  = await tx.inventoryItem.update({
@@ -263,6 +436,25 @@ export class InventoryService {
         newQuantity: Number(updated.quantity),
       };
     });
+
+    await this.maybeDispatchLowInventoryNotification({
+      hotelId,
+      actorUserId: dto.actorUserId,
+      beforeQuantity: Number(item.quantity),
+      beforeMinStock: Number(item.minStock),
+      item: {
+        name: result.item.name,
+        sku: result.item.sku,
+        quantity: result.item.quantity,
+        minStock: result.item.minStock,
+        unit: result.item.unit,
+        category: result.item.category,
+        supplier: result.item.supplier,
+        location: result.item.location,
+      },
+    });
+
+    return result;
   }
 
   // ── Movement history ───────────────────────────────────────────────────────
@@ -400,4 +592,13 @@ export class InventoryService {
       updatedAt:   item.updatedAt,
     };
   }
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }

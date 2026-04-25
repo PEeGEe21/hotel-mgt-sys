@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  Logger,
 } from '@nestjs/common';
 import { ReservationStatus, PaymentStatus, RoomStatus, BookingType } from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -18,6 +19,7 @@ import { readFile } from 'fs/promises';
 import * as handlebars from 'handlebars';
 import { compileTemplate } from 'src/common/utils/compile-template.utils';
 import { LedgerService } from '../../ledger/ledger.service';
+import { NotificationsService } from '../../notifications/notifications.service';
 
 // ─── Service ──────────────────────────────────────────────────────────────────
 
@@ -33,10 +35,156 @@ const RESERVATION_INCLUDE = {
 
 @Injectable()
 export class ReservationsService {
+  private readonly logger = new Logger(ReservationsService.name);
+
   constructor(
     private prisma: PrismaService,
     private ledger: LedgerService,
+    private notifications: NotificationsService,
   ) {}
+
+  private buildNewReservationNotificationEmail(args: {
+    hotelName: string;
+    reservationNo: string;
+    guestName: string;
+    roomNumber: string;
+    checkIn: Date;
+    checkOut: Date;
+    totalAmount: number;
+  }) {
+    const hotelName = escapeHtml(args.hotelName);
+    const reservationNo = escapeHtml(args.reservationNo);
+    const guestName = escapeHtml(args.guestName);
+    const roomNumber = escapeHtml(args.roomNumber);
+    const checkIn = fmtDate(args.checkIn);
+    const checkOut = fmtDate(args.checkOut);
+    const totalAmount = fmtMoney(args.totalAmount);
+
+    return {
+      subject: `New reservation ${reservationNo} for ${guestName}`,
+      text:
+        `${args.hotelName}: a new reservation has been created.\n` +
+        `Reservation: ${args.reservationNo}\n` +
+        `Guest: ${args.guestName}\n` +
+        `Room: ${args.roomNumber}\n` +
+        `Check-in: ${checkIn}\n` +
+        `Check-out: ${checkOut}\n` +
+        `Total: ${totalAmount}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.6;">
+          <p style="margin: 0 0 12px;">A new reservation has been created for <strong>${hotelName}</strong>.</p>
+          <table style="border-collapse: collapse;">
+            <tr><td style="padding: 4px 12px 4px 0;"><strong>Reservation</strong></td><td style="padding: 4px 0;">${reservationNo}</td></tr>
+            <tr><td style="padding: 4px 12px 4px 0;"><strong>Guest</strong></td><td style="padding: 4px 0;">${guestName}</td></tr>
+            <tr><td style="padding: 4px 12px 4px 0;"><strong>Room</strong></td><td style="padding: 4px 0;">${roomNumber}</td></tr>
+            <tr><td style="padding: 4px 12px 4px 0;"><strong>Check-in</strong></td><td style="padding: 4px 0;">${checkIn}</td></tr>
+            <tr><td style="padding: 4px 12px 4px 0;"><strong>Check-out</strong></td><td style="padding: 4px 0;">${checkOut}</td></tr>
+            <tr><td style="padding: 4px 12px 4px 0;"><strong>Total</strong></td><td style="padding: 4px 0;">${totalAmount}</td></tr>
+          </table>
+        </div>
+      `,
+    };
+  }
+
+  private buildNewReservationInAppNotification(args: {
+    reservationNo: string;
+    guestName: string;
+    roomNumber: string;
+    checkIn: Date;
+    checkOut: Date;
+  }) {
+    return {
+      title: 'New reservation created',
+      message:
+        `${args.guestName} was booked into room ${args.roomNumber} ` +
+        `from ${fmtDate(args.checkIn)} to ${fmtDate(args.checkOut)}.`,
+      metadata: {
+        reservationNo: args.reservationNo,
+        guestName: args.guestName,
+        roomNumber: args.roomNumber,
+        checkIn: args.checkIn.toISOString(),
+        checkOut: args.checkOut.toISOString(),
+      },
+    };
+  }
+
+  private buildPaymentReceivedNotificationEmail(args: {
+    hotelName: string;
+    reservationNo: string;
+    guestName: string;
+    roomNumber: string;
+    amount: number;
+    method: string;
+    reference?: string | null;
+    paidAt: Date;
+    paidAmount: number;
+    balance: number;
+  }) {
+    const hotelName = escapeHtml(args.hotelName);
+    const reservationNo = escapeHtml(args.reservationNo);
+    const guestName = escapeHtml(args.guestName);
+    const roomNumber = escapeHtml(args.roomNumber);
+    const method = escapeHtml(args.method);
+    const reference = args.reference ? escapeHtml(args.reference) : null;
+    const amount = fmtMoney(args.amount);
+    const paidAmount = fmtMoney(args.paidAmount);
+    const balance = fmtMoney(args.balance);
+    const paidAt = fmtDate(args.paidAt);
+
+    return {
+      subject: `Payment received for reservation ${reservationNo}`,
+      text:
+        `${args.hotelName}: a payment has been recorded.\n` +
+        `Reservation: ${args.reservationNo}\n` +
+        `Guest: ${args.guestName}\n` +
+        `Room: ${args.roomNumber}\n` +
+        `Amount: ${amount}\n` +
+        `Method: ${args.method}\n` +
+        `Paid at: ${paidAt}\n` +
+        `Total paid: ${paidAmount}\n` +
+        `Balance: ${balance}` +
+        (args.reference ? `\nReference: ${args.reference}` : ''),
+      html: `
+        <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.6;">
+          <p style="margin: 0 0 12px;">A payment has been recorded for <strong>${hotelName}</strong>.</p>
+          <table style="border-collapse: collapse;">
+            <tr><td style="padding: 4px 12px 4px 0;"><strong>Reservation</strong></td><td style="padding: 4px 0;">${reservationNo}</td></tr>
+            <tr><td style="padding: 4px 12px 4px 0;"><strong>Guest</strong></td><td style="padding: 4px 0;">${guestName}</td></tr>
+            <tr><td style="padding: 4px 12px 4px 0;"><strong>Room</strong></td><td style="padding: 4px 0;">${roomNumber}</td></tr>
+            <tr><td style="padding: 4px 12px 4px 0;"><strong>Amount</strong></td><td style="padding: 4px 0;">${amount}</td></tr>
+            <tr><td style="padding: 4px 12px 4px 0;"><strong>Method</strong></td><td style="padding: 4px 0;">${method}</td></tr>
+            <tr><td style="padding: 4px 12px 4px 0;"><strong>Paid at</strong></td><td style="padding: 4px 0;">${paidAt}</td></tr>
+            <tr><td style="padding: 4px 12px 4px 0;"><strong>Total paid</strong></td><td style="padding: 4px 0;">${paidAmount}</td></tr>
+            <tr><td style="padding: 4px 12px 4px 0;"><strong>Balance</strong></td><td style="padding: 4px 0;">${balance}</td></tr>
+            ${reference ? `<tr><td style="padding: 4px 12px 4px 0;"><strong>Reference</strong></td><td style="padding: 4px 0;">${reference}</td></tr>` : ''}
+          </table>
+        </div>
+      `,
+    };
+  }
+
+  private buildPaymentReceivedInAppNotification(args: {
+    reservationNo: string;
+    guestName: string;
+    amount: number;
+    method: string;
+    balance: number;
+  }) {
+    return {
+      title: 'Payment received',
+      message:
+        `${fmtMoney(args.amount)} was received for ${args.guestName} ` +
+        `on reservation ${args.reservationNo} via ${args.method}. ` +
+        `Balance remaining: ${fmtMoney(args.balance)}.`,
+      metadata: {
+        reservationNo: args.reservationNo,
+        guestName: args.guestName,
+        amount: args.amount,
+        method: args.method,
+        balance: args.balance,
+      },
+    };
+  }
 
   private async assertGuestBelongsToHotel(hotelId: string, guestId?: string | null) {
     if (!guestId) return;
@@ -240,7 +388,7 @@ export class ReservationsService {
   }
 
   // ── Create ──────────────────────────────────────────────────────────────────
-  async create(hotelId: string, dto: CreateReservationDto) {
+  async create(hotelId: string, dto: CreateReservationDto, actorUserId?: string) {
     const data = this.normalizeOptionalRelations(dto);
     const checkIn = new Date(dto.checkIn);
     const checkOut = new Date(dto.checkOut);
@@ -300,6 +448,44 @@ export class ReservationsService {
       where: { id: dto.roomId },
       data: { status: RoomStatus.RESERVED },
     });
+
+    const hotel = await this.prisma.hotel.findUnique({
+      where: { id: hotelId },
+      select: { name: true },
+    });
+
+    const reservationDetails = reservation as any;
+    const guestName =
+      `${reservationDetails.guest?.firstName ?? ''} ${reservationDetails.guest?.lastName ?? ''}`.trim() ||
+      'Guest';
+
+    try {
+      await this.notifications.dispatch({
+        hotelId,
+        event: 'newReservation',
+        excludeEmailUserIds: actorUserId ? [actorUserId] : undefined,
+        email: this.buildNewReservationNotificationEmail({
+          hotelName: hotel?.name ?? 'HotelOS',
+          reservationNo: reservation.reservationNo,
+          guestName,
+          roomNumber: reservationDetails.room?.number ?? 'Unassigned',
+          checkIn: reservation.checkIn,
+          checkOut: reservation.checkOut,
+          totalAmount: Number(reservation.totalAmount),
+        }),
+        inApp: this.buildNewReservationInAppNotification({
+          reservationNo: reservation.reservationNo,
+          guestName,
+          roomNumber: reservationDetails.room?.number ?? 'Unassigned',
+          checkIn: reservation.checkIn,
+          checkOut: reservation.checkOut,
+        }),
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Failed to dispatch newReservation notification for ${reservation.reservationNo}: ${String(error)}`,
+      );
+    }
 
     return reservation;
   }
@@ -556,7 +742,12 @@ export class ReservationsService {
     return invoice;
   }
 
-  async recordPayment(hotelId: string, reservationId: string, dto: RecordPaymentDto) {
+  async recordPayment(
+    hotelId: string,
+    reservationId: string,
+    dto: RecordPaymentDto,
+    actorUserId?: string,
+  ) {
     const result = await this.prisma.$transaction(async (tx) => {
       const reservation = await tx.reservation.findFirst({
         where: { id: reservationId, hotelId },
@@ -630,6 +821,52 @@ export class ReservationsService {
       invoiceId: result.payment.invoiceId,
       paymentId: result.payment.id,
     });
+
+    const hotel = await this.prisma.hotel.findUnique({
+      where: { id: hotelId },
+      select: { name: true },
+    });
+
+    const reservationDetails = result.reservation as any;
+    const guestName =
+      `${reservationDetails.guest?.firstName ?? ''} ${reservationDetails.guest?.lastName ?? ''}`.trim() ||
+      'Guest';
+
+    try {
+      const balance = Math.max(
+        0,
+        Number(result.reservation.totalAmount) - Number(result.reservation.paidAmount),
+      );
+
+      await this.notifications.dispatch({
+        hotelId,
+        event: 'paymentReceived',
+        excludeEmailUserIds: actorUserId ? [actorUserId] : undefined,
+        email: this.buildPaymentReceivedNotificationEmail({
+          hotelName: hotel?.name ?? 'HotelOS',
+          reservationNo: result.reservation.reservationNo,
+          guestName,
+          roomNumber: reservationDetails.room?.number ?? 'Unassigned',
+          amount: Number(result.payment.amount),
+          method: result.payment.method,
+          reference: result.payment.reference,
+          paidAt: result.payment.paidAt,
+          paidAmount: Number(result.reservation.paidAmount),
+          balance,
+        }),
+        inApp: this.buildPaymentReceivedInAppNotification({
+          reservationNo: result.reservation.reservationNo,
+          guestName,
+          amount: Number(result.payment.amount),
+          method: result.payment.method,
+          balance,
+        }),
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Failed to dispatch paymentReceived notification for ${result.reservation.reservationNo}: ${String(error)}`,
+      );
+    }
 
     return result;
   }

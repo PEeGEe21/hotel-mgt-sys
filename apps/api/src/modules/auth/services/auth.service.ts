@@ -305,6 +305,12 @@ export class AuthService {
         hotelName: user.staff?.hotel?.name ?? 'HotelOS',
         resetUrl,
       }),
+      hotelId: user.staff?.hotelId ?? null,
+      event: 'passwordReset',
+      metadata: {
+        userId: user.id,
+        resetUrl,
+      },
     });
 
     await this.logAudit({

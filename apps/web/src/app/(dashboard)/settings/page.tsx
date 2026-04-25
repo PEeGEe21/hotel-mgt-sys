@@ -17,6 +17,7 @@ import {
   Bell,
   KeyRound,
   ShieldCheck,
+  Mail,
 } from 'lucide-react';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Layers } from '@solar-icons/react';
@@ -121,6 +122,15 @@ const sections = [
     bg: 'bg-emerald-500/10 border-emerald-500/20',
     adminOnly: true,
   },
+  // {
+  //   label: 'Mailing',
+  //   description: 'Inspect sent, failed, and skipped emails',
+  //   href: '/settings/mailing',
+  //   icon: Mail,
+  //   color: 'text-sky-400',
+  //   bg: 'bg-sky-500/10 border-sky-500/20',
+  //   adminOnly: true,
+  // },
   {
     label: 'Password Reset',
     description: 'Self-service password change and security',

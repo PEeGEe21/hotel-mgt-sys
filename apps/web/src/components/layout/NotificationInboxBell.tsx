@@ -1,0 +1,180 @@
+'use client';
+
+import Link from 'next/link';
+import { Bell, CheckCheck, ExternalLink } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  useMarkAllNotificationsAsRead,
+  useMarkNotificationAsRead,
+  useNotifications,
+  type AppNotification,
+} from '@/hooks/useNotifications';
+import { cn } from '@/lib/utils';
+
+function formatNotificationTime(value: string) {
+  const date = new Date(value);
+  const now = Date.now();
+  const diffMinutes = Math.max(1, Math.round((now - date.getTime()) / 60_000));
+
+  if (diffMinutes < 60) return `${diffMinutes}m ago`;
+
+  const diffHours = Math.round(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+
+  const diffDays = Math.round(diffHours / 24);
+  if (diffDays < 7) return `${diffDays}d ago`;
+
+  return date.toLocaleDateString('en-NG', {
+    day: 'numeric',
+    month: 'short',
+  });
+}
+
+function NotificationRow({
+  item,
+  onRead,
+  isUpdating,
+}: {
+  item: AppNotification;
+  onRead: (id: string) => void;
+  isUpdating: boolean;
+}) {
+  const unread = !item.readAt;
+
+  return (
+    <button
+      type="button"
+      onClick={() => unread && onRead(item.id)}
+      className={cn(
+        'w-full rounded-xl border px-3 py-3 text-left transition-colors',
+        unread
+          ? 'border-blue-500/20 bg-blue-500/8 hover:bg-blue-500/12'
+          : 'border-[#1e2536] bg-[#0f1117] hover:bg-white/5',
+      )}
+      disabled={isUpdating}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <p className="truncate text-sm font-medium text-slate-100">{item.title}</p>
+            {unread && <span className="h-2 w-2 rounded-full bg-blue-400" />}
+          </div>
+          <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-400">{item.message}</p>
+        </div>
+        <span className="shrink-0 text-[11px] text-slate-500">
+          {formatNotificationTime(item.createdAt)}
+        </span>
+      </div>
+    </button>
+  );
+}
+
+export default function NotificationInboxBell() {
+  const { data, isLoading } = useNotifications({ limit: 8 });
+  const markAsRead = useMarkNotificationAsRead();
+  const markAllAsRead = useMarkAllNotificationsAsRead();
+
+  const items = data?.items ?? [];
+  const unreadCount = data?.unreadCount ?? 0;
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button className="relative flex h-9 w-9 items-center justify-center rounded-lg border border-[#1e2536] bg-[#0f1117] text-slate-400 transition-colors hover:text-slate-200">
+          <Bell size={16} />
+          {unreadCount > 0 && (
+            <>
+              <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-blue-500" />
+              <Badge className="absolute -right-2 -top-2 h-5 min-w-5 rounded-full bg-blue-500 px-1 text-[10px] text-white hover:bg-blue-500">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </Badge>
+            </>
+          )}
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        sideOffset={10}
+        className="w-[380px] min-w-[380px] rounded-2xl border border-[#1e2536] bg-[#161b27] p-0 text-white shadow-2xl"
+      >
+        <div className="flex items-center justify-between px-4 py-3">
+          <div>
+            <p className="text-sm font-semibold text-slate-100">Notifications</p>
+            <p className="text-xs text-slate-500">
+              {unreadCount > 0 ? `${unreadCount} unread` : 'You are all caught up'}
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => markAllAsRead.mutate()}
+            disabled={unreadCount === 0 || markAllAsRead.isPending}
+            className="h-8 rounded-lg px-2 text-xs text-slate-300 hover:bg-white/5 hover:text-white"
+          >
+            <CheckCheck className="mr-1 h-3.5 w-3.5" />
+            Read all
+          </Button>
+        </div>
+        <DropdownMenuSeparator className="mx-0 bg-[#1e2536]" />
+
+        <ScrollArea className="max-h-[420px]">
+          <div className="space-y-2 p-3">
+            {isLoading && (
+              <>
+                {Array.from({ length: 4 }).map((_, index) => (
+                  <div
+                    key={index}
+                    className="h-20 animate-pulse rounded-xl border border-[#1e2536] bg-[#0f1117]"
+                  />
+                ))}
+              </>
+            )}
+
+            {!isLoading && items.length === 0 && (
+              <div className="rounded-xl border border-dashed border-[#263046] bg-[#0f1117] px-4 py-10 text-center">
+                <Bell className="mx-auto mb-3 h-5 w-5 text-slate-500" />
+                <p className="text-sm font-medium text-slate-200">No notifications yet</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Reservation, payment, and stock alerts will show up here.
+                </p>
+              </div>
+            )}
+
+            {!isLoading &&
+              items.map((item) => (
+                <NotificationRow
+                  key={item.id}
+                  item={item}
+                  onRead={(id) => markAsRead.mutate(id)}
+                  isUpdating={markAsRead.isPending}
+                />
+              ))}
+          </div>
+        </ScrollArea>
+
+        <DropdownMenuSeparator className="mx-0 bg-[#1e2536]" />
+        <div className="p-2">
+          <Button
+            asChild
+            variant="ghost"
+            className="h-10 w-full justify-between rounded-xl text-slate-300 hover:bg-white/5 hover:text-white"
+          >
+            <Link href="/notifications">
+              View all notifications
+              <ExternalLink className="h-4 w-4" />
+            </Link>
+          </Button>
+        </div>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}

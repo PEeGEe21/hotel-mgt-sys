@@ -109,6 +109,7 @@ export function useInventoryList(
     search?: string;
     category?: string;
   } = {},
+  options: { enabled?: boolean } = {},
 ) {
   return useQuery<InventoryListResponse>({
     queryKey: ['inventory', filters],
@@ -121,6 +122,7 @@ export function useInventoryList(
       const { data } = await api.get(`/inventory?${params}`);
       return data;
     },
+    enabled: options.enabled ?? true,
     staleTime: 30_000,
     placeholderData: keepPreviousData,
   });

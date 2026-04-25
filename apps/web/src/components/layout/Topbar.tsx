@@ -1,8 +1,9 @@
 'use client';
 import Link from 'next/link';
-import { Bell, Search, User, Settings, LogOut, ChevronDown } from 'lucide-react';
+import { Search, User, LogOut, ChevronDown } from 'lucide-react';
 import { useAuthStore } from '@/store/auth.store';
 import { useHydration } from '@/hooks/useHydration';
+import NotificationInboxBell from '@/components/layout/NotificationInboxBell';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,10 +36,7 @@ export default function Topbar() {
         />
       </div>
       <div className="flex items-center gap-4">
-        <button className="relative w-9 h-9 rounded-lg border border-[#1e2536] bg-[#0f1117] flex items-center justify-center text-slate-400 hover:text-slate-200 transition-colors">
-          <Bell size={16} />
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-blue-500 rounded-full" />
-        </button>
+        <NotificationInboxBell />
         {/* User avatar + info */}
         {!hydrated ? (
           <div className="flex items-center gap-2.5">

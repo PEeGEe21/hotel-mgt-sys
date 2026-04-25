@@ -186,6 +186,8 @@ model Hotel {
   journalEntries JournalEntry[]
   auditLogs     AuditLog[]
   notificationPreferences NotificationPreference[]
+  notifications Notification[]
+  emailDeliveryLogs EmailDeliveryLog[]
 }
 
 // ─── USERS & AUTH ─────────────────────────────────────────────────────────────
@@ -214,6 +216,7 @@ model User {
   auditLogsActor AuditLog[] @relation("AuditActor")
   auditLogsTarget AuditLog[] @relation("AuditTarget")
   notificationPreferences NotificationPreference[]
+  notifications Notification[]
 }
 
 model PasswordResetToken {
@@ -281,6 +284,48 @@ model NotificationPreference {
 
   @@unique([userId, event])
   @@index([hotelId])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  hotelId   String
+  event     String
+  title     String
+  message   String
+  metadata  Json?
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hotel Hotel @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+
+  @@index([hotelId, createdAt])
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
+}
+
+model EmailDeliveryLog {
+  id                String   @id @default(uuid())
+  hotelId           String?
+  recipient         String
+  subject           String
+  fromEmail         String
+  provider          String
+  event             String?
+  status            String
+  errorMessage      String?
+  providerMessageId String?
+  metadata          Json?
+  sentAt            DateTime?
+  createdAt         DateTime @default(now())
+
+  hotel Hotel? @relation(fields: [hotelId], references: [id], onDelete: SetNull)
+
+  @@index([hotelId, createdAt])
+  @@index([status, createdAt])
+  @@index([event, createdAt])
+  @@index([recipient, createdAt])
 }
 
 model RolePermission {

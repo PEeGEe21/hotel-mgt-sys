@@ -55,7 +55,7 @@ export class ReservationsController {
   @Permissions('create:reservations')
   @ApiOperation({ summary: 'Create a new reservation' })
   create(@Request() req: any, @Body() dto: CreateReservationDto) {
-    return this.svc.create(req.user.hotelId, dto);
+    return this.svc.create(req.user.hotelId, dto, req.user.sub);
   }
 
   @Put(':id')
@@ -108,7 +108,7 @@ export class ReservationsController {
   @Permissions('create:finance')
   @ApiOperation({ summary: 'Record a payment for a reservation' })
   recordPayment(@Request() req: any, @Param('id') id: string, @Body() dto: RecordPaymentDto) {
-    return this.svc.recordPayment(req.user.hotelId, id, dto);
+    return this.svc.recordPayment(req.user.hotelId, id, dto, req.user.sub);
   }
 
   @Get(':id/payments/:paymentId/receipt')

@@ -33,6 +33,7 @@ import {
   Landmark,
   CreditCard,
   Shield,
+  MessageCircleCode,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/auth.store';
 import { useAppStore } from '@/store/app.store';
@@ -81,6 +82,7 @@ const nav: NavEntry[] = [
     ],
   },
   { label: 'Reports', href: '/reports', icon: BarChart3 },
+  { label: 'Mailing', href: '/mailing', icon: MessageCircleCode },
   {
     label: 'Facilities',
     href: '/#',

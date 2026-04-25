@@ -51,7 +51,7 @@ export class InventoryController {
   @Post()
   @Permissions('create:inventory')
   create(@Request() req: any, @Body() dto: CreateInventoryItemDto) {
-    return this.inventoryService.create(req.user.hotelId, dto);
+    return this.inventoryService.create(req.user.hotelId, dto, req.user.sub);
   }
 
   @Post(':id/movements')
@@ -64,13 +64,14 @@ export class InventoryController {
     return this.inventoryService.recordMovement(req.user.hotelId, id, {
       ...dto,
       staffId: req.user.staffId,
+      actorUserId: req.user.sub,
     });
   }
 
   @Patch(':id')
   @Permissions('edit:inventory')
   update(@Request() req: any, @Param('id') id: string, @Body() dto: UpdateInventoryItemDto) {
-    return this.inventoryService.update(req.user.hotelId, id, dto);
+    return this.inventoryService.update(req.user.hotelId, id, dto, req.user.sub);
   }
 
   @Delete(':id')

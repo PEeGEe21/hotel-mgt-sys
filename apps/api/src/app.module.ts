@@ -29,6 +29,7 @@ import { LedgerModule } from './modules/ledger/ledger.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { AuditLogsModule } from './modules/audit-logs/audit-logs.module';
 import { HealthModule } from './modules/health/health.module';
+import { MailingModule } from './modules/mailing/mailing.module';
 
 @Module({
   imports: [
@@ -63,6 +64,7 @@ import { HealthModule } from './modules/health/health.module';
     LedgerModule,
     NotificationsModule,
     AuditLogsModule,
+    MailingModule,
   ],
   providers: [PermissionsGuard, RolesGuard],
 })

@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { refreshAction } from '@/actions/auth.actions';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST() {
   const result = await refreshAction();
 

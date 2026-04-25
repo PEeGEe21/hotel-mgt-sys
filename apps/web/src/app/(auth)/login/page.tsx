@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { Hotel, Lock, Mail, Eye, EyeOff, MapPin } from 'lucide-react';
 import Link from 'next/link';
 import { useAuthStore } from '@/store/auth.store';
@@ -9,6 +9,14 @@ import { useHotelBranding } from '@/hooks/hotel/useHotelBranding';
 import openToast from '@/components/ToastComponent';
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginContent />
+    </Suspense>
+  );
+}
+
+function LoginContent() {
   // const login = useAuthStore((s) => s.login);
 
   const { login, isLoading, error, clearError } = useAuthStore();

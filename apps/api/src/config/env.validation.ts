@@ -46,16 +46,31 @@ function assertCorsOrigins(value: EnvValue) {
     .forEach((origin) => assertUrl(origin, 'CORS_ORIGINS'));
 }
 
+function assertEmailFrom(value: EnvValue, key: string) {
+  if (!value) return;
+
+  const trimmed = value.trim();
+  const match = trimmed.match(/<([^<>]+)>$/);
+  const email = (match ? match[1] : trimmed).trim();
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new Error(`${key} must be a valid email address or formatted sender like "HotelOS <noreply@example.com>"`);
+  }
+}
+
 export function validateEnv(config: Record<string, unknown>) {
   const nodeEnv = readString(config, 'NODE_ENV') || 'development';
   const frontendUrl = readString(config, 'FRONTEND_URL');
   const corsOrigins = readString(config, 'CORS_ORIGINS');
+  const emailFrom = readString(config, 'EMAIL_FROM');
+  const resendApiKey = readString(config, 'RESEND_API_KEY');
 
   assertInteger(readString(config, 'PORT'), 'PORT');
   assertInteger(readString(config, 'RATE_LIMIT_WINDOW_MS'), 'RATE_LIMIT_WINDOW_MS');
   assertInteger(readString(config, 'RATE_LIMIT_MAX'), 'RATE_LIMIT_MAX');
   assertUrl(frontendUrl, 'FRONTEND_URL');
   assertCorsOrigins(corsOrigins);
+  assertEmailFrom(emailFrom, 'EMAIL_FROM');
 
   if (nodeEnv === PRODUCTION) {
     if (!readString(config, 'DATABASE_URL')) {
@@ -68,6 +83,14 @@ export function validateEnv(config: Record<string, unknown>) {
 
     assertProductionSecret(readString(config, 'JWT_SECRET'), 'JWT_SECRET', 'change-me-in-production');
     assertProductionSecret(readString(config, 'JWT_REFRESH_SECRET'), 'JWT_REFRESH_SECRET', 'refresh-change-me');
+
+    if (!resendApiKey) {
+      throw new Error('RESEND_API_KEY is required in production');
+    }
+
+    if (!emailFrom) {
+      throw new Error('EMAIL_FROM is required in production');
+    }
   }
 
   return config;
