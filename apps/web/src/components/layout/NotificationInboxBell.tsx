@@ -17,6 +17,7 @@ import {
   useNotifications,
   type AppNotification,
 } from '@/hooks/useNotifications';
+import { useNotificationsRealtime } from '@/hooks/useNotificationsRealtime';
 import { cn } from '@/lib/utils';
 
 function formatNotificationTime(value: string) {
@@ -78,6 +79,8 @@ function NotificationRow({
 }
 
 export default function NotificationInboxBell() {
+  useNotificationsRealtime();
+
   const { data, isLoading } = useNotifications({ limit: 8 });
   const markAsRead = useMarkNotificationAsRead();
   const markAllAsRead = useMarkAllNotificationsAsRead();
@@ -88,7 +91,7 @@ export default function NotificationInboxBell() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button className="relative flex h-9 w-9 items-center justify-center rounded-lg border border-[#1e2536] bg-[#0f1117] text-slate-400 transition-colors hover:text-slate-200">
+        <button className="relative flex h-9 w-9 items-center justify-center rounded-lg border border-[#1e2536] bg-[#0f1117] text-slate-400 transition-colors hover:text-slate-200 outline-none focus-visible:outline-none">
           <Bell size={16} />
           {unreadCount > 0 && (
             <>
@@ -105,7 +108,7 @@ export default function NotificationInboxBell() {
         sideOffset={10}
         className="w-[380px] min-w-[380px] rounded-2xl border border-[#1e2536] bg-[#161b27] p-0 text-white shadow-2xl"
       >
-        <div className="flex items-center justify-between px-4 py-3">
+        <div className="flex items-center justify-between px-4 pt-3">
           <div>
             <p className="text-sm font-semibold text-slate-100">Notifications</p>
             <p className="text-xs text-slate-500">
@@ -126,8 +129,8 @@ export default function NotificationInboxBell() {
         </div>
         <DropdownMenuSeparator className="mx-0 bg-[#1e2536]" />
 
-        <ScrollArea className="max-h-[420px]">
-          <div className="space-y-2 p-3">
+        <ScrollArea className="max-h-[320px] ">
+          <div className="space-y-2 py-3 px-3 pb-20">
             {isLoading && (
               <>
                 {Array.from({ length: 4 }).map((_, index) => (
@@ -162,11 +165,11 @@ export default function NotificationInboxBell() {
         </ScrollArea>
 
         <DropdownMenuSeparator className="mx-0 bg-[#1e2536]" />
-        <div className="p-2">
+        <div className="px-2 pt-2 bottom-0 absolute w-full">
           <Button
             asChild
             variant="ghost"
-            className="h-10 w-full justify-between rounded-xl text-slate-300 hover:bg-white/5 hover:text-white"
+            className="bg-[#161b27] h-10 w-full justify-between rounded-xl text-slate-300 hover:bg-white/5 hover:text-white"
           >
             <Link href="/notifications">
               View all notifications

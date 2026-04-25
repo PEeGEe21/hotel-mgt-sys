@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { randomUUID } from 'crypto';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 
 type SendEmailOptions = {
@@ -36,25 +36,23 @@ export class EmailService {
     sentAt?: Date | null;
   }) {
     try {
-      await this.prisma.$executeRaw`
-        INSERT INTO "EmailDeliveryLog"
-          ("id", "hotelId", "recipient", "subject", "fromEmail", "provider", "event", "status", "errorMessage", "providerMessageId", "metadata", "sentAt")
-        VALUES
-          (
-            ${randomUUID()},
-            ${args.hotelId ?? null},
-            ${args.recipient},
-            ${args.subject},
-            ${args.fromEmail},
-            ${args.provider},
-            ${args.event ?? null},
-            ${args.status},
-            ${args.errorMessage ?? null},
-            ${args.providerMessageId ?? null},
-            ${args.metadata ? JSON.stringify(args.metadata) : null}::jsonb,
-            ${args.sentAt ?? null}
-          )
-      `;
+      await this.prisma.emailDeliveryLog.create({
+        data: {
+          hotelId: args.hotelId ?? null,
+          recipient: args.recipient,
+          subject: args.subject,
+          fromEmail: args.fromEmail,
+          provider: args.provider,
+          event: args.event ?? null,
+          status: args.status,
+          errorMessage: args.errorMessage ?? null,
+          providerMessageId: args.providerMessageId ?? null,
+          metadata: args.metadata
+            ? (args.metadata as Prisma.InputJsonValue)
+            : Prisma.JsonNull,
+          sentAt: args.sentAt ?? null,
+        },
+      });
     } catch (error) {
       this.logger.warn(`Email delivery log insert failed: ${String(error)}`);
     }

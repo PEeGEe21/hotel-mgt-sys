@@ -32,6 +32,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { AuditLogsModule } from './modules/audit-logs/audit-logs.module';
 import { HealthModule } from './modules/health/health.module';
 import { MailingModule } from './modules/mailing/mailing.module';
+import { RealtimeModule } from './modules/realtime/realtime.module';
 
 @Module({
   imports: [
@@ -84,6 +85,7 @@ import { MailingModule } from './modules/mailing/mailing.module';
     NotificationsModule,
     AuditLogsModule,
     MailingModule,
+    RealtimeModule,
   ],
   providers: [PermissionsGuard, RolesGuard],
 })

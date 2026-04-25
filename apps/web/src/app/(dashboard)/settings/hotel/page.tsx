@@ -48,6 +48,9 @@ export default function HotelProfilePage() {
     attendancePinRequired: false,
     attendanceKioskEnabled: true,
     attendancePersonalEnabled: true,
+    attendanceAbsenceScanEnabled: true,
+    attendanceAbsenceScanHour: '9',
+    attendanceAbsenceScanMinute: '15',
   });
 
   const set = (k: string, v: string | boolean | null) => setForm((f) => ({ ...f, [k]: v }));
@@ -77,6 +80,9 @@ export default function HotelProfilePage() {
       attendancePinRequired: Boolean(data.attendancePinRequired),
       attendanceKioskEnabled: Boolean(data.attendanceKioskEnabled ?? true),
       attendancePersonalEnabled: Boolean(data.attendancePersonalEnabled ?? true),
+      attendanceAbsenceScanEnabled: Boolean(data.cronSettings?.attendanceAbsenceScanEnabled ?? true),
+      attendanceAbsenceScanHour: String(data.cronSettings?.attendanceAbsenceScanHour ?? 9),
+      attendanceAbsenceScanMinute: String(data.cronSettings?.attendanceAbsenceScanMinute ?? 15),
     }));
     setLogoPreview(data.logo ?? null);
   }, [data]);
@@ -103,6 +109,11 @@ export default function HotelProfilePage() {
       attendancePinRequired: form.attendancePinRequired,
       attendanceKioskEnabled: form.attendanceKioskEnabled,
       attendancePersonalEnabled: form.attendancePersonalEnabled,
+      cronSettings: {
+        attendanceAbsenceScanEnabled: form.attendanceAbsenceScanEnabled,
+        attendanceAbsenceScanHour: Number(form.attendanceAbsenceScanHour || 9),
+        attendanceAbsenceScanMinute: Number(form.attendanceAbsenceScanMinute || 15),
+      },
     };
     try {
       await updateHotel.mutateAsync(payload);
@@ -383,6 +394,48 @@ export default function HotelProfilePage() {
                 }`}
               />
             </button>
+          </div>
+
+          <div className="col-span-2 flex items-center justify-between bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-2.5">
+            <div>
+              <p className="text-sm text-slate-200">Enable absence scheduler</p>
+              <p className="text-xs text-slate-500">Generate absence alerts from the background scheduler</p>
+            </div>
+            <button
+              onClick={() => set('attendanceAbsenceScanEnabled', !form.attendanceAbsenceScanEnabled)}
+              className={`w-12 h-6 rounded-full transition-colors ${
+                form.attendanceAbsenceScanEnabled ? 'bg-emerald-500/80' : 'bg-slate-700'
+              }`}
+            >
+              <span
+                className={`block w-5 h-5 bg-white rounded-full mt-0.5 transition-transform ${
+                  form.attendanceAbsenceScanEnabled ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+
+          <div>
+            <label className="text-xs text-slate-500 uppercase tracking-wider mb-1.5 block">
+              Absence Check Hour
+            </label>
+            <input
+              value={form.attendanceAbsenceScanHour}
+              onChange={(e) => set('attendanceAbsenceScanHour', e.target.value)}
+              placeholder="9"
+              className="w-full bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-2.5 text-sm text-slate-200 outline-none focus:border-blue-500 transition-colors"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-slate-500 uppercase tracking-wider mb-1.5 block">
+              Absence Check Minute
+            </label>
+            <input
+              value={form.attendanceAbsenceScanMinute}
+              onChange={(e) => set('attendanceAbsenceScanMinute', e.target.value)}
+              placeholder="15"
+              className="w-full bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-2.5 text-sm text-slate-200 outline-none focus:border-blue-500 transition-colors"
+            />
           </div>
 
           <div>

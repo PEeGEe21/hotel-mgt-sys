@@ -730,7 +730,6 @@ export class FacilitiesService {
         await this.notifications.dispatch({
           hotelId,
           event: 'maintenanceAlert',
-          excludeUserIds: actorUserId ? [actorUserId] : undefined,
           excludeEmailUserIds: actorUserId ? [actorUserId] : undefined,
           email: this.buildMaintenanceAlertEmail({
             hotelName: hotel?.name ?? 'HotelOS',

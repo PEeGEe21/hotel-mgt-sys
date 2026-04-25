@@ -9,6 +9,7 @@ import { createRateLimitMiddleware } from './common/middleware/rate-limit.middle
 import { createRequestLoggingMiddleware } from './common/middleware/request-logging.middleware';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { StructuredLogger } from './common/logger/structured-logger';
+import { RealtimeIoAdapter } from './modules/realtime/realtime.adapter';
 
 async function bootstrap() {
   const logger = new StructuredLogger();
@@ -22,6 +23,7 @@ async function bootstrap() {
 
   // Production hardening
   app.enableCors(buildCorsOptions(configService));
+  app.useWebSocketAdapter(new RealtimeIoAdapter(app, configService));
   app.use(createRequestLoggingMiddleware(logger));
   app.use(compression());
   app.use(

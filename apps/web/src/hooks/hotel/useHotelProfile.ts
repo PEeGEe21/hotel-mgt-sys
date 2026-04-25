@@ -27,6 +27,11 @@ export type HotelProfile = {
   attendancePinRequired: boolean;
   attendanceKioskEnabled: boolean;
   attendancePersonalEnabled: boolean;
+  cronSettings: {
+    attendanceAbsenceScanEnabled: boolean;
+    attendanceAbsenceScanHour: number;
+    attendanceAbsenceScanMinute: number;
+  };
 };
 
 export function useHotelProfile() {

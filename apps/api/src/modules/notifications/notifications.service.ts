@@ -1,9 +1,9 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { randomUUID } from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { DEFAULT_ROLE_PERMISSIONS } from '../../common/constants/role-permissions';
-import { Role } from '@prisma/client';
+import { Prisma, Role } from '@prisma/client';
 import { EmailService } from '../../common/email/email.service';
+import { RealtimeGateway } from '../realtime/realtime.gateway';
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
   NOTIFICATION_EVENT_PERMISSIONS,
@@ -70,22 +70,6 @@ type DispatchNotificationResult = {
   };
 };
 
-type NotificationRow = {
-  id: string;
-  userId: string;
-  hotelId: string;
-  event: string;
-  title: string;
-  message: string;
-  metadata: Record<string, unknown> | null;
-  readAt: Date | null;
-  createdAt: Date;
-};
-
-type NotificationCountRow = {
-  count: bigint;
-};
-
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
@@ -93,7 +77,23 @@ export class NotificationsService {
   constructor(
     private prisma: PrismaService,
     private emailService: EmailService,
+    private realtimeGateway: RealtimeGateway,
   ) {}
+
+  private publishNotificationsSync(
+    userIds: string[],
+    hotelId: string | null,
+    reason: 'created' | 'read' | 'read-all',
+    event?: NotificationEvent,
+  ) {
+    const uniqueUserIds = [...new Set(userIds.filter(Boolean))];
+    this.realtimeGateway.emitNotificationSync(uniqueUserIds, {
+      hotelId,
+      reason,
+      event,
+      timestamp: new Date().toISOString(),
+    });
+  }
 
   private async getRolePermissions(hotelId: string | null, role: Role): Promise<string[]> {
     if (!hotelId) return DEFAULT_ROLE_PERMISSIONS[role] ?? [];
@@ -167,20 +167,6 @@ export class NotificationsService {
       channelEmail: row?.channelEmail ?? defaults.channelEmail,
       channelInApp: row?.channelInApp ?? defaults.channelInApp,
       channelPush: row?.channelPush ?? defaults.channelPush,
-    };
-  }
-
-  private mapNotificationRow(row: NotificationRow) {
-    return {
-      id: row.id,
-      userId: row.userId,
-      hotelId: row.hotelId,
-      event: row.event,
-      title: row.title,
-      message: row.message,
-      metadata: row.metadata,
-      readAt: row.readAt,
-      createdAt: row.createdAt,
     };
   }
 
@@ -316,23 +302,27 @@ export class NotificationsService {
     }
 
     if (options.inApp && inAppEligibleRecipients.length) {
-      await this.prisma.$transaction(
-        inAppEligibleRecipients.map((user) =>
-          this.prisma.$executeRaw`
-            INSERT INTO "Notification" ("id", "userId", "hotelId", "event", "title", "message", "metadata")
-            VALUES (
-              ${randomUUID()},
-              ${user.id},
-              ${options.hotelId},
-              ${options.event},
-              ${options.inApp!.title},
-              ${options.inApp!.message},
-              ${options.inApp!.metadata ? JSON.stringify(options.inApp!.metadata) : null}::jsonb
-            )
-          `,
-        ),
-      );
-      inAppDispatched = inAppEligibleRecipients.length;
+      const created = await this.prisma.notification.createMany({
+        data: inAppEligibleRecipients.map((user) => ({
+          userId: user.id,
+          hotelId: options.hotelId,
+          event: options.event,
+          title: options.inApp!.title,
+          message: options.inApp!.message,
+          metadata: options.inApp!.metadata
+            ? (options.inApp!.metadata as Prisma.InputJsonValue)
+            : Prisma.JsonNull,
+        })),
+      });
+      inAppDispatched = created.count;
+      if (created.count > 0) {
+        this.publishNotificationsSync(
+          inAppEligibleRecipients.map((user) => user.id),
+          options.hotelId,
+          'created',
+          options.event,
+        );
+      }
     }
 
     const inAppEligible = inAppEligibleRecipients.length;
@@ -445,54 +435,32 @@ export class NotificationsService {
 
     const limit = Math.min(Math.max(options.limit ?? 20, 1), 100);
     const page = Math.max(options.page ?? 1, 1);
-    const offset = (page - 1) * limit;
-    const unreadOnlyClause = options.unreadOnly
-      ? this.prisma.$queryRaw<NotificationRow[]>`
-          SELECT "id", "userId", "hotelId", "event", "title", "message", "metadata", "readAt", "createdAt"
-          FROM "Notification"
-          WHERE "userId" = ${userId} AND "hotelId" = ${hotelId} AND "readAt" IS NULL
-          ORDER BY "createdAt" DESC
-          OFFSET ${offset}
-          LIMIT ${limit}
-        `
-      : this.prisma.$queryRaw<NotificationRow[]>`
-          SELECT "id", "userId", "hotelId", "event", "title", "message", "metadata", "readAt", "createdAt"
-          FROM "Notification"
-          WHERE "userId" = ${userId} AND "hotelId" = ${hotelId}
-          ORDER BY "createdAt" DESC
-          OFFSET ${offset}
-          LIMIT ${limit}
-        `;
+    const skip = (page - 1) * limit;
+    const where = {
+      userId,
+      hotelId,
+      ...(options.unreadOnly ? { readAt: null } : {}),
+    };
 
-    const [items, unreadCountRows, totalRows] = await Promise.all([
-      unreadOnlyClause,
-      this.prisma.$queryRaw<NotificationCountRow[]>`
-        SELECT COUNT(*)::bigint AS count
-        FROM "Notification"
-        WHERE "userId" = ${userId} AND "hotelId" = ${hotelId} AND "readAt" IS NULL
-      `,
-      options.unreadOnly
-        ? this.prisma.$queryRaw<NotificationCountRow[]>`
-            SELECT COUNT(*)::bigint AS count
-            FROM "Notification"
-            WHERE "userId" = ${userId} AND "hotelId" = ${hotelId} AND "readAt" IS NULL
-          `
-        : this.prisma.$queryRaw<NotificationCountRow[]>`
-            SELECT COUNT(*)::bigint AS count
-            FROM "Notification"
-            WHERE "userId" = ${userId} AND "hotelId" = ${hotelId}
-          `,
+    const [items, unreadCount, total] = await Promise.all([
+      this.prisma.notification.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.notification.count({
+        where: { userId, hotelId, readAt: null },
+      }),
+      this.prisma.notification.count({ where }),
     ]);
 
-    const total = Number(totalRows[0]?.count ?? 0);
     const lastPage = Math.max(1, Math.ceil(total / limit));
-    const from = total === 0 ? 0 : offset + 1;
-    const to = Math.min(total, offset + items.length);
-
-    console.log(items, 'items')
+    const from = total === 0 ? 0 : skip + 1;
+    const to = Math.min(total, skip + items.length);
     return {
-      items: items.map((item) => this.mapNotificationRow(item)),
-      unreadCount: Number(unreadCountRows[0]?.count ?? 0),
+      items,
+      unreadCount,
       meta: {
         total,
         current_page: page,
@@ -509,24 +477,23 @@ export class NotificationsService {
       throw new NotFoundException('Notification not found.');
     }
 
-    const existing = await this.prisma.$queryRaw<NotificationRow[]>`
-      SELECT "id", "userId", "hotelId", "event", "title", "message", "metadata", "readAt", "createdAt"
-      FROM "Notification"
-      WHERE "id" = ${notificationId} AND "userId" = ${userId} AND "hotelId" = ${hotelId}
-      LIMIT 1
-    `;
-    if (!existing[0]) {
+    const existing = await this.prisma.notification.findFirst({
+      where: { id: notificationId, userId, hotelId },
+    });
+    if (!existing) {
       throw new NotFoundException('Notification not found.');
     }
 
-    const updated = await this.prisma.$queryRaw<NotificationRow[]>`
-      UPDATE "Notification"
-      SET "readAt" = COALESCE("readAt", ${new Date()})
-      WHERE "id" = ${notificationId}
-      RETURNING "id", "userId", "hotelId", "event", "title", "message", "metadata", "readAt", "createdAt"
-    `;
+    const updated = await this.prisma.notification.update({
+      where: { id: notificationId },
+      data: { readAt: existing.readAt ?? new Date() },
+    });
 
-    return this.mapNotificationRow(updated[0]);
+    if (!existing.readAt) {
+      this.publishNotificationsSync([userId], hotelId, 'read', existing.event as NotificationEvent);
+    }
+
+    return updated;
   }
 
   async markAllAsRead(userId: string, hotelId: string | null) {
@@ -534,12 +501,15 @@ export class NotificationsService {
       return { updated: 0 };
     }
 
-    const result = await this.prisma.$executeRaw`
-      UPDATE "Notification"
-      SET "readAt" = ${new Date()}
-      WHERE "userId" = ${userId} AND "hotelId" = ${hotelId} AND "readAt" IS NULL
-    `;
+    const result = await this.prisma.notification.updateMany({
+      where: { userId, hotelId, readAt: null },
+      data: { readAt: new Date() },
+    });
 
-    return { updated: Number(result) };
+    if (result.count > 0) {
+      this.publishNotificationsSync([userId], hotelId, 'read-all');
+    }
+
+    return { updated: result.count };
   }
 }

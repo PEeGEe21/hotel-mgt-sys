@@ -19,7 +19,6 @@ export class NotificationsController {
     @Query('page') page?: string,
     @Query('unreadOnly') unreadOnly?: string,
   ) {
-    console.log('enteres here')
     return this.notificationsService.listInbox(req.user.sub, req.user.hotelId ?? null, {
       limit: limit ? Number(limit) : undefined,
       page: page ? Number(page) : undefined,

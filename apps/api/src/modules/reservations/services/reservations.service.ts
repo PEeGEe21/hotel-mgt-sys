@@ -701,7 +701,6 @@ export class ReservationsService {
       await this.notifications.dispatch({
         hotelId,
         event: 'checkIn',
-        excludeUserIds: actorUserId ? [actorUserId] : undefined,
         excludeEmailUserIds: actorUserId ? [actorUserId] : undefined,
         email: this.buildCheckInNotificationEmail({
           hotelName: hotel?.name ?? 'HotelOS',
@@ -759,7 +758,6 @@ export class ReservationsService {
       await this.notifications.dispatch({
         hotelId,
         event: 'checkOut',
-        excludeUserIds: actorUserId ? [actorUserId] : undefined,
         excludeEmailUserIds: actorUserId ? [actorUserId] : undefined,
         email: this.buildCheckOutNotificationEmail({
           hotelName: hotel?.name ?? 'HotelOS',

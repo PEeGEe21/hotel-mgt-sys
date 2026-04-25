@@ -19,7 +19,7 @@ export function ReportsHeader({
           <select
             value={dateRange}
             onChange={(e) => onDateRangeChange(e.target.value)}
-            className="bg-transparent text-sm text-slate-300 outline-none selection:bg-transparent"
+            className="bg-[#0f1117] text-sm text-slate-300 outline-none selection:bg-transparent"
           >
             {['Last 7 Days', 'Last 30 Days', 'Last 6 Months', 'This Year'].map((option) => (
               <option key={option}>{option}</option>

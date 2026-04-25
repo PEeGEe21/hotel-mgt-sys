@@ -162,26 +162,33 @@ export class AttendanceService {
           alertDate: args.alertDate,
         };
 
+    const metadataWhere = Object.entries(metadataPattern).map(([key, value]) => ({
+      metadata: {
+        path: [key],
+        equals: value,
+      },
+    }));
+
     const [notificationMatch, emailLogMatch] = await Promise.all([
-      this.prisma.$queryRaw<Array<{ id: string }>>`
-        SELECT "id"
-        FROM "Notification"
-        WHERE "hotelId" = ${args.hotelId}
-          AND "event" = 'attendanceAlert'
-          AND "metadata" @> ${JSON.stringify(metadataPattern)}::jsonb
-        LIMIT 1
-      `,
-      this.prisma.$queryRaw<Array<{ id: string }>>`
-        SELECT "id"
-        FROM "EmailDeliveryLog"
-        WHERE "hotelId" = ${args.hotelId}
-          AND "event" = 'attendanceAlert'
-          AND "metadata" @> ${JSON.stringify(metadataPattern)}::jsonb
-        LIMIT 1
-      `,
+      this.prisma.notification.findFirst({
+        where: {
+          hotelId: args.hotelId,
+          event: 'attendanceAlert',
+          AND: metadataWhere,
+        },
+        select: { id: true },
+      }),
+      this.prisma.emailDeliveryLog.findFirst({
+        where: {
+          hotelId: args.hotelId,
+          event: 'attendanceAlert',
+          AND: metadataWhere,
+        },
+        select: { id: true },
+      }),
     ]);
 
-    return Boolean(notificationMatch[0] || emailLogMatch[0]);
+    return Boolean(notificationMatch || emailLogMatch);
   }
 
   private async dispatchAbsenceInAppAlert(args: {

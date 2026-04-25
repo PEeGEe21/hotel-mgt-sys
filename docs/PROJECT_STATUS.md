@@ -4,8 +4,8 @@ Last updated: 2026-04-25
 
 ## Next Up
 
-- [ ] Email + notifications
-Notes: core delivery is now in place. Next priority is expanding event coverage, finishing production polish, and improving live delivery.
+- [ ] Background jobs / scheduler
+Notes: scheduler foundation is now in place. Next priority is expanding jobs for more timed notifications, retries, digest workflows, and operational visibility.
 
 ## Settings
 
@@ -53,26 +53,32 @@ Done recently:
 - topbar notifications bell + inbox dropdown
 - full notifications page with pagination
 - mailing module with sent/failed/skipped email log viewer
-- `newReservation`, `paymentReceived`, and `lowInventory` events wired
+- `newReservation`, `paymentReceived`, `lowInventory`, `checkIn`, `checkOut`, `maintenanceAlert`, and `attendanceAlert` events wired
 - actor kept for in-app notifications and excluded from self-email by default
+- attendance absence alerts now use per-staff in-app notifications plus a summary email instead of one email per absent staff member
 
 Still pending:
-- add more event coverage: `checkIn`, `checkOut`, `maintenanceAlert`, `attendanceAlert`
 - richer email templates and branding consistency
 - optional linkage between in-app notifications and email delivery rows
-- live delivery for in-app notifications via SSE/WebSocket
-- replace raw SQL notification persistence/read paths with typed Prisma once client generation is stable
-- apply pending Prisma migrations for `Notification` and `EmailDeliveryLog` in active environments
+- expand scheduler / jobs coverage for additional timed notification workflows
+- link notification inbox items back to mail log detail where relevant
 
 - [ ] Realtime WebSocket/SSE
-Notes: kitchen display and live orders still pending. Notifications can also reuse SSE/WebSocket later for live inbox updates.
+Done recently:
+- shared authenticated WebSocket gateway foundation
+- live in-app notification delivery via WebSocket-driven inbox refresh
+
+Still pending:
+- kitchen display realtime updates
+- live POS/order state propagation
+- housekeeping/facilities live task board updates
+- broader cross-module realtime event strategy and admin observability
 
 ## Backlogged
 
 - [ ] Inventory Purchase Orders tab
 - [ ] Payroll PAYE + pension
 - [ ] Transactional email template library polish
-- [ ] Email/provider troubleshooting detail drawer in mailing viewer
 - [ ] Global currency/date formatting consistency
 - [ ] Dashboard loading, empty, and error state standardization
 - [ ] UI-only action audit and wiring
@@ -115,6 +121,16 @@ Notes: added fail-fast production env validation, including production hardening
 - [ ] Redis
 Notes: still needed for caching, sessions, and eventually distributed rate limiting.
 
+- [ ] Background jobs / scheduler
+Notes: needed for timed workflows like attendance absence detection, notification digests, retries, and other non-request-triggered tasks. This is the next infrastructure priority.
+
+Done recently:
+- attendance queue scaffolded in the API
+- recurring scheduler heartbeat added for attendance jobs
+- dedicated `HotelCronSetting` model added for DB-backed per-hotel scheduling
+- attendance absence detection moved off admin page loads into scheduler-backed execution
+- hotel settings now expose attendance absence scheduler controls
+
 - [ ] Connection pooling
 
 - [x] Response compression
@@ -125,6 +141,6 @@ Notes: Playwright after feature freeze.
 
 ## Newly Added
 
-- [ ] Apply pending Prisma migrations in local/staging/production for notifications and mailing logs
-- [ ] Admin UX polish for mailing log filters, event grouping, and error inspection
-- [ ] Notification inbox unread badge/live refresh polish after event expansion
+- [ ] Expand DB-backed cron settings beyond attendance absence scanning
+- [ ] Add scheduler observability/admin visibility for last run status and failures
+- [ ] Realtime event naming/payload conventions across modules

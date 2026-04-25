@@ -47,7 +47,7 @@ export function useNotifications(options: { limit?: number; page?: number; unrea
       return data;
     },
     staleTime: 20_000,
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
   });
 }
 
