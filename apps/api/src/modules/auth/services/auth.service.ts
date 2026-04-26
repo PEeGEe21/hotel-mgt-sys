@@ -299,7 +299,7 @@ export class AuthService {
     const resetUrl = this.buildPasswordResetUrl(token);
     await this.email.sendEmail({
       to: user.email,
-      subject: 'Reset your HotelOS password',
+      subject: `Reset your ${user.staff?.hotel?.name ?? 'HotelOS'} password`,
       text: `Reset your password: ${resetUrl}\n\nThis link expires in 30 minutes. If you did not request this, you can ignore this email.`,
       html: this.buildPasswordResetEmail({
         hotelName: user.staff?.hotel?.name ?? 'HotelOS',

@@ -187,6 +187,9 @@ export default function ReservationsPage() {
   const [view, setView] = useState<'list' | 'calendar'>('list');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<ReservationStatus | 'All'>('All');
+  const [checkoutTiming, setCheckoutTiming] = useState<
+    'All' | 'dueTomorrow' | 'dueToday' | 'overdue'
+  >('All');
   const [page, setPage] = useState(1);
   const [showNew, setShowNew] = useState(false);
   const [limit, setLimit] = useState(20);
@@ -197,6 +200,7 @@ export default function ReservationsPage() {
 
   const { data, isLoading, isFetching } = useReservations({
     status: statusFilter !== 'All' ? statusFilter : undefined,
+    checkoutTiming: checkoutTiming !== 'All' ? checkoutTiming : undefined,
     search: debouncedSearch || undefined,
     page,
     limit,
@@ -284,6 +288,33 @@ export default function ReservationsPage() {
               >
                 {cfg && <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />}
                 {s === 'All' ? 'All' : cfg!.label}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {[
+            { key: 'All', label: 'All Checkout Timing' },
+            { key: 'dueTomorrow', label: 'Due Tomorrow' },
+            { key: 'dueToday', label: 'Due Today' },
+            { key: 'overdue', label: 'Overdue' },
+          ].map((item) => {
+            const active = checkoutTiming === item.key;
+            return (
+              <button
+                key={item.key}
+                onClick={() => {
+                  setCheckoutTiming(item.key as any);
+                  setPage(1);
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                  active
+                    ? 'bg-violet-600/20 border-violet-500/30 text-violet-300'
+                    : 'bg-[#161b27] border-[#1e2536] text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                {item.label}
               </button>
             );
           })}

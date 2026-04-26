@@ -5,7 +5,7 @@ import {
   ConflictException,
   Logger,
 } from '@nestjs/common';
-import { ReservationStatus, PaymentStatus, RoomStatus, BookingType } from '@prisma/client';
+import { ReservationStatus, PaymentStatus, RoomStatus, BookingType, HotelCronJobType, TaskPriority, TaskStatus } from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { genReservationNo, nightsBetween } from 'src/common/utils/reservation.utils';
 import { buildCursor, buildCursorWhere, parseCursor } from 'src/common/utils/cursor.utils';
@@ -20,6 +20,7 @@ import * as handlebars from 'handlebars';
 import { compileTemplate } from 'src/common/utils/compile-template.utils';
 import { LedgerService } from '../../ledger/ledger.service';
 import { NotificationsService } from '../../notifications/notifications.service';
+import { EmailService } from '../../../common/email/email.service';
 
 // ─── Service ──────────────────────────────────────────────────────────────────
 
@@ -41,7 +42,90 @@ export class ReservationsService {
     private prisma: PrismaService,
     private ledger: LedgerService,
     private notifications: NotificationsService,
+    private email: EmailService,
   ) {}
+
+  private applyDefaultCheckoutTime(value: Date, hour: number, minute: number) {
+    const next = new Date(value);
+    next.setHours(hour, minute, 0, 0);
+    return next;
+  }
+
+  private async recordCronJobSuccess(args: {
+    hotelId: string;
+    jobType: HotelCronJobType;
+    enabled: boolean;
+    runAtHour: number;
+    runAtMinute: number;
+    triggeredAt: Date;
+  }) {
+    await this.prisma.hotelCronSetting.upsert({
+      where: {
+        hotelId_jobType: {
+          hotelId: args.hotelId,
+          jobType: args.jobType,
+        },
+      },
+      update: {
+        enabled: args.enabled,
+        runAtHour: args.runAtHour,
+        runAtMinute: args.runAtMinute,
+        lastTriggeredAt: args.triggeredAt,
+        lastSucceededAt: args.triggeredAt,
+        lastError: null,
+      } as any,
+      create: {
+        hotelId: args.hotelId,
+        jobType: args.jobType,
+        enabled: args.enabled,
+        runAtHour: args.runAtHour,
+        runAtMinute: args.runAtMinute,
+        lastTriggeredAt: args.triggeredAt,
+        lastSucceededAt: args.triggeredAt,
+        lastError: null,
+      } as any,
+    });
+  }
+
+  private async recordCronJobFailure(args: {
+    hotelId: string;
+    jobType: HotelCronJobType;
+    enabled: boolean;
+    runAtHour: number;
+    runAtMinute: number;
+    triggeredAt: Date;
+    error: unknown;
+  }) {
+    const message =
+      args.error instanceof Error ? args.error.message : String(args.error ?? 'Unknown error');
+
+    await this.prisma.hotelCronSetting.upsert({
+      where: {
+        hotelId_jobType: {
+          hotelId: args.hotelId,
+          jobType: args.jobType,
+        },
+      },
+      update: {
+        enabled: args.enabled,
+        runAtHour: args.runAtHour,
+        runAtMinute: args.runAtMinute,
+        lastTriggeredAt: args.triggeredAt,
+        lastFailedAt: args.triggeredAt,
+        lastError: message,
+      } as any,
+      create: {
+        hotelId: args.hotelId,
+        jobType: args.jobType,
+        enabled: args.enabled,
+        runAtHour: args.runAtHour,
+        runAtMinute: args.runAtMinute,
+        lastTriggeredAt: args.triggeredAt,
+        lastFailedAt: args.triggeredAt,
+        lastError: message,
+      } as any,
+    });
+  }
 
   private buildNewReservationNotificationEmail(args: {
     hotelName: string;
@@ -292,6 +376,204 @@ export class ReservationsService {
     };
   }
 
+  private buildCheckoutDueSummaryEmail(args: {
+    hotelName: string;
+    alertDate: string;
+    scheduledAt: string;
+    dueTodayCount: number;
+    overdueCount: number;
+    reservations: Array<{
+      reservationNo: string;
+      guestName: string;
+      roomNumber: string;
+      checkOut: Date;
+    }>;
+  }) {
+    const rows = args.reservations
+      .map(
+        (reservation) => `
+          <tr>
+            <td style="padding: 6px 12px 6px 0;">${escapeHtml(reservation.reservationNo)}</td>
+            <td style="padding: 6px 12px 6px 0;">${escapeHtml(reservation.guestName)}</td>
+            <td style="padding: 6px 12px 6px 0;">${escapeHtml(reservation.roomNumber)}</td>
+            <td style="padding: 6px 0;">${fmtDate(reservation.checkOut)}</td>
+          </tr>
+        `,
+      )
+      .join('');
+
+    return {
+      subject: `Checkout due summary for ${args.alertDate}`,
+      text:
+        `${args.hotelName}: ${args.reservations.length} checked-in reservations are due out or overdue as of ${args.scheduledAt}.\n` +
+        `Due today: ${args.dueTodayCount}\n` +
+        `Overdue: ${args.overdueCount}\n` +
+        args.reservations
+          .map(
+            (reservation) =>
+              `- ${reservation.reservationNo}: ${reservation.guestName} in room ${reservation.roomNumber} (checkout ${fmtDate(reservation.checkOut)})`,
+          )
+          .join('\n'),
+      html: `
+        <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.6;">
+          <p style="margin: 0 0 12px;">
+            Checkout summary for <strong>${escapeHtml(args.hotelName)}</strong> on
+            <strong>${escapeHtml(args.alertDate)}</strong> at <strong>${escapeHtml(args.scheduledAt)}</strong>.
+          </p>
+          <p style="margin: 0 0 12px;">
+            <strong>${args.reservations.length}</strong> checked-in reservations are due out or overdue.
+          </p>
+          <ul style="margin: 0 0 12px; padding-left: 18px;">
+            <li>Due today: ${args.dueTodayCount}</li>
+            <li>Overdue: ${args.overdueCount}</li>
+          </ul>
+          <table style="border-collapse: collapse;">
+            <thead>
+              <tr>
+                <th align="left" style="padding: 6px 12px 6px 0;">Reservation</th>
+                <th align="left" style="padding: 6px 12px 6px 0;">Guest</th>
+                <th align="left" style="padding: 6px 12px 6px 0;">Room</th>
+                <th align="left" style="padding: 6px 0;">Checkout</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      `,
+    };
+  }
+
+  private buildCheckoutDueInAppNotification(args: {
+    alertDate: string;
+    dueTodayCount: number;
+    overdueCount: number;
+    reservations: Array<{
+      reservationId: string;
+      reservationNo: string;
+      guestName: string;
+      roomNumber: string;
+      checkOut: Date;
+    }>;
+  }) {
+    return {
+      title: 'Checkout attention needed',
+      message:
+        `${args.reservations.length} checked-in reservations are due out or overdue for ${args.alertDate}. ` +
+        `Due today: ${args.dueTodayCount}. Overdue: ${args.overdueCount}.`,
+      metadata: {
+        alertDate: args.alertDate,
+        dueTodayCount: args.dueTodayCount,
+        overdueCount: args.overdueCount,
+        reservations: args.reservations.map((reservation) => ({
+          reservationId: reservation.reservationId,
+          reservationNo: reservation.reservationNo,
+          guestName: reservation.guestName,
+          roomNumber: reservation.roomNumber,
+          checkOut: reservation.checkOut.toISOString(),
+        })),
+      },
+    };
+  }
+
+  private buildGuestCheckoutReminderEmail(args: {
+    hotelName: string;
+    guestName: string;
+    roomNumber: string;
+    reservationNo: string;
+    checkOut: Date;
+    stage: 'dayBefore' | 'sameDay';
+  }) {
+    const hotelName = escapeHtml(args.hotelName);
+    const guestName = escapeHtml(args.guestName);
+    const roomNumber = escapeHtml(args.roomNumber);
+    const reservationNo = escapeHtml(args.reservationNo);
+    const checkOut = fmtDateTime(args.checkOut);
+
+    const intro =
+      args.stage === 'dayBefore'
+        ? `This is a reminder from ${args.hotelName} that your checkout for room ${args.roomNumber} is tomorrow at ${checkOut}.`
+        : `This is a reminder from ${args.hotelName} that your checkout for room ${args.roomNumber} is scheduled for ${checkOut}.`;
+
+    return {
+      subject:
+        args.stage === 'dayBefore'
+          ? `Checkout tomorrow for reservation ${args.reservationNo}`
+          : `Checkout reminder for reservation ${args.reservationNo}`,
+      text:
+        `Hello ${args.guestName},\n` +
+        `${intro}\n` +
+        `If you need help or an extension, please contact the front desk.`,
+      html: `
+        <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.6;">
+          <p style="margin: 0 0 12px;">Hello <strong>${guestName}</strong>,</p>
+          <p style="margin: 0 0 12px;">
+            ${escapeHtml(intro)}
+          </p>
+          <p style="margin: 0 0 12px;">Reservation: <strong>${reservationNo}</strong></p>
+          <p style="margin: 0;">
+            If you need help or would like to discuss an extension, please contact the front desk.
+          </p>
+        </div>
+      `,
+    };
+  }
+
+  private async hasSentGuestCheckoutReminder(args: {
+    hotelId: string;
+    recipient: string;
+    event: string;
+    subject: string;
+  }) {
+    const existing = await this.prisma.emailDeliveryLog.findFirst({
+      where: {
+        hotelId: args.hotelId,
+        recipient: args.recipient,
+        event: args.event,
+        subject: args.subject,
+        status: 'SENT',
+      },
+      select: { id: true },
+    });
+
+    return Boolean(existing);
+  }
+
+  private async ensureCheckoutHousekeepingTask(args: {
+    hotelId: string;
+    roomId: string;
+    reservationNo: string;
+    guestName: string;
+    dueBy: Date;
+    overdue: boolean;
+  }) {
+    const type = 'CHECKOUT_PREP';
+    const existing = await this.prisma.housekeepingTask.findFirst({
+      where: {
+        hotelId: args.hotelId,
+        roomId: args.roomId,
+        type,
+        status: { in: [TaskStatus.PENDING, TaskStatus.IN_PROGRESS] },
+        notes: { contains: args.reservationNo, mode: 'insensitive' },
+      },
+      select: { id: true },
+    });
+
+    if (existing) return;
+
+    const label = args.overdue ? 'Overdue checkout follow-up' : 'Due checkout prep';
+    await this.prisma.housekeepingTask.create({
+      data: {
+        hotelId: args.hotelId,
+        roomId: args.roomId,
+        type,
+        priority: args.overdue ? TaskPriority.HIGH : TaskPriority.NORMAL,
+        status: TaskStatus.PENDING,
+        dueBy: args.dueBy,
+        notes: `${label} for reservation ${args.reservationNo} (${args.guestName}). Created by checkout scheduler.`,
+      },
+    });
+  }
+
   private async assertGuestBelongsToHotel(hotelId: string, guestId?: string | null) {
     if (!guestId) return;
     const guest = await this.prisma.guest.findFirst({
@@ -372,6 +654,9 @@ export class ReservationsService {
     if (filters.status) where.status = filters.status;
     if (filters.roomId) where.roomId = filters.roomId;
     if (filters.guestId) where.guestId = filters.guestId;
+    if (filters.checkoutTiming && !filters.status) {
+      where.status = ReservationStatus.CHECKED_IN;
+    }
 
     if (filters.dateFrom || filters.dateTo) {
       where.AND = [
@@ -389,26 +674,57 @@ export class ReservationsService {
       ];
     }
 
-    const [reservations, total] = await Promise.all([
-      this.prisma.reservation.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { checkIn: 'desc' },
-        include: {
-          guest: {
-            select: { id: true, firstName: true, lastName: true, isVip: true, phone: true },
-          },
-          room: {
-            select: { id: true, number: true, type: true, floor: { select: { name: true } } },
-          },
-          company: { select: { id: true, name: true } },
-          groupBooking: { select: { id: true, groupNo: true, name: true } },
-          _count: { select: { folioItems: true } },
+    const hotel = filters.checkoutTiming
+      ? ((await this.prisma.hotel.findUnique({
+          where: { id: hotelId },
+          select: { timezone: true } as any,
+        })) as { timezone?: string | null } | null)
+      : null;
+
+    const reservationQuery = {
+      where,
+      orderBy: { checkIn: 'desc' as const },
+      include: {
+        guest: {
+          select: { id: true, firstName: true, lastName: true, isVip: true, phone: true },
         },
-      }),
-      this.prisma.reservation.count({ where }),
-    ]);
+        room: {
+          select: { id: true, number: true, type: true, floor: { select: { name: true } } },
+        },
+        company: { select: { id: true, name: true } },
+        groupBooking: { select: { id: true, groupNo: true, name: true } },
+        _count: { select: { folioItems: true } },
+      },
+    };
+
+    const [reservations, total] = filters.checkoutTiming
+      ? await (async () => {
+          const timezone = hotel?.timezone || 'Africa/Lagos';
+          const now = new Date();
+          const today = getZonedDateParts(now, timezone).date;
+          const tomorrowRef = new Date(now);
+          tomorrowRef.setDate(tomorrowRef.getDate() + 1);
+          const tomorrow = getZonedDateParts(tomorrowRef, timezone).date;
+
+          const allReservations = await this.prisma.reservation.findMany(reservationQuery);
+          const filtered = allReservations.filter((reservation) => {
+            const localCheckoutDate = getZonedDateParts(reservation.checkOut, timezone).date;
+            if (filters.checkoutTiming === 'dueTomorrow') return localCheckoutDate === tomorrow;
+            if (filters.checkoutTiming === 'dueToday') return localCheckoutDate === today;
+            if (filters.checkoutTiming === 'overdue') return localCheckoutDate < today;
+            return true;
+          });
+
+          return [filtered.slice(skip, skip + limit), filtered.length] as const;
+        })()
+      : await Promise.all([
+          this.prisma.reservation.findMany({
+            ...reservationQuery,
+            skip,
+            take: limit,
+          }),
+          this.prisma.reservation.count({ where }),
+        ]);
 
     // Today's stats (always hotel-wide)
     const today = new Date();
@@ -461,8 +777,21 @@ export class ReservationsService {
 
   // ── Availability ────────────────────────────────────────────────────────────
   async getAvailableRooms(hotelId: string, dto: AvailabilityDto) {
+    const hotel = await this.prisma.hotel.findUnique({
+      where: { id: hotelId },
+      select: { defaultCheckoutHour: true, defaultCheckoutMinute: true } as any,
+    }) as
+      | {
+          defaultCheckoutHour?: number | null;
+          defaultCheckoutMinute?: number | null;
+        }
+      | null;
     const checkIn = new Date(dto.checkIn);
-    const checkOut = new Date(dto.checkOut);
+    const checkOut = this.applyDefaultCheckoutTime(
+      new Date(dto.checkOut),
+      hotel?.defaultCheckoutHour ?? 12,
+      hotel?.defaultCheckoutMinute ?? 0,
+    );
 
     if (checkOut <= checkIn) throw new BadRequestException('Check-out must be after check-in.');
 
@@ -496,8 +825,21 @@ export class ReservationsService {
   // ── Create ──────────────────────────────────────────────────────────────────
   async create(hotelId: string, dto: CreateReservationDto, actorUserId?: string) {
     const data = this.normalizeOptionalRelations(dto);
+    const hotelSettings = await this.prisma.hotel.findUnique({
+      where: { id: hotelId },
+      select: { defaultCheckoutHour: true, defaultCheckoutMinute: true } as any,
+    }) as
+      | {
+          defaultCheckoutHour?: number | null;
+          defaultCheckoutMinute?: number | null;
+        }
+      | null;
     const checkIn = new Date(dto.checkIn);
-    const checkOut = new Date(dto.checkOut);
+    const checkOut = this.applyDefaultCheckoutTime(
+      new Date(dto.checkOut),
+      hotelSettings?.defaultCheckoutHour ?? 12,
+      hotelSettings?.defaultCheckoutMinute ?? 0,
+    );
 
     if (checkOut <= checkIn) throw new BadRequestException('Check-out must be after check-in.');
 
@@ -600,9 +942,24 @@ export class ReservationsService {
   async update(hotelId: string, id: string, dto: UpdateReservationDto) {
     const data = this.normalizeOptionalRelations(dto);
     const current = await this.findOne(hotelId, id);
+    const hotelSettings = await this.prisma.hotel.findUnique({
+      where: { id: hotelId },
+      select: { defaultCheckoutHour: true, defaultCheckoutMinute: true } as any,
+    }) as
+      | {
+          defaultCheckoutHour?: number | null;
+          defaultCheckoutMinute?: number | null;
+        }
+      | null;
     const nextRoomId = data.roomId ?? current.roomId;
     const nextCheckIn = data.checkIn ? new Date(data.checkIn) : current.checkIn;
-    const nextCheckOut = data.checkOut ? new Date(data.checkOut) : current.checkOut;
+    const nextCheckOut = data.checkOut
+      ? this.applyDefaultCheckoutTime(
+          new Date(data.checkOut),
+          hotelSettings?.defaultCheckoutHour ?? 12,
+          hotelSettings?.defaultCheckoutMinute ?? 0,
+        )
+      : current.checkOut;
     const roomOrDateChanged =
       nextRoomId !== current.roomId ||
       nextCheckIn.getTime() !== current.checkIn.getTime() ||
@@ -824,6 +1181,252 @@ export class ReservationsService {
     ]);
 
     return updated;
+  }
+
+  async runCheckoutDueScanForDate(referenceDate = new Date()) {
+    const reference = new Date(referenceDate);
+    const hotels = (await this.prisma.hotel.findMany({
+      select: {
+        id: true,
+        name: true,
+        timezone: true,
+        guestCheckoutReminderEnabled: true,
+        autoCreateCheckoutHousekeepingTasks: true,
+        cronSettings: {
+          where: { jobType: HotelCronJobType.CHECKOUT_DUE_SCAN },
+          take: 1,
+        },
+      } as any,
+      orderBy: { createdAt: 'asc' },
+    })) as unknown as Array<{
+      id: string;
+      name: string;
+      timezone: string | null;
+      guestCheckoutReminderEnabled?: boolean;
+      autoCreateCheckoutHousekeepingTasks?: boolean;
+      cronSettings: Array<{
+        enabled: boolean;
+        runAtHour: number;
+        runAtMinute: number;
+        lastTriggeredAt?: Date | null;
+      }>;
+    }>;
+
+    let reservationsFlagged = 0;
+    let hotelsProcessed = 0;
+    let hotelsFailed = 0;
+
+    for (const hotel of hotels) {
+      const cronSetting = hotel.cronSettings[0];
+      const enabled = cronSetting?.enabled ?? true;
+      const runAtHour = cronSetting?.runAtHour ?? 11;
+      const runAtMinute = cronSetting?.runAtMinute ?? 0;
+      const timezone = hotel.timezone || 'Africa/Lagos';
+
+      if (!enabled) continue;
+
+      const localNow = getZonedDateParts(reference, timezone);
+      const localMinutes = localNow.hour * 60 + localNow.minute;
+      const scheduledMinutes = runAtHour * 60 + runAtMinute;
+      if (localMinutes < scheduledMinutes) continue;
+
+      const alertDate = localNow.date;
+      const tomorrow = new Date(reference);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const tomorrowDate = getZonedDateParts(tomorrow, timezone).date;
+      if (cronSetting?.lastTriggeredAt) {
+        const lastTriggeredDate = getZonedDateParts(cronSetting.lastTriggeredAt, timezone).date;
+        if (lastTriggeredDate === alertDate) continue;
+      }
+
+      try {
+        const checkedInReservations = await this.prisma.reservation.findMany({
+          where: {
+            hotelId: hotel.id,
+            status: ReservationStatus.CHECKED_IN,
+          },
+          select: {
+            id: true,
+            reservationNo: true,
+            checkOut: true,
+            roomId: true,
+            guest: {
+              select: {
+                firstName: true,
+                lastName: true,
+                email: true,
+              },
+            },
+            room: {
+              select: {
+                number: true,
+              },
+            },
+          },
+          orderBy: [{ checkOut: 'asc' }, { createdAt: 'asc' }],
+        });
+
+        const reservations = checkedInReservations
+          .map((reservation) => {
+            const guestName =
+              `${reservation.guest?.firstName ?? ''} ${reservation.guest?.lastName ?? ''}`.trim() ||
+              'Guest';
+            return {
+              reservationId: reservation.id,
+              reservationNo: reservation.reservationNo,
+              guestName,
+              guestEmail: reservation.guest?.email ?? null,
+              roomId: reservation.roomId,
+              roomNumber: reservation.room?.number ?? 'Unassigned',
+              checkOut: reservation.checkOut,
+              localCheckoutDate: getZonedDateParts(reservation.checkOut, timezone).date,
+            };
+          })
+          .filter((reservation) => reservation.localCheckoutDate <= alertDate);
+
+        if (!reservations.length) {
+          await this.recordCronJobSuccess({
+            hotelId: hotel.id,
+            jobType: HotelCronJobType.CHECKOUT_DUE_SCAN,
+            enabled,
+            runAtHour,
+            runAtMinute,
+            triggeredAt: reference,
+          });
+          hotelsProcessed += 1;
+          continue;
+        }
+
+        const dueTodayCount = reservations.filter(
+          (reservation) => reservation.localCheckoutDate === alertDate,
+        ).length;
+        const overdueCount = reservations.filter(
+          (reservation) => reservation.localCheckoutDate < alertDate,
+        ).length;
+        const scheduledAt = `${String(runAtHour).padStart(2, '0')}:${String(runAtMinute).padStart(2, '0')}`;
+
+        await this.notifications.dispatch({
+          hotelId: hotel.id,
+          event: 'checkOutDue',
+          email: this.buildCheckoutDueSummaryEmail({
+            hotelName: hotel.name,
+            alertDate,
+            scheduledAt,
+            dueTodayCount,
+            overdueCount,
+            reservations,
+          }),
+          inApp: this.buildCheckoutDueInAppNotification({
+            alertDate,
+            dueTodayCount,
+            overdueCount,
+            reservations,
+          }),
+        });
+
+        if (hotel.guestCheckoutReminderEnabled) {
+          for (const reservation of checkedInReservations
+            .map((item) => ({
+              reservationId: item.id,
+              reservationNo: item.reservationNo,
+              guestName:
+                `${item.guest?.firstName ?? ''} ${item.guest?.lastName ?? ''}`.trim() || 'Guest',
+              guestEmail: item.guest?.email ?? null,
+              roomNumber: item.room?.number ?? 'Unassigned',
+              checkOut: item.checkOut,
+              localCheckoutDate: getZonedDateParts(item.checkOut, timezone).date,
+            }))
+            .filter(
+              (item) =>
+                item.guestEmail &&
+                (item.localCheckoutDate === alertDate || item.localCheckoutDate === tomorrowDate),
+            )) {
+            const stage =
+              reservation.localCheckoutDate === tomorrowDate ? 'dayBefore' : 'sameDay';
+            const event =
+              stage === 'dayBefore'
+                ? 'checkOutDueGuestDayBefore'
+                : 'checkOutDueGuestSameDay';
+            const emailContent = this.buildGuestCheckoutReminderEmail({
+              hotelName: hotel.name,
+              guestName: reservation.guestName,
+              roomNumber: reservation.roomNumber,
+              reservationNo: reservation.reservationNo,
+              checkOut: reservation.checkOut,
+              stage,
+            });
+
+            const alreadySent = await this.hasSentGuestCheckoutReminder({
+              hotelId: hotel.id,
+              recipient: reservation.guestEmail as string,
+              event,
+              subject: emailContent.subject,
+            });
+
+            if (alreadySent) continue;
+
+            await this.email.sendEmail({
+              to: reservation.guestEmail as string,
+              subject: emailContent.subject,
+              html: emailContent.html,
+              text: emailContent.text,
+              hotelId: hotel.id,
+              event,
+              metadata: {
+                reservationId: reservation.reservationId,
+                reservationNo: reservation.reservationNo,
+                stage,
+              },
+            });
+          }
+        }
+
+        if (hotel.autoCreateCheckoutHousekeepingTasks) {
+          for (const reservation of reservations) {
+            await this.ensureCheckoutHousekeepingTask({
+              hotelId: hotel.id,
+              roomId: reservation.roomId,
+              reservationNo: reservation.reservationNo,
+              guestName: reservation.guestName,
+              dueBy: reservation.checkOut,
+              overdue: reservation.localCheckoutDate < alertDate,
+            });
+          }
+        }
+
+        await this.recordCronJobSuccess({
+          hotelId: hotel.id,
+          jobType: HotelCronJobType.CHECKOUT_DUE_SCAN,
+          enabled,
+          runAtHour,
+          runAtMinute,
+          triggeredAt: reference,
+        });
+
+        reservationsFlagged += reservations.length;
+        hotelsProcessed += 1;
+      } catch (error) {
+        hotelsFailed += 1;
+        this.logger.error(`Checkout due scan failed for hotel ${hotel.id}: ${String(error)}`);
+
+        await this.recordCronJobFailure({
+          hotelId: hotel.id,
+          jobType: HotelCronJobType.CHECKOUT_DUE_SCAN,
+          enabled,
+          runAtHour,
+          runAtMinute,
+          triggeredAt: reference,
+          error,
+        });
+      }
+    }
+
+    return {
+      date: reference.toISOString(),
+      hotelsProcessed,
+      hotelsFailed,
+      reservationsFlagged,
+    };
   }
 
   // ── Add Folio Item ──────────────────────────────────────────────────────────
@@ -1131,4 +1734,27 @@ function escapeHtml(value: string) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+function getZonedDateParts(value: Date, timezone: string) {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+
+  const parts = formatter.formatToParts(new Date(value));
+  const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+
+  return {
+    date: `${map.year}-${map.month}-${map.day}`,
+    hour: Number(map.hour ?? 0),
+    minute: Number(map.minute ?? 0),
+    second: Number(map.second ?? 0),
+  };
 }

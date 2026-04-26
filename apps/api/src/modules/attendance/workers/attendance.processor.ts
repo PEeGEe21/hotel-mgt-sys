@@ -18,7 +18,7 @@ export class AttendanceProcessor {
   async handleAbsenceScan(job: Job) {
     const result = await this.attendanceService.runAbsenceDetectionForDate(new Date());
     this.logger.log(
-      `Completed ${job.name} for ${result.date}: ${result.absentStaffCount} absent staff across ${result.hotelsProcessed} hotels`,
+      `Completed ${job.name} for ${result.date}: ${result.absentStaffCount} absent staff across ${result.hotelsProcessed} hotels, ${result.hotelsFailed} failed`,
     );
     return result;
   }

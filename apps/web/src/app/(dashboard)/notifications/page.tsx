@@ -21,7 +21,7 @@ function formatFullDate(value: string) {
 
 export default function NotificationsPage() {
   const [page, setPage] = useState(1);
-  const { data, isLoading } = useNotifications({ limit: 20, page });
+  const { data, isLoading } = useNotifications({ limit: 5, page });
   const markAsRead = useMarkNotificationAsRead();
   const markAllAsRead = useMarkAllNotificationsAsRead();
 
@@ -58,7 +58,7 @@ export default function NotificationsPage() {
         </div>
       </div>
 
-      <Card className="border-[#1e2536] bg-[#161b27] text-white shadow-none">
+      <Card className="border-[#1e2536] bg-[#161b27] text-white shadow-none pb-0">
         <CardHeader className="border-b border-[#1e2536]">
           <CardTitle className="text-base font-semibold">Recent activity</CardTitle>
         </CardHeader>

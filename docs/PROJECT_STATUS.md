@@ -1,11 +1,11 @@
 # Project Status
 
-Last updated: 2026-04-25
+Last updated: 2026-04-26
 
 ## Next Up
 
 - [ ] Background jobs / scheduler
-Notes: scheduler foundation is now in place. Next priority is expanding jobs for more timed notifications, retries, digest workflows, and operational visibility.
+Notes: scheduler foundation is in place and the Redis/Bull attendance loop has been verified. Current focus is checkout automation follow-through: apply the latest DB migrations, run end-to-end verification, and then expand reminder timing / additional timed workflows.
 
 ## Settings
 
@@ -54,14 +54,19 @@ Done recently:
 - full notifications page with pagination
 - mailing module with sent/failed/skipped email log viewer
 - `newReservation`, `paymentReceived`, `lowInventory`, `checkIn`, `checkOut`, `maintenanceAlert`, and `attendanceAlert` events wired
+- `checkOutDue` staff notification flow wired for checkout-due scheduler summaries
 - actor kept for in-app notifications and excluded from self-email by default
 - attendance absence alerts now use per-staff in-app notifications plus a summary email instead of one email per absent staff member
+- guest-facing checkout reminder emails added with hotel-level enable/disable control
+- guest checkout reminders now support day-before and same-day stages with email-log deduping
 
 Still pending:
 - richer email templates and branding consistency
 - optional linkage between in-app notifications and email delivery rows
 - expand scheduler / jobs coverage for additional timed notification workflows
 - link notification inbox items back to mail log detail where relevant
+- guest-facing reminder content polish
+- broader reminder timing options beyond the current day-before / same-day checkout flow
 
 - [ ] Realtime WebSocket/SSE
 Done recently:
@@ -130,6 +135,17 @@ Done recently:
 - dedicated `HotelCronSetting` model added for DB-backed per-hotel scheduling
 - attendance absence detection moved off admin page loads into scheduler-backed execution
 - hotel settings now expose attendance absence scheduler controls
+- scheduler status visibility added in hotel settings for enabled state, last run, next run, and timezone
+- Redis/Bull attendance scheduler loop verified locally
+- stale repeatable attendance scheduler jobs are now cleaned up and startup is idempotent against outdated repeat configs
+- generic cron run-state fields added for success/failure tracking across current and future hotel jobs
+- attendance scheduler now records per-hotel last success, last failure, and last error without breaking the entire scan loop
+- checkout-due scheduler added with hotel-configured daily local run time
+- checkout-due workflow now supports guest reminder emails, staff summary alerts, and unassigned housekeeping prep task creation
+- hotel settings now support default checkout time plus guest reminder / housekeeping automation controls
+- hotel settings UI has been restructured into left-side vertical tabs with per-section save actions
+- reservations page now supports `Due Tomorrow`, `Due Today`, and `Overdue` checkout filters
+- reservation creation flow now surfaces the hotel default checkout time to staff
 
 - [ ] Connection pooling
 
@@ -142,5 +158,12 @@ Notes: Playwright after feature freeze.
 ## Newly Added
 
 - [ ] Expand DB-backed cron settings beyond attendance absence scanning
-- [ ] Add scheduler observability/admin visibility for last run status and failures
+- [~] Add scheduler observability/admin visibility for last run status and failures
+Notes: last run, next run, timezone, enabled state, last success/failure timestamps, and last error are now visible for attendance and checkout scheduling. Remaining work is applying the DB migrations in each environment, running live end-to-end verification, and extending the same model to more job types and richer reminder timing controls.
 - [ ] Realtime event naming/payload conventions across modules
+
+## Immediate Pending
+
+- [ ] Apply latest Prisma migrations for cron run-state, checkout cron job type, and hotel checkout settings
+- [ ] Run end-to-end verification for checkout automation
+Notes: verify hotel settings save/load across tabs, default checkout time behavior on reservation creation, reservation page checkout filters, guest reminder toggle behavior, staff checkout summary alerts, and housekeeping prep task creation.

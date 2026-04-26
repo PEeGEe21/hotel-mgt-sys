@@ -165,11 +165,11 @@ export default function NotificationInboxBell() {
         </ScrollArea>
 
         <DropdownMenuSeparator className="mx-0 bg-[#1e2536]" />
-        <div className="px-2 pt-2 bottom-0 absolute w-full">
+        <div className="px-2 pt-2 bottom-0 absolute w-full z-10">
           <Button
             asChild
             variant="ghost"
-            className="bg-[#161b27] h-10 w-full justify-between rounded-xl text-slate-300 hover:bg-white/5 hover:text-white"
+            className="bg-[#161b27] h-10 w-full justify-between rounded-xl text-slate-300 hover:bg-[#161b27] z-10 hover:text-white"
           >
             <Link href="/notifications">
               View all notifications

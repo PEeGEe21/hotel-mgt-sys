@@ -15,6 +15,7 @@ export type HotelProfile = {
   phone: string;
   email: string;
   website?: string | null;
+  domain?: string | null;
   logo?: string | null;
   description?: string | null;
   currency: string;
@@ -23,14 +24,29 @@ export type HotelProfile = {
   latitude?: number | null;
   longitude?: number | null;
   geofenceEnabled: boolean;
-  geofenceRadiusMeters: number;
-  attendancePinRequired: boolean;
-  attendanceKioskEnabled: boolean;
-  attendancePersonalEnabled: boolean;
-  cronSettings: {
+  geofenceRadiusMeters?: number;
+  attendancePinRequired?: boolean;
+  attendanceKioskEnabled?: boolean;
+  attendancePersonalEnabled?: boolean;
+  defaultCheckoutHour?: number;
+  defaultCheckoutMinute?: number;
+  guestCheckoutReminderEnabled?: boolean;
+  autoCreateCheckoutHousekeepingTasks: boolean;
+  cronSettings?: {
     attendanceAbsenceScanEnabled: boolean;
     attendanceAbsenceScanHour: number;
     attendanceAbsenceScanMinute: number;
+    attendanceAbsenceScanLastTriggeredAt?: string | null;
+    attendanceAbsenceScanLastSucceededAt?: string | null;
+    attendanceAbsenceScanLastFailedAt?: string | null;
+    attendanceAbsenceScanLastError?: string | null;
+    checkoutDueScanEnabled: boolean;
+    checkoutDueScanHour: number;
+    checkoutDueScanMinute: number;
+    checkoutDueScanLastTriggeredAt?: string | null;
+    checkoutDueScanLastSucceededAt?: string | null;
+    checkoutDueScanLastFailedAt?: string | null;
+    checkoutDueScanLastError?: string | null;
   };
 };
 
@@ -54,8 +70,10 @@ export function useUpdateHotelProfile() {
       useAppStore.getState().setHotel({
         id: data.id,
         name: data.name,
-        domain: null,
+        domain: data?.domain ?? null,
+        address: data?.address ?? null,
         city: data.city,
+        state: data?.state ?? null,
         country: data.country,
         currency: data.currency,
         timezone: data.timezone,
@@ -68,6 +86,10 @@ export function useUpdateHotelProfile() {
         attendancePinRequired: data.attendancePinRequired,
         attendanceKioskEnabled: data.attendanceKioskEnabled,
         attendancePersonalEnabled: data.attendancePersonalEnabled,
+        defaultCheckoutHour: data.defaultCheckoutHour,
+        defaultCheckoutMinute: data.defaultCheckoutMinute,
+        guestCheckoutReminderEnabled: data.guestCheckoutReminderEnabled,
+        autoCreateCheckoutHousekeepingTasks: data.autoCreateCheckoutHousekeepingTasks,
       });
       openToast('success', 'Hotel profile updated');
     },

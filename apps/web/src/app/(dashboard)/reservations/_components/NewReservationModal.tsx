@@ -26,6 +26,7 @@ import { AsYouType, parsePhoneNumberFromString } from 'libphonenumber-js';
 import { TYPE_CONFIG } from '@/lib/rooms-data';
 import { useDebounce } from '@/hooks/useDebounce';
 import { Dialog, DialogContent, DialogOverlay, DialogTitle } from '@/components/ui/dialog';
+import { useAppStore } from '@/store/app.store';
 
 const SOURCES = ['DIRECT', 'BOOKING.COM', 'EXPEDIA', 'AIRBNB', 'WALK_IN', 'PHONE', 'OTHER'];
 
@@ -35,6 +36,12 @@ function fmtMoney(n: number) {
     currency: 'NGN',
     maximumFractionDigits: 0,
   }).format(n);
+}
+
+function fmtCheckoutDefault(hour?: number, minute?: number) {
+  const h = String(hour ?? 12).padStart(2, '0');
+  const m = String(minute ?? 0).padStart(2, '0');
+  return `${h}:${m}`;
 }
 
 interface Props {
@@ -47,6 +54,7 @@ interface Props {
 export default function NewReservationModal({ isOpen, onClose, prefillGuest, prefillRoom }: Props) {
   const createReservation = useCreateReservation();
   const createGuest = useCreateGuest();
+  const hotel = useAppStore((state) => state.hotel);
 
   const [step, setStep] = useState(1);
   const [form, setForm] = useState({
@@ -136,6 +144,10 @@ export default function NewReservationModal({ isOpen, onClose, prefillGuest, pre
         )
       : 0;
   const totalAmount = selectedRoom ? nights * Number(selectedRoom.baseRate) : 0;
+  const checkoutDefaultLabel = fmtCheckoutDefault(
+    hotel?.defaultCheckoutHour,
+    hotel?.defaultCheckoutMinute,
+  );
 
   const canStep2 = !!form.guestId;
   const canStep3 = !!form.roomId && nights > 0;
@@ -546,6 +558,10 @@ export default function NewReservationModal({ isOpen, onClose, prefillGuest, pre
                     min={form.checkIn || new Date().toISOString().slice(0, 10)}
                     className={inputCls + ' [color-scheme:dark]'}
                   />
+                  <p className="mt-1.5 text-[11px] text-slate-500">
+                    Checkout time uses the hotel default: {checkoutDefaultLabel}
+                    {hotel?.timezone ? ` (${hotel.timezone})` : ''}
+                  </p>
                 </div>
               </div>
 
@@ -648,7 +664,10 @@ export default function NewReservationModal({ isOpen, onClose, prefillGuest, pre
                   },
                   { label: 'Floor', value: selectedRoom?.floor?.name ?? '—' },
                   { label: 'Check-in', value: form.checkIn },
-                  { label: 'Check-out', value: form.checkOut },
+                  {
+                    label: 'Check-out',
+                    value: form.checkOut ? `${form.checkOut} · ${checkoutDefaultLabel}` : '—',
+                  },
                   { label: 'Duration', value: `${nights} night${nights !== 1 ? 's' : ''}` },
                   {
                     label: 'Guests',

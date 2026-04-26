@@ -1,33 +1,34 @@
 'use client';
 
+import { HotelProfile } from '@/hooks/hotel/useHotelProfile';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-export type HotelInfo = {
-  id: string;
-  name: string;
-  domain: string | null;
-  city: string;
-  country: string;
-  currency: string;
-  timezone: string;
-  logo: string | null;
-  email: string;
-  phone: string;
-  taxRate?: number | string | null;
-  geofenceEnabled?: boolean;
-  geofenceRadiusMeters?: number;
-  attendancePinRequired?: boolean;
-  attendanceKioskEnabled?: boolean;
-  attendancePersonalEnabled?: boolean;
-};
+// export type HotelInfo = {
+//   id: string;
+//   name: string;
+//   domain: string | null;
+//   city: string;
+//   country: string;
+//   currency: string;
+//   timezone: string;
+//   logo: string | null;
+//   email: string;
+//   phone: string;
+//   taxRate?: number | string | null;
+//   geofenceEnabled?: boolean;
+//   geofenceRadiusMeters?: number;
+//   attendancePinRequired?: boolean;
+//   attendanceKioskEnabled?: boolean;
+//   attendancePersonalEnabled?: boolean;
+// };
 
 interface AppState {
-  hotel: HotelInfo | null;
+  hotel: HotelProfile | null;
   hasHydrated: boolean;
   // Actions
-  setHotel: (hotel: HotelInfo) => void;
+  setHotel: (hotel: HotelProfile) => void;
   clearHotel: () => void;
   setHasHydrated: (hasHydrated: boolean) => void;
 }

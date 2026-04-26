@@ -100,6 +100,7 @@ export type ReservationsResponse = {
 
 export type ReservationFilters = {
   status?: ReservationStatus;
+  checkoutTiming?: 'dueTomorrow' | 'dueToday' | 'overdue';
   search?: string;
   dateFrom?: string;
   dateTo?: string;
@@ -132,6 +133,7 @@ export function useReservations(filters: ReservationFilters = {}) {
     queryFn: async () => {
       const params = new URLSearchParams();
       if (filters.status) params.set('status', filters.status);
+      if (filters.checkoutTiming) params.set('checkoutTiming', filters.checkoutTiming);
       if (filters.search) params.set('search', filters.search);
       if (filters.dateFrom) params.set('dateFrom', filters.dateFrom);
       if (filters.dateTo) params.set('dateTo', filters.dateTo);

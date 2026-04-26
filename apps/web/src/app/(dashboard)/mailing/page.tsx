@@ -94,9 +94,9 @@ function DeliveryRow({
       </div>
       <div>
         <p className="font-medium text-slate-200">{row.subject}</p>
-        {row.errorMessage && (
+        {/* {row.errorMessage && (
           <p className="mt-1 line-clamp-2 text-xs text-rose-300">{row.errorMessage}</p>
-        )}
+        )} */}
       </div>
       <div className="text-xs text-slate-400">{row.event ?? '—'}</div>
       <div>

@@ -73,6 +73,7 @@ enum AttendanceType {
 
 enum HotelCronJobType {
   ATTENDANCE_ABSENCE_SCAN
+  CHECKOUT_DUE_SCAN
 }
 
 enum OrderStatus {
@@ -152,6 +153,10 @@ model Hotel {
   attendancePinRequired Boolean @default(false)
   attendanceKioskEnabled Boolean @default(true)
   attendancePersonalEnabled Boolean @default(true)
+  defaultCheckoutHour Int @default(12)
+  defaultCheckoutMinute Int @default(0)
+  guestCheckoutReminderEnabled Boolean @default(false)
+  autoCreateCheckoutHousekeepingTasks Boolean @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -203,6 +208,9 @@ model HotelCronSetting {
   runAtHour       Int              @default(9)
   runAtMinute     Int              @default(15)
   lastTriggeredAt DateTime?
+  lastSucceededAt DateTime?
+  lastFailedAt    DateTime?
+  lastError       String?
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 

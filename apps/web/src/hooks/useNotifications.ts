@@ -9,6 +9,7 @@ export type AppNotificationEvent =
   | 'newReservation'
   | 'checkIn'
   | 'checkOut'
+  | 'checkOutDue'
   | 'paymentReceived'
   | 'lowInventory'
   | 'maintenanceAlert'

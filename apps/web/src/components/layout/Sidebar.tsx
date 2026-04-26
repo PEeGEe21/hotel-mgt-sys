@@ -34,6 +34,7 @@ import {
   CreditCard,
   Shield,
   MessageCircleCode,
+  AlarmClock,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/auth.store';
 import { useAppStore } from '@/store/app.store';
@@ -54,8 +55,8 @@ const nav: NavEntry[] = [
   { label: 'Reservations', href: '/reservations', icon: CalendarCheck },
   { label: 'Guests', href: '/guests', icon: Users },
   { label: 'Staff', href: '/staff', icon: UserCheck },
-  { label: 'Attendance', href: '/attendance', icon: Clock },
-  { label: 'Clock', href: '/clock', icon: Clock },
+  { label: 'Attendance', href: '/attendance', icon: AlarmClock },
+  { label: 'Clock In/Out', href: '/clock', icon: Clock },
   {
     label: 'POS / Store',
     href: '/pos',

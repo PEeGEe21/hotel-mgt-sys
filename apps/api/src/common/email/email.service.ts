@@ -22,6 +22,16 @@ export class EmailService {
     private readonly prisma: PrismaService,
   ) {}
 
+  private parseJsonSafely(value: string) {
+    if (!value) return null;
+
+    try {
+      return JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+
   private async logDelivery(args: {
     hotelId?: string | null;
     recipient: string;
@@ -84,6 +94,7 @@ export class EmailService {
         headers: {
           Authorization: `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
+          'User-Agent': 'hotel-os/1.0',
         },
         body: JSON.stringify({
           from,
@@ -95,7 +106,7 @@ export class EmailService {
       });
 
       const rawBody = await response.text();
-      const parsedBody = rawBody ? JSON.parse(rawBody) : null;
+      const parsedBody = this.parseJsonSafely(rawBody);
 
       if (!response.ok) {
         this.logger.error(`Resend email failed with ${response.status}: ${rawBody}`);

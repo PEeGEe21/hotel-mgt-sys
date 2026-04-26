@@ -14,6 +14,82 @@ export class AttendanceService {
     private notifications: NotificationsService,
   ) {}
 
+  private async recordCronJobSuccess(args: {
+    hotelId: string;
+    jobType: HotelCronJobType;
+    enabled: boolean;
+    runAtHour: number;
+    runAtMinute: number;
+    triggeredAt: Date;
+  }) {
+    await this.prisma.hotelCronSetting.upsert({
+      where: {
+        hotelId_jobType: {
+          hotelId: args.hotelId,
+          jobType: args.jobType,
+        },
+      },
+      update: {
+        enabled: args.enabled,
+        runAtHour: args.runAtHour,
+        runAtMinute: args.runAtMinute,
+        lastTriggeredAt: args.triggeredAt,
+        lastSucceededAt: args.triggeredAt,
+        lastError: null,
+      } as any,
+      create: {
+        hotelId: args.hotelId,
+        jobType: args.jobType,
+        enabled: args.enabled,
+        runAtHour: args.runAtHour,
+        runAtMinute: args.runAtMinute,
+        lastTriggeredAt: args.triggeredAt,
+        lastSucceededAt: args.triggeredAt,
+        lastError: null,
+      } as any,
+    });
+  }
+
+  private async recordCronJobFailure(args: {
+    hotelId: string;
+    jobType: HotelCronJobType;
+    enabled: boolean;
+    runAtHour: number;
+    runAtMinute: number;
+    triggeredAt: Date;
+    error: unknown;
+  }) {
+    const message =
+      args.error instanceof Error ? args.error.message : String(args.error ?? 'Unknown error');
+
+    await this.prisma.hotelCronSetting.upsert({
+      where: {
+        hotelId_jobType: {
+          hotelId: args.hotelId,
+          jobType: args.jobType,
+        },
+      },
+      update: {
+        enabled: args.enabled,
+        runAtHour: args.runAtHour,
+        runAtMinute: args.runAtMinute,
+        lastTriggeredAt: args.triggeredAt,
+        lastFailedAt: args.triggeredAt,
+        lastError: message,
+      } as any,
+      create: {
+        hotelId: args.hotelId,
+        jobType: args.jobType,
+        enabled: args.enabled,
+        runAtHour: args.runAtHour,
+        runAtMinute: args.runAtMinute,
+        lastTriggeredAt: args.triggeredAt,
+        lastFailedAt: args.triggeredAt,
+        lastError: message,
+      } as any,
+    });
+  }
+
   private isLateClockIn(timestamp: Date) {
     return dayjs(timestamp).hour() >= 9;
   }
@@ -493,6 +569,7 @@ export class AttendanceService {
 
     let absentCount = 0;
     let hotelsProcessed = 0;
+    let hotelsFailed = 0;
 
     for (const hotel of hotels) {
       const cronSetting = hotel.cronSettings[0];
@@ -514,52 +591,56 @@ export class AttendanceService {
         if (lastTriggeredDate === alertDate) continue;
       }
 
-      const targetDay = dayjs(`${alertDate}T00:00:00`);
-      const absentStaff = await this.getAbsentStaffForHotelDay(hotel.id, targetDay);
-      absentCount += absentStaff.length;
-      hotelsProcessed += 1;
+      try {
+        const targetDay = dayjs(`${alertDate}T00:00:00`);
+        const absentStaff = await this.getAbsentStaffForHotelDay(hotel.id, targetDay);
+        absentCount += absentStaff.length;
+        hotelsProcessed += 1;
 
-      for (const member of absentStaff) {
-        await this.dispatchAbsenceInAppAlert({
-          hotelId: hotel.id,
-          staff: member,
-          alertDate: localNow.date,
-        });
-      }
-
-      await this.dispatchAbsenceDigestEmail({
-        hotelId: hotel.id,
-        alertDate: localNow.date,
-        absentStaff,
-      });
-
-      await this.prisma.hotelCronSetting.upsert({
-        where: {
-          hotelId_jobType: {
+        for (const member of absentStaff) {
+          await this.dispatchAbsenceInAppAlert({
             hotelId: hotel.id,
-            jobType: HotelCronJobType.ATTENDANCE_ABSENCE_SCAN,
-          },
-        },
-        update: {
-          enabled,
-          runAtHour,
-          runAtMinute,
-          lastTriggeredAt: reference,
-        },
-        create: {
+            staff: member,
+            alertDate: localNow.date,
+          });
+        }
+
+        await this.dispatchAbsenceDigestEmail({
+          hotelId: hotel.id,
+          alertDate: localNow.date,
+          absentStaff,
+        });
+
+        await this.recordCronJobSuccess({
           hotelId: hotel.id,
           jobType: HotelCronJobType.ATTENDANCE_ABSENCE_SCAN,
           enabled,
           runAtHour,
           runAtMinute,
-          lastTriggeredAt: reference,
-        },
-      });
+          triggeredAt: reference,
+        });
+      } catch (error) {
+        hotelsFailed += 1;
+        this.logger.error(
+          `Attendance absence scan failed for hotel ${hotel.id}: ${String(error)}`,
+        );
+
+        await this.recordCronJobFailure({
+          hotelId: hotel.id,
+          jobType: HotelCronJobType.ATTENDANCE_ABSENCE_SCAN,
+          enabled,
+          runAtHour,
+          runAtMinute,
+          triggeredAt: reference,
+          error,
+        });
+      }
     }
 
     return {
       date: reference.toISOString(),
       hotelsProcessed,
+      hotelsFailed,
       absentStaffCount: absentCount,
     };
   }
