@@ -160,6 +160,10 @@ Notes: Playwright after feature freeze.
 - [ ] Expand DB-backed cron settings beyond attendance absence scanning
 - [~] Add scheduler observability/admin visibility for last run status and failures
 Notes: last run, next run, timezone, enabled state, last success/failure timestamps, and last error are now visible for attendance and checkout scheduling. Remaining work is applying the DB migrations in each environment, running live end-to-end verification, and extending the same model to more job types and richer reminder timing controls.
+- [ ] Add housekeeping follow-up job for cleaning tasks still in progress or not done
+Notes: send staff/admin mail and in-app notifications when checkout-related cleaning remains open beyond the expected window.
+- [ ] Improve dynamic metadata across notifications and email delivery logs
+Notes: expand metadata payloads so reminders, scheduler alerts, and linked follow-up tasks can be traced more cleanly in UI and admin tooling.
 - [ ] Realtime event naming/payload conventions across modules
 
 ## Immediate Pending
