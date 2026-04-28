@@ -26,6 +26,7 @@ import { useDebounce } from '@/hooks/useDebounce';
 import Pagination from '@/components/ui/pagination';
 import { useAuthStore } from '@/store/auth.store';
 import { impersonateAction } from '@/actions/auth.actions';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAppStore } from '@/store/app.store';
 import { useRouter } from 'next/navigation';
 
@@ -199,6 +200,7 @@ function AccountModal({
 
 export default function UserAccountsPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const currentUser = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
   const setHotel = useAppStore((s) => s.setHotel);
@@ -405,6 +407,7 @@ export default function UserAccountsPage() {
                             if (!confirm(`Impersonate ${acc.staffName}?`)) return;
                             const result = await impersonateAction(acc.id);
                             if (result.success) {
+                              queryClient.removeQueries({ queryKey: ['dashboard'] });
                               setUser(result.user);
                               if (result.hotel) setHotel(result.hotel);
                               router.push('/dashboard');

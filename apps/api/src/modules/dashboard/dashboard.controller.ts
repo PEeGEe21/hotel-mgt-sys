@@ -1,7 +1,8 @@
-import { Controller, Get, Param, Request, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Put, Request, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard, Permissions, PermissionsGuard } from '../auth/guards';
 import { DashboardService } from './dashboard.service';
+import { UpdateDashboardLayoutDto } from './dtos/update-dashboard-layout.dto';
 
 @ApiTags('Dashboard')
 @ApiBearerAuth()
@@ -29,5 +30,19 @@ export class DashboardController {
   @ApiOperation({ summary: 'Get dashboard widget data for the current user context' })
   getWidgetData(@Request() req: any, @Param('widgetId') widgetId: string) {
     return this.dashboardService.getWidgetData(req.user.sub, widgetId);
+  }
+
+  @Get('admin/layouts')
+  @Permissions('manage:settings')
+  @ApiOperation({ summary: 'Get editable dashboard layouts for all roles' })
+  getAdminLayouts(@Request() req: any) {
+    return this.dashboardService.getAdminLayouts(req.user.sub);
+  }
+
+  @Put('admin/layouts')
+  @Permissions('manage:settings')
+  @ApiOperation({ summary: 'Update dashboard layouts for roles' })
+  updateAdminLayouts(@Request() req: any, @Body() dto: UpdateDashboardLayoutDto) {
+    return this.dashboardService.updateAdminLayouts(req.user.sub, dto);
   }
 }

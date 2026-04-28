@@ -18,6 +18,7 @@ import {
   KeyRound,
   ShieldCheck,
   Mail,
+  LayoutDashboard,
 } from 'lucide-react';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Layers } from '@solar-icons/react';
@@ -46,6 +47,15 @@ const sections = [
     icon: Shield,
     color: 'text-amber-400',
     bg: 'bg-amber-500/10 border-amber-500/20',
+    adminOnly: true,
+  },
+  {
+    label: 'Dashboard Layouts',
+    description: 'Configure widgets by role',
+    href: '/settings/dashboard',
+    icon: LayoutDashboard,
+    color: 'text-blue-400',
+    bg: 'bg-blue-500/10 border-blue-500/20',
     adminOnly: true,
   },
   {

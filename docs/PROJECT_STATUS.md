@@ -5,7 +5,7 @@ Last updated: 2026-04-28
 ## Next Up
 
 - [ ] Background jobs / scheduler
-Notes: scheduler foundation is in place and the Redis/Bull attendance loop has been verified. Current focus is checkout automation follow-through: apply the latest DB migrations, run end-to-end verification, and then expand reminder timing / additional timed workflows.
+Notes: scheduler foundation is in place and the Redis/Bull attendance loop has been verified. Current focus is checkout automation follow-through: expand reminder timing, add additional timed workflows, and keep pushing DB-backed cron coverage beyond the current attendance and checkout flows.
 
 ## Settings
 
@@ -30,17 +30,20 @@ Done recently:
 - frontend dashboard page switched from hardcoded composition to a DB-driven shared renderer
 - layout preset system added for `compact`, `wide`, and `full` widget spans
 - hotel-less `SUPER_ADMIN` / `ADMIN` dashboard context fallback added
+- seeded role-specific widget size overrides added
+- dashboard impersonation cache scope fixed
+- admin/staff user update DTO validation fixed for `role` and `isActive`
+- admin dashboard layout settings UI added for role widget visibility, ordering, and size presets
+- dashboard layout row reordering fix shipped for admin config settings
+- dashboard widget allowed sizes standardized to `compact`, `wide`, and `full`
+- existing dashboard widget size options backfilled safely via Prisma migration
+- dashboard settings flow verified end-to-end after migration rollout
 
 Still pending:
 - role-by-role browser QA across seeded roles
-- widget order / span / mobile balance polish
+- browser review of widget order / span / mobile balance
 - loading, empty, and error state polish across widgets
 - review weak v1 widgets and remove or replace them where needed
-- decide whether dashboard config stays DB-seeded only for now or gets an admin settings UI next
-
-Urgent follow-up:
-- impersonation still shows stale previous-user dashboard data after switching accounts
-- updating a staff-linked user account fails because the frontend sends `role` and `isActive` to a DTO path that currently rejects those fields
 - [ ] Facilities module
 Notes: bookings, cancellations, maintenance, inspections, requisitions, reports, complaints, details/actions/delete modal are covered. Remaining work is mostly polish, QA, and edge-case fixes.
 
@@ -177,7 +180,7 @@ Notes: Playwright after feature freeze.
 
 - [ ] Expand DB-backed cron settings beyond attendance absence scanning
 - [~] Add scheduler observability/admin visibility for last run status and failures
-Notes: last run, next run, timezone, enabled state, last success/failure timestamps, and last error are now visible for attendance and checkout scheduling. Remaining work is applying the DB migrations in each environment, running live end-to-end verification, and extending the same model to more job types and richer reminder timing controls.
+Notes: last run, next run, timezone, enabled state, last success/failure timestamps, and last error are now visible for attendance and checkout scheduling. Remaining work is extending the same model to more job types and richer reminder timing controls.
 - [ ] Add housekeeping follow-up job for cleaning tasks still in progress or not done
 Notes: send staff/admin mail and in-app notifications when checkout-related cleaning remains open beyond the expected window.
 - [ ] Improve dynamic metadata across notifications and email delivery logs
@@ -186,8 +189,7 @@ Notes: expand metadata payloads so reminders, scheduler alerts, and linked follo
 
 ## Immediate Pending
 
-- [ ] Apply latest Prisma migrations for cron run-state, checkout cron job type, and hotel checkout settings
 - [ ] Run end-to-end verification for checkout automation
 Notes: verify hotel settings save/load across tabs, default checkout time behavior on reservation creation, reservation page checkout filters, guest reminder toggle behavior, staff checkout summary alerts, and housekeeping prep task creation.
 - [ ] Finish dashboard QA / polish pass
-Notes: retest layout after span cleanup, confirm housekeeping usefulness improvements, confirm skeleton loading states feel good, and resolve urgent impersonation/user-update bugs before calling the dashboard v1 stable.
+Notes: role-by-role browser QA is still pending even though the admin dashboard settings flow is now verified. Remaining work is reviewing seeded role layouts, widget usefulness, and skeleton/empty/error states before calling the dashboard v1 stable.

@@ -11,7 +11,7 @@ const DASHBOARD_WIDGETS = [
     featureFlag: null,
     defaultEnabled: true,
     defaultSize: 'compact',
-    allowedSizes: ['compact', 'wide'],
+    allowedSizes: ['compact', 'wide', 'full'],
   },
   {
     id: 'todays_checkins_outs',
@@ -20,7 +20,7 @@ const DASHBOARD_WIDGETS = [
     featureFlag: null,
     defaultEnabled: true,
     defaultSize: 'wide',
-    allowedSizes: ['wide', 'full'],
+    allowedSizes: ['compact', 'wide', 'full'],
   },
   {
     id: 'room_status_grid',
@@ -29,7 +29,7 @@ const DASHBOARD_WIDGETS = [
     featureFlag: null,
     defaultEnabled: true,
     defaultSize: 'wide',
-    allowedSizes: ['wide', 'full'],
+    allowedSizes: ['compact', 'wide', 'full'],
   },
   {
     id: 'revenue_today',
@@ -38,7 +38,7 @@ const DASHBOARD_WIDGETS = [
     featureFlag: null,
     defaultEnabled: true,
     defaultSize: 'compact',
-    allowedSizes: ['compact', 'wide'],
+    allowedSizes: ['compact', 'wide', 'full'],
   },
   {
     id: 'outstanding_folios',
@@ -47,7 +47,7 @@ const DASHBOARD_WIDGETS = [
     featureFlag: null,
     defaultEnabled: true,
     defaultSize: 'compact',
-    allowedSizes: ['compact', 'wide'],
+    allowedSizes: ['compact', 'wide', 'full'],
   },
   {
     id: 'pos_sales_today',
@@ -56,7 +56,7 @@ const DASHBOARD_WIDGETS = [
     featureFlag: null,
     defaultEnabled: true,
     defaultSize: 'compact',
-    allowedSizes: ['compact', 'wide'],
+    allowedSizes: ['compact', 'wide', 'full'],
   },
   {
     id: 'active_pos_orders',
@@ -65,7 +65,7 @@ const DASHBOARD_WIDGETS = [
     featureFlag: null,
     defaultEnabled: true,
     defaultSize: 'wide',
-    allowedSizes: ['wide', 'full'],
+    allowedSizes: ['compact', 'wide', 'full'],
   },
   {
     id: 'low_stock_alerts',
@@ -74,7 +74,7 @@ const DASHBOARD_WIDGETS = [
     featureFlag: null,
     defaultEnabled: true,
     defaultSize: 'compact',
-    allowedSizes: ['compact', 'wide'],
+    allowedSizes: ['compact', 'wide', 'full'],
   },
   {
     id: 'housekeeping_queue',
@@ -83,7 +83,7 @@ const DASHBOARD_WIDGETS = [
     featureFlag: null,
     defaultEnabled: true,
     defaultSize: 'wide',
-    allowedSizes: ['wide', 'full'],
+    allowedSizes: ['compact', 'wide', 'full'],
   },
   {
     id: 'staff_on_duty',
@@ -92,7 +92,7 @@ const DASHBOARD_WIDGETS = [
     featureFlag: null,
     defaultEnabled: true,
     defaultSize: 'compact',
-    allowedSizes: ['compact', 'wide'],
+    allowedSizes: ['compact', 'wide', 'full'],
   },
   {
     id: 'my_attendance_today',
@@ -101,7 +101,7 @@ const DASHBOARD_WIDGETS = [
     featureFlag: null,
     defaultEnabled: true,
     defaultSize: 'compact',
-    allowedSizes: ['compact'],
+    allowedSizes: ['compact', 'wide', 'full'],
   },
   {
     id: 'my_tasks_today',
@@ -110,9 +110,37 @@ const DASHBOARD_WIDGETS = [
     featureFlag: null,
     defaultEnabled: true,
     defaultSize: 'wide',
-    allowedSizes: ['wide', 'full'],
+    allowedSizes: ['compact', 'wide', 'full'],
   },
 ] as const;
+
+type DashboardWidgetId = (typeof DASHBOARD_WIDGETS)[number]['id'];
+type DashboardWidgetSize = 'compact' | 'wide' | 'full';
+
+const DASHBOARD_ROLE_SIZE_OVERRIDES: Partial<
+  Record<Role, Partial<Record<DashboardWidgetId, DashboardWidgetSize>>>
+> = {
+  [Role.SUPER_ADMIN]: {
+    outstanding_folios: 'compact',
+  },
+  [Role.ADMIN]: {
+    outstanding_folios: 'compact',
+  },
+  [Role.MANAGER]: {
+    outstanding_folios: 'compact',
+    housekeeping_queue: 'wide',
+  },
+  [Role.HOUSEKEEPING]: {
+    housekeeping_queue: 'full',
+    my_tasks_today: 'wide',
+  },
+  [Role.CASHIER]: {
+    outstanding_folios: 'compact',
+  },
+  [Role.BARTENDER]: {
+    active_pos_orders: 'full',
+  },
+};
 
 const DASHBOARD_ROLE_LAYOUTS: Record<Role, string[]> = {
   [Role.SUPER_ADMIN]: [
@@ -972,7 +1000,7 @@ async function main() {
         widgetId,
         position,
         enabled: true,
-        sizeOverride: null,
+        sizeOverride: DASHBOARD_ROLE_SIZE_OVERRIDES[role]?.[widgetId as DashboardWidgetId] ?? null,
       })),
     );
 

@@ -8,7 +8,6 @@ import { useDashboardFeatureFlags } from '@/hooks/dashboard/useDashboardFeatureF
 import { useDashboardConfig } from '@/hooks/dashboard/useDashboardConfig';
 
 function resolveWidgetSize(widget: DashboardConfigWidget): DashboardWidgetSize {
-  if (widget.id === 'outstanding_folios') return 'compact';
   return widget.size;
 }
 

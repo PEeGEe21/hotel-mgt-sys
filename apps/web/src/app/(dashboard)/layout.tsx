@@ -12,6 +12,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { stopImpersonationAction } from '@/actions/auth.actions';
 import { useState } from 'react';
 import openToast from '@/components/ToastComponent';
+import { useQueryClient } from '@tanstack/react-query';
 
 function AuthOverlay({ label }: { label: string }) {
   const hotel = useAppStore((s) => s.hotel);
@@ -42,6 +43,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [stoppingImpersonation, setStoppingImpersonation] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { canPath, ready } = usePermissions();
 
   if (!hydrated) {
@@ -108,6 +110,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   setStoppingImpersonation(true);
                   const result = await stopImpersonationAction();
                   if (result.success) {
+                    queryClient.removeQueries({ queryKey: ['dashboard'] });
                     setUser(result.user);
                     if (result.hotel) setHotel(result.hotel);
                     openToast('success', 'Returned to your account');

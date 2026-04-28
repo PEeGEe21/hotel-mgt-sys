@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -13,6 +14,7 @@ import {
 import dayjs from 'dayjs';
 import { PrismaService } from '../../prisma/prisma.service';
 import { DEFAULT_ROLE_PERMISSIONS } from '../../common/constants/role-permissions';
+import { UpdateDashboardLayoutDto } from './dtos/update-dashboard-layout.dto';
 
 type DashboardContext = {
   userId: string;
@@ -21,6 +23,17 @@ type DashboardContext = {
   staffId: string | null;
   permissions: Set<string>;
 };
+
+const DASHBOARD_ROLES = [
+  Role.SUPER_ADMIN,
+  Role.ADMIN,
+  Role.MANAGER,
+  Role.RECEPTIONIST,
+  Role.HOUSEKEEPING,
+  Role.CASHIER,
+  Role.BARTENDER,
+  Role.STAFF,
+];
 
 @Injectable()
 export class DashboardService {
@@ -43,20 +56,27 @@ export class DashboardService {
 
     return {
       role: ctx.role,
-      widgets: roleConfig.map((entry) => ({
-        id: entry.widget.id,
-        title: entry.widget.title,
-        permissionKey: entry.widget.permissionKey,
-        featureFlag: entry.widget.featureFlag,
-        defaultEnabled: entry.widget.defaultEnabled,
-        defaultSize: entry.widget.defaultSize,
-        allowedSizes: entry.widget.allowedSizes,
-        position: entry.position,
-        enabled: entry.enabled,
-        size: entry.sizeOverride ?? entry.widget.defaultSize,
-        sizeOverride: entry.sizeOverride,
-        config: entry.config,
-      })),
+      widgets: roleConfig.map((entry) => {
+        const sizeOverride =
+          entry.sizeOverride && entry.widget.allowedSizes.includes(entry.sizeOverride)
+            ? entry.sizeOverride
+            : null;
+
+        return {
+          id: entry.widget.id,
+          title: entry.widget.title,
+          permissionKey: entry.widget.permissionKey,
+          featureFlag: entry.widget.featureFlag,
+          defaultEnabled: entry.widget.defaultEnabled,
+          defaultSize: entry.widget.defaultSize,
+          allowedSizes: entry.widget.allowedSizes,
+          position: entry.position,
+          enabled: entry.enabled,
+          size: sizeOverride ?? entry.widget.defaultSize,
+          sizeOverride,
+          config: entry.config,
+        };
+      }),
     };
   }
 
@@ -64,6 +84,87 @@ export class DashboardService {
     await this.getDashboardContext(userId);
     const flags = await this.getFeatureFlagMap();
     return { flags };
+  }
+
+  async getAdminLayouts(userId: string) {
+    const ctx = await this.getDashboardContext(userId);
+    const [widgets, rows] = await Promise.all([
+      this.prisma.dashboardWidget.findMany({ orderBy: { title: 'asc' } }),
+      this.prisma.roleDashboardConfig.findMany({
+        where: { hotelId: ctx.hotelId },
+        include: { widget: true },
+        orderBy: [{ role: 'asc' }, { position: 'asc' }],
+      }),
+    ]);
+
+    return {
+      roles: DASHBOARD_ROLES,
+      widgets,
+      rows: rows.map((row) => ({
+        id: row.id,
+        role: row.role,
+        widgetId: row.widgetId,
+        title: row.widget.title,
+        permissionKey: row.widget.permissionKey,
+        featureFlag: row.widget.featureFlag,
+        defaultSize: row.widget.defaultSize,
+        allowedSizes: row.widget.allowedSizes,
+        position: row.position,
+        enabled: row.enabled,
+        sizeOverride: row.sizeOverride,
+        size: row.sizeOverride ?? row.widget.defaultSize,
+      })),
+    };
+  }
+
+  async updateAdminLayouts(userId: string, dto: UpdateDashboardLayoutDto) {
+    const ctx = await this.getDashboardContext(userId);
+    const widgets = await this.prisma.dashboardWidget.findMany();
+    const widgetMap = new Map(widgets.map((widget) => [widget.id, widget]));
+
+    const invalidWidget = dto.rows.find((row) => !widgetMap.has(row.widgetId));
+    if (invalidWidget) {
+      throw new BadRequestException(`Unknown dashboard widget: ${invalidWidget.widgetId}`);
+    }
+
+    const invalidSize = dto.rows.find((row) => {
+      if (!row.sizeOverride) return false;
+      return !widgetMap.get(row.widgetId)?.allowedSizes.includes(row.sizeOverride);
+    });
+    if (invalidSize) {
+      throw new BadRequestException(
+        `${invalidSize.sizeOverride} is not allowed for ${invalidSize.widgetId}`,
+      );
+    }
+
+    await this.prisma.$transaction(
+      dto.rows.map((row) =>
+        this.prisma.roleDashboardConfig.upsert({
+          where: {
+            hotelId_role_widgetId: {
+              hotelId: ctx.hotelId,
+              role: row.role,
+              widgetId: row.widgetId,
+            },
+          },
+          update: {
+            position: row.position,
+            enabled: row.enabled,
+            sizeOverride: row.sizeOverride ?? null,
+          },
+          create: {
+            hotelId: ctx.hotelId,
+            role: row.role,
+            widgetId: row.widgetId,
+            position: row.position,
+            enabled: row.enabled,
+            sizeOverride: row.sizeOverride ?? null,
+          },
+        }),
+      ),
+    );
+
+    return this.getAdminLayouts(userId);
   }
 
   async getWidgetData(userId: string, widgetId: string) {

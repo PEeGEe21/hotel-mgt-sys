@@ -38,9 +38,13 @@ Implemented now:
 - fixed layout presets using `compact`, `wide`, and `full`
 - fallback dashboard context handling for hotel-less `SUPER_ADMIN` / `ADMIN` users
 - runtime removal of weak `pending_approvals` from the visible v1 dashboard
-- runtime span override for `outstanding_folios` to avoid awkward empty desktop space
+- role-configured widget size overrides for seeded layouts
+- DB-configured `outstanding_folios` span cleanup with no frontend special case
 - improved housekeeping usefulness with a more summary-driven room-readiness widget treatment
 - skeleton loading state pass for dashboard widgets
+- dashboard query cache is scoped by active auth/impersonation context
+- admin/staff user updates accept validated `role` and `isActive` fields
+- admin dashboard layout settings UI for role widget visibility, ordering, and size presets
 
 Current phase:
 - phase 1, 2, and 3 are functionally in place
@@ -50,13 +54,8 @@ Current phase:
 Still next:
 - validate role-by-role widget visibility and ordering in the browser
 - refine widget data quality and empty/loading/error states
-- decide whether to add an admin dashboard-config UI later or continue DB-seeded only for now
 - add richer future widgets like analytics and guest satisfaction when their data contracts are ready
 - keep seeded DB config aligned with the latest runtime-visible widget decisions
-
-Urgent follow-up bugs:
-- after impersonation, the dashboard can still show stale data from the previous user context
-- updating a staff-linked user from the admin/users flow currently fails because `role` and `isActive` are being rejected by the update DTO path
 
 ## 2. System Layers
 
@@ -440,12 +439,9 @@ Immediate next steps:
 - polish empty, loading, and error states where needed
 - retest manager layout after `outstanding_folios` span cleanup
 - retest housekeeping usefulness after room-readiness and `my_tasks_today` empty-state improvements
-- fix impersonation stale-dashboard state
-- fix admin/staff update validation mismatch
 
 After QA:
 - decide whether to keep widget data endpoints centralized under `dashboard/widgets/:id` or split some widgets onto dedicated domain endpoints later
-- decide whether to build a settings/admin UI for dashboard configuration or keep DB-seeded role layouts for now
 - add richer analytics widgets after the first role-based dashboard rollout is stable
 
 ## 14. QA Checklist
@@ -460,7 +456,7 @@ After QA:
 - [ ] `CASHIER` sees only cashier widgets
 - [ ] `BARTENDER` sees only bartender widgets
 - [ ] `STAFF` sees only `my_attendance_today`
-- [ ] impersonating into another user refreshes dashboard config and widget data cleanly
+- [x] impersonating into another user refreshes dashboard config and widget data cleanly
 
 ### Permission Safety
 
@@ -477,7 +473,7 @@ After QA:
 - [ ] empty states read clearly when no live data exists
 - [ ] loading states are consistent across widgets
 - [ ] error states are consistent across widgets
-- [ ] `outstanding_folios` no longer leaves awkward dead space on manager desktop layout
+- [x] `outstanding_folios` no longer leaves awkward dead space on manager desktop layout
 
 ### Data Quality
 
@@ -491,4 +487,4 @@ After QA:
 
 ### Related Admin Flows
 
-- [ ] updating a staff-linked user from the admin/users flow succeeds without DTO validation errors
+- [x] updating a staff-linked user from the admin/users flow succeeds without DTO validation errors
