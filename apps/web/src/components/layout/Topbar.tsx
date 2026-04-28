@@ -49,7 +49,7 @@ export default function Topbar() {
         ) : (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="flex items-center gap-2.5 hover:bg-white/5 px-2.5 py-1.5 rounded-lg transition-colors min-w-28">
+              <button className="flex items-center gap-2.5 hover:bg-white/5 px-2.5 py-1.5 rounded-lg transition-colors min-w-28 outline-none focus-visible:outline-none">
                 {user?.avatar ? (
                   <img
                     src={user.avatar}
@@ -73,7 +73,7 @@ export default function Topbar() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="min-w-44 !bg-[#161b27] border border-[#1e2536] ring-0 text-white">
               <DropdownMenuItem asChild>
-                <Link href="/profile" className="flex items-center gap-2 cursor-pointer hover:!bg-white/5 !text-white">
+                <Link href="/profile" className="flex items-center gap-2 cursor-pointer hover:!bg-white/5 !text-white outline-none focus-visible:outline-none">
                   <User size={14} /> Profile
                 </Link>
               </DropdownMenuItem>
@@ -83,7 +83,7 @@ export default function Topbar() {
                 </Link>
               </DropdownMenuItem> */}
               <DropdownMenuSeparator className="bg-[#161b27]" />
-              <DropdownMenuItem onClick={logout} className="text-red-400 focus:text-red-400 cursor-pointer hover:!bg-white/5">
+              <DropdownMenuItem onClick={logout} className="text-red-400 focus:text-red-400 cursor-pointer hover:!bg-white/5 outline-none focus-visible:outline-none">
                 <LogOut size={14} /> Sign out
               </DropdownMenuItem>
             </DropdownMenuContent>

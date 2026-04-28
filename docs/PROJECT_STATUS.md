@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-04-26
+Last updated: 2026-04-28
 
 ## Next Up
 
@@ -23,6 +23,24 @@ Notes: scheduler foundation is in place and the Redis/Bull attendance loop has b
 ## Core Features
 
 - [ ] Role-based dashboards
+Done recently:
+- Prisma-backed dashboard widget registry, role layout config, and feature flag tables added
+- seeded default dashboard widgets, role layouts, and non-blocking pre-SaaS feature flags
+- backend dashboard module added with config, feature flags, and per-widget data endpoints
+- frontend dashboard page switched from hardcoded composition to a DB-driven shared renderer
+- layout preset system added for `compact`, `wide`, and `full` widget spans
+- hotel-less `SUPER_ADMIN` / `ADMIN` dashboard context fallback added
+
+Still pending:
+- role-by-role browser QA across seeded roles
+- widget order / span / mobile balance polish
+- loading, empty, and error state polish across widgets
+- review weak v1 widgets and remove or replace them where needed
+- decide whether dashboard config stays DB-seeded only for now or gets an admin settings UI next
+
+Urgent follow-up:
+- impersonation still shows stale previous-user dashboard data after switching accounts
+- updating a staff-linked user account fails because the frontend sends `role` and `isActive` to a DTO path that currently rejects those fields
 - [ ] Facilities module
 Notes: bookings, cancellations, maintenance, inspections, requisitions, reports, complaints, details/actions/delete modal are covered. Remaining work is mostly polish, QA, and edge-case fixes.
 
@@ -171,3 +189,5 @@ Notes: expand metadata payloads so reminders, scheduler alerts, and linked follo
 - [ ] Apply latest Prisma migrations for cron run-state, checkout cron job type, and hotel checkout settings
 - [ ] Run end-to-end verification for checkout automation
 Notes: verify hotel settings save/load across tabs, default checkout time behavior on reservation creation, reservation page checkout filters, guest reminder toggle behavior, staff checkout summary alerts, and housekeeping prep task creation.
+- [ ] Finish dashboard QA / polish pass
+Notes: retest layout after span cleanup, confirm housekeeping usefulness improvements, confirm skeleton loading states feel good, and resolve urgent impersonation/user-update bugs before calling the dashboard v1 stable.

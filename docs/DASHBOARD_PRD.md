@@ -2,6 +2,8 @@
 
 Architecture, Design Plan & Implementation Guide
 
+Last updated: 2026-04-28
+
 ## 1. Overview & Goals
 
 Core principle: no `if (role === 'manager')` blocks in the frontend. Dashboard layout and widget visibility are driven by database config seeded per role and rendered by one shared system.
@@ -21,6 +23,40 @@ Current implementation fit:
 - this architecture is compatible with the current Prisma + NestJS + React Query stack
 - the permission examples in this document should follow the existing permission model in [permissions.ts](/var/www/html/hotel-os/apps/web/src/lib/permissions.ts:1)
 - feature flags should exist in the design now, but must default to non-blocking until SaaS plans are introduced
+
+## Current Status
+
+Implemented now:
+- Prisma-backed dashboard tables and migration for widget registry, role dashboard config, and feature flags
+- seeded widget registry, role layouts, and non-blocking feature flags
+- backend dashboard module with:
+  - `GET /api/v1/dashboard/config`
+  - `GET /api/v1/dashboard/feature-flags`
+  - `GET /api/v1/dashboard/widgets/:widgetId`
+- frontend dashboard renderer driven by DB config
+- frontend widget registry and per-widget data fetching hooks
+- fixed layout presets using `compact`, `wide`, and `full`
+- fallback dashboard context handling for hotel-less `SUPER_ADMIN` / `ADMIN` users
+- runtime removal of weak `pending_approvals` from the visible v1 dashboard
+- runtime span override for `outstanding_folios` to avoid awkward empty desktop space
+- improved housekeeping usefulness with a more summary-driven room-readiness widget treatment
+- skeleton loading state pass for dashboard widgets
+
+Current phase:
+- phase 1, 2, and 3 are functionally in place
+- phase 4 is partially complete with real-data widgets
+- phase 5 QA is in progress
+
+Still next:
+- validate role-by-role widget visibility and ordering in the browser
+- refine widget data quality and empty/loading/error states
+- decide whether to add an admin dashboard-config UI later or continue DB-seeded only for now
+- add richer future widgets like analytics and guest satisfaction when their data contracts are ready
+- keep seeded DB config aligned with the latest runtime-visible widget decisions
+
+Urgent follow-up bugs:
+- after impersonation, the dashboard can still show stale data from the previous user context
+- updating a staff-linked user from the admin/users flow currently fails because `role` and `isActive` are being rejected by the update DTO path
 
 ## 2. System Layers
 
@@ -44,8 +80,8 @@ Current implementation fit:
 6. Each widget fetches its own data independently.
 
 ```text
-GET /api/dashboard/config  -> { widgets: [...], order: [...] }
-GET /api/feature-flags     -> { revenue_analytics: true, ... }
+GET /api/v1/dashboard/config         -> { widgets: [...] }
+GET /api/v1/dashboard/feature-flags  -> { flags: { revenue_analytics: true, ... } }
      |
      v
 For each widget:
@@ -82,6 +118,7 @@ Per-role layout config.
 | `widget_id` | `VARCHAR FK` | References `dashboard_widgets.id` |
 | `position` | `INTEGER` | Sort order, `0`-indexed |
 | `enabled` | `BOOLEAN` | Toggle without deleting row |
+| `size_override` | `VARCHAR NULL` | Optional layout override like `compact`, `wide`, `full` |
 | `config` | `JSONB NULL` | Widget-specific overrides |
 
 ### `feature_flags`
@@ -101,17 +138,17 @@ Each widget should live in code and be described by a registry entry.
 ```js
 // widgetRegistry.js
 export const widgetRegistry = {
-  occupancy_chart: {
-    id: 'occupancy_chart',
+  occupancy_overview: {
+    id: 'occupancy_overview',
     component: OccupancyChartWidget,
     permissionKey: 'view:rooms',
     featureFlag: null,
   },
-  revenue_analytics: {
-    id: 'revenue_analytics',
-    component: RevenueAnalyticsWidget,
+  revenue_today: {
+    id: 'revenue_today',
+    component: RevenueTodayWidget,
     permissionKey: 'view:finance',
-    featureFlag: 'revenue_analytics',
+    featureFlag: null,
   },
 };
 ```
@@ -120,16 +157,21 @@ export const widgetRegistry = {
 
 | Widget ID | Permission Key | Feature Flag |
 | --- | --- | --- |
-| `occupancy_chart` | `view:rooms` | `null` |
-| `checkins_today` | `view:reservations` | `null` |
-| `checkouts_today` | `view:reservations` | `null` |
-| `housekeeping_status` | `view:housekeeping` | `null` |
-| `maintenance_queue` | `view:facilities` | `null` |
+| `occupancy_overview` | `view:rooms` | `null` |
+| `todays_checkins_outs` | `view:reservations` | `null` |
+| `room_status_grid` | `view:rooms` | `null` |
 | `revenue_today` | `view:finance` | `null` |
-| `revenue_analytics` | `view:finance` | `revenue_analytics` |
-| `guest_satisfaction` | `view:reports` | `guest_satisfaction` |
-| `staff_on_shift` | `view:attendance` | `null` |
-| `alerts_feed` | `view:dashboard` | `null` |
+| `outstanding_folios` | `view:finance` | `null` |
+| `pos_sales_today` | `view:pos` | `null` |
+| `active_pos_orders` | `view:pos` | `null` |
+| `low_stock_alerts` | `view:inventory` | `null` |
+| `housekeeping_queue` | `view:housekeeping` | `null` |
+| `staff_on_duty` | `view:attendance` | `null` |
+| `my_attendance_today` | `clock:self` | `null` |
+| `my_tasks_today` | `view:housekeeping` | `null` |
+
+Note:
+- `pending_approvals` was part of the initial seeded concept, but it is currently considered too weak for v1 and has been removed from the visible runtime dashboard pending replacement or redesign.
 
 Note: we can still reuse the same existing widgets and patterns already present in [page2.tsx](/var/www/html/hotel-os/apps/web/src/app/(dashboard)/dashboard/page2.tsx:1) as the initial widget set while moving them into the shared registry-driven system.
 
@@ -157,38 +199,58 @@ This keeps layout predictable, allows future admin customization, and avoids eac
 
 ## 5. Seeded Role Configs
 
-### Manager
+### Super Admin / Admin / Manager
 
-Position `0` to `7`:
-- `occupancy_chart`
+Current seeded order:
+- `occupancy_overview`
+- `todays_checkins_outs`
+- `room_status_grid`
 - `revenue_today`
-- `revenue_analytics`
-- `checkins_today`
-- `housekeeping_status`
-- `maintenance_queue`
-- `guest_satisfaction`
-- `alerts_feed`
+- `outstanding_folios`
+- `housekeeping_queue`
+- `staff_on_duty`
+- `low_stock_alerts`
+- `pos_sales_today`
+- `active_pos_orders`
+- `my_attendance_today`
 
-### Front Desk
+### Receptionist
 
-Position `0` to `3`:
-- `checkins_today`
-- `checkouts_today`
-- `occupancy_chart`
-- `alerts_feed`
+Current seeded order:
+- `todays_checkins_outs`
+- `room_status_grid`
+- `occupancy_overview`
+- `my_attendance_today`
 
 ### Housekeeping
 
-Position `0` to `1`:
-- `housekeeping_status`
-- `alerts_feed`
+Current seeded order:
+- `housekeeping_queue`
+- `my_tasks_today`
+- `room_status_grid`
+- `my_attendance_today`
 
-### Maintenance
+### Cashier
 
-Position `0` to `2`:
-- `maintenance_queue`
-- `housekeeping_status`
-- `alerts_feed`
+Current seeded order:
+- `revenue_today`
+- `outstanding_folios`
+- `pos_sales_today`
+- `active_pos_orders`
+- `my_attendance_today`
+
+### Bartender
+
+Current seeded order:
+- `pos_sales_today`
+- `active_pos_orders`
+- `low_stock_alerts`
+- `my_attendance_today`
+
+### Staff
+
+Current seeded order:
+- `my_attendance_today`
 
 ## 6. Permission System
 
@@ -249,8 +311,9 @@ Target: Day 1, about 3 to 4 hours.
 
 Target: Day 1 to 2, about 4 hours.
 
-- `GET /api/dashboard/config` returns the user's role config sorted by position and filtered to enabled rows
-- `GET /api/feature-flags` returns active flags for the user's plan
+- `GET /api/v1/dashboard/config` returns the user's role config sorted by position and filtered to enabled rows
+- `GET /api/v1/dashboard/feature-flags` returns active flags for the user's plan
+- `GET /api/v1/dashboard/widgets/:widgetId` returns widget data with permission enforcement
 - add `requirePermission(key)` middleware to all widget data endpoints
 - verify a housekeeping user calling `/api/revenue/today` directly gets `403`
 
@@ -270,14 +333,25 @@ Target: Day 2, about 4 hours.
 
 Target: Day 2 to 3, about 6 hours.
 
-- `OccupancyChartWidget` -> `GET /api/occupancy/summary`
-- `CheckinsTodayWidget` -> `GET /api/reservations/today?type=checkin`
-- `CheckoutsTodayWidget` -> `GET /api/reservations/today?type=checkout`
-- `HousekeepingStatusWidget` -> `GET /api/housekeeping/status`
-- `MaintenanceQueueWidget` -> `GET /api/maintenance/queue`
-- `RevenueTodayWidget` -> `GET /api/revenue/today`
-- `AlertsFeedWidget` -> `GET /api/alerts`
-- stub `RevenueAnalyticsWidget` and `GuestSatisfactionWidget` behind feature flags for later build-out
+Implemented now:
+- `occupancy_overview`
+- `todays_checkins_outs`
+- `room_status_grid`
+- `revenue_today`
+- `outstanding_folios`
+- `pos_sales_today`
+- `active_pos_orders`
+- `low_stock_alerts`
+- `housekeeping_queue`
+- `staff_on_duty`
+- `my_attendance_today`
+- `my_tasks_today`
+
+Still later:
+- richer analytics widgets
+- feature-flagged premium widgets
+- dashboard-specific charts beyond the current summary-card model
+- a stronger replacement for `pending_approvals` if management still needs another operational widget
 
 ### Phase 5: QA
 
@@ -289,6 +363,7 @@ Target: Day 3 to 4, about 3 hours.
 - change a position value in the DB and verify widgets reorder without a deploy
 - change a widget size preset or size override and verify layout updates consistently
 - document the "adding a new widget" pattern in the codebase
+- confirm `SUPER_ADMIN` and hotel-less `ADMIN` users resolve dashboard context correctly
 
 ## 9. Extending the System
 
@@ -324,32 +399,26 @@ This keeps the system simpler to build now while preserving a path to richer adm
 ## 11. File Structure
 
 ```text
-src/dashboard/
-  widgetRegistry.js
-  DashboardRenderer.jsx
+apps/web/src/dashboard/
+  widget-registry.tsx
+  DashboardRenderer.tsx
   hooks/
-    usePermissions.js
-    useFeatureFlags.js
-    useDashboardConfig.js
-  widgets/
-    OccupancyChartWidget.jsx
-    CheckinsTodayWidget.jsx
-    ... (one file per widget)
+    useDashboardConfig.ts
+    useDashboardFeatureFlags.ts
+    useDashboardWidgetData.ts
+  widgets.tsx
+  types.ts
 
-server/
-  routes/dashboard.js
-  routes/featureFlags.js
-  middleware/requirePermission.js
+apps/api/src/modules/dashboard/
+  dashboard.controller.ts
+  dashboard.module.ts
+  dashboard.service.ts
 
-db/
+apps/api/prisma/
+  schema.prisma
+  seed.ts
   migrations/
-    ..._create_dashboard_widgets.js
-    ..._create_role_dashboard_configs.js
-    ..._create_feature_flags.js
-  seeds/
-    dashboard_widgets.js
-    role_dashboard_configs.js
-    feature_flags.js
+    ..._add_dashboard_config/
 ```
 
 ## 12. Tracking Notes
@@ -361,3 +430,65 @@ Recommended update habits:
 - update this file when schema or API design changes
 - reflect milestone-level status in `PROJECT_STATUS.md`
 - keep implementation details here and high-level delivery status in the status doc
+
+## 13. Next Steps
+
+Immediate next steps:
+- browser QA across seeded roles
+- verify each seeded role only sees allowed widgets
+- review widget ordering and span balance on desktop and mobile
+- polish empty, loading, and error states where needed
+- retest manager layout after `outstanding_folios` span cleanup
+- retest housekeeping usefulness after room-readiness and `my_tasks_today` empty-state improvements
+- fix impersonation stale-dashboard state
+- fix admin/staff update validation mismatch
+
+After QA:
+- decide whether to keep widget data endpoints centralized under `dashboard/widgets/:id` or split some widgets onto dedicated domain endpoints later
+- decide whether to build a settings/admin UI for dashboard configuration or keep DB-seeded role layouts for now
+- add richer analytics widgets after the first role-based dashboard rollout is stable
+
+## 14. QA Checklist
+
+### Role Coverage
+
+- [ ] `SUPER_ADMIN` can load dashboard config and widgets without a staff-linked hotel row
+- [ ] `ADMIN` can load dashboard config and widgets without a staff-linked hotel row
+- [ ] `MANAGER` sees the seeded management dashboard set
+- [ ] `RECEPTIONIST` sees only receptionist widgets
+- [ ] `HOUSEKEEPING` sees only housekeeping widgets
+- [ ] `CASHIER` sees only cashier widgets
+- [ ] `BARTENDER` sees only bartender widgets
+- [ ] `STAFF` sees only `my_attendance_today`
+- [ ] impersonating into another user refreshes dashboard config and widget data cleanly
+
+### Permission Safety
+
+- [ ] a role without `view:finance` cannot see finance widgets
+- [ ] a role without `view:pos` cannot see POS widgets
+- [ ] a role without `view:housekeeping` cannot see housekeeping widgets
+- [ ] direct widget data requests still fail correctly when permission is missing
+
+### Layout & UX
+
+- [ ] `compact`, `wide`, and `full` spans render correctly on desktop
+- [ ] widgets stack cleanly on mobile
+- [ ] widget ordering matches DB `position`
+- [ ] empty states read clearly when no live data exists
+- [ ] loading states are consistent across widgets
+- [ ] error states are consistent across widgets
+- [ ] `outstanding_folios` no longer leaves awkward dead space on manager desktop layout
+
+### Data Quality
+
+- [ ] `occupancy_overview` reflects live room totals accurately
+- [ ] `todays_checkins_outs` shows correct same-day reservation activity
+- [ ] `revenue_today` reflects live payments accurately
+- [ ] `outstanding_folios` reflects unpaid balances accurately
+- [ ] `pos_sales_today` and `active_pos_orders` feel strong enough for v1
+- [ ] housekeeping `room_status_grid` / room-readiness data feels relevant enough for operational use
+- [ ] `my_attendance_today` and `my_tasks_today` behave correctly for self-service roles
+
+### Related Admin Flows
+
+- [ ] updating a staff-linked user from the admin/users flow succeeds without DTO validation errors

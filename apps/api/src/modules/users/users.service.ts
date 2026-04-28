@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateUserAccountDto } from './dtos/create-user-account.dto';
 import { UpdateUserAccountDto } from './dtos/update-user-account.dto';
@@ -6,21 +6,37 @@ import { ResetPasswordDto } from './dtos/reset-password.dto';
 import { UpdateUserPermissionsDto } from './dtos/update-user-permissions.dto';
 import * as bcrypt from 'bcryptjs';
 import { UsersFilterDto } from './dtos/users-filter.dto';
+import { Role } from '@prisma/client';
 
 @Injectable()
 export class UsersService {
   constructor(private prisma: PrismaService) {}
 
-  async findAll(hotelId: string, search?: string) {
+  private async resolveHotelId(hotelId?: string | null, role?: string) {
+    if (hotelId) return hotelId;
+
+    if (role === Role.SUPER_ADMIN || role === Role.ADMIN) {
+      const hotel = await this.prisma.hotel.findFirst({
+        select: { id: true },
+        orderBy: { createdAt: 'asc' },
+      });
+      if (hotel?.id) return hotel.id;
+    }
+
+    throw new ForbiddenException('Hotel context is unavailable for this user.');
+  }
+
+  async findAll(hotelId: string | null | undefined, role: string | undefined, search?: string) {
+    const resolvedHotelId = await this.resolveHotelId(hotelId, role);
     const where: any = {
-      staff: { hotelId },
+      staff: { is: { hotelId: resolvedHotelId } },
     };
     if (search) {
       where.OR = [
         { email: { contains: search, mode: 'insensitive' } },
-        { staff: { firstName: { contains: search, mode: 'insensitive' } } },
-        { staff: { lastName: { contains: search, mode: 'insensitive' } } },
-        { staff: { department: { contains: search, mode: 'insensitive' } } },
+        { staff: { is: { firstName: { contains: search, mode: 'insensitive' } } } },
+        { staff: { is: { lastName: { contains: search, mode: 'insensitive' } } } },
+        { staff: { is: { department: { contains: search, mode: 'insensitive' } } } },
       ];
     }
 
@@ -50,21 +66,22 @@ export class UsersService {
     }));
   }
 
-  async list(hotelId: string, filters: UsersFilterDto) {
+  async list(hotelId: string | null | undefined, role: string | undefined, filters: UsersFilterDto) {
+    const resolvedHotelId = await this.resolveHotelId(hotelId, role);
     const page = filters.page ?? 1;
     const limit = filters.limit ?? 20;
     const skip = (page - 1) * limit;
 
     const where: any = {
-      staff: { hotelId },
+      staff: { is: { hotelId: resolvedHotelId } },
     };
     if (filters.search) {
       where.OR = [
         { email: { contains: filters.search, mode: 'insensitive' } },
         { username: { contains: filters.search, mode: 'insensitive' } },
-        { staff: { firstName: { contains: filters.search, mode: 'insensitive' } } },
-        { staff: { lastName: { contains: filters.search, mode: 'insensitive' } } },
-        { staff: { department: { contains: filters.search, mode: 'insensitive' } } },
+        { staff: { is: { firstName: { contains: filters.search, mode: 'insensitive' } } } },
+        { staff: { is: { lastName: { contains: filters.search, mode: 'insensitive' } } } },
+        { staff: { is: { department: { contains: filters.search, mode: 'insensitive' } } } },
       ];
     }
 
@@ -123,12 +140,13 @@ export class UsersService {
     };
   }
 
-  async create(hotelId: string, dto: CreateUserAccountDto) {
+  async create(hotelId: string | null | undefined, role: string | undefined, dto: CreateUserAccountDto) {
+    const resolvedHotelId = await this.resolveHotelId(hotelId, role);
     const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (existing) throw new BadRequestException('Email already in use.');
 
     const employeeExists = await this.prisma.staff.findFirst({
-      where: { hotelId, employeeCode: dto.employeeCode },
+      where: { hotelId: resolvedHotelId, employeeCode: dto.employeeCode },
       select: { id: true },
     });
     if (employeeExists) throw new BadRequestException('Employee code already exists.');
@@ -148,7 +166,7 @@ export class UsersService {
       await tx.staff.create({
         data: {
           userId: user.id,
-          hotelId,
+          hotelId: resolvedHotelId,
           employeeCode: dto.employeeCode,
           firstName: dto.firstName,
           lastName: dto.lastName,
@@ -164,12 +182,18 @@ export class UsersService {
     });
   }
 
-  async update(hotelId: string, userId: string, dto: UpdateUserAccountDto) {
+  async update(
+    hotelId: string | null | undefined,
+    role: string | undefined,
+    userId: string,
+    dto: UpdateUserAccountDto,
+  ) {
+    const resolvedHotelId = await this.resolveHotelId(hotelId, role);
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: { staff: true },
     });
-    if (!user || user.staff?.hotelId !== hotelId) {
+    if (!user || user.staff?.hotelId !== resolvedHotelId) {
       throw new NotFoundException('User account not found.');
     }
 
@@ -180,7 +204,7 @@ export class UsersService {
 
     if (dto.employeeCode && dto.employeeCode !== user.staff?.employeeCode) {
       const employeeExists = await this.prisma.staff.findFirst({
-        where: { hotelId, employeeCode: dto.employeeCode },
+        where: { hotelId: resolvedHotelId, employeeCode: dto.employeeCode },
         select: { id: true },
       });
       if (employeeExists) throw new BadRequestException('Employee code already exists.');
@@ -215,16 +239,18 @@ export class UsersService {
   }
 
   async updatePermissions(
-    hotelId: string,
+    hotelId: string | null | undefined,
+    role: string | undefined,
     actorUserId: string,
     userId: string,
     dto: UpdateUserPermissionsDto,
   ) {
+    const resolvedHotelId = await this.resolveHotelId(hotelId, role);
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: { staff: true },
     });
-    if (!user || user.staff?.hotelId !== hotelId) {
+    if (!user || user.staff?.hotelId !== resolvedHotelId) {
       throw new NotFoundException('User account not found.');
     }
 
@@ -252,7 +278,7 @@ export class UsersService {
       if (changed) {
         await tx.permissionAuditLog.create({
           data: {
-            hotelId,
+            hotelId: resolvedHotelId,
             actorUserId,
             targetType: 'USER',
             targetUserId: user.id,
@@ -266,12 +292,18 @@ export class UsersService {
     return { success: true };
   }
 
-  async resetPassword(hotelId: string, userId: string, dto: ResetPasswordDto) {
+  async resetPassword(
+    hotelId: string | null | undefined,
+    role: string | undefined,
+    userId: string,
+    dto: ResetPasswordDto,
+  ) {
+    const resolvedHotelId = await this.resolveHotelId(hotelId, role);
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: { staff: true },
     });
-    if (!user || user.staff?.hotelId !== hotelId) {
+    if (!user || user.staff?.hotelId !== resolvedHotelId) {
       throw new NotFoundException('User account not found.');
     }
 
@@ -280,12 +312,13 @@ export class UsersService {
     return { success: true };
   }
 
-  async remove(hotelId: string, userId: string) {
+  async remove(hotelId: string | null | undefined, role: string | undefined, userId: string) {
+    const resolvedHotelId = await this.resolveHotelId(hotelId, role);
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: { staff: true },
     });
-    if (!user || user.staff?.hotelId !== hotelId) {
+    if (!user || user.staff?.hotelId !== resolvedHotelId) {
       throw new NotFoundException('User account not found.');
     }
 

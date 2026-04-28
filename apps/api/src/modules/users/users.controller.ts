@@ -30,25 +30,25 @@ export class UsersController {
   @Get()
   @Permissions('view:hr')
   list(@Request() req: any, @Query() filters: UsersFilterDto) {
-    return this.usersService.list(req.user.hotelId, filters);
+    return this.usersService.list(req.user.hotelId, req.user.role, filters);
   }
 
   @Get('/list')
   @Permissions('view:hr')
   findAll(@Request() req: any, @Query('search') search?: string) {
-    return this.usersService.findAll(req.user.hotelId, search);
+    return this.usersService.findAll(req.user.hotelId, req.user.role, search);
   }
 
   @Post()
   @Permissions('manage:hr')
   create(@Request() req: any, @Body() dto: CreateUserAccountDto) {
-    return this.usersService.create(req.user.hotelId, dto);
+    return this.usersService.create(req.user.hotelId, req.user.role, dto);
   }
 
   @Patch(':id')
   @Permissions('manage:hr')
   update(@Request() req: any, @Param('id') id: string, @Body() dto: UpdateUserAccountDto) {
-    return this.usersService.update(req.user.hotelId, id, dto);
+    return this.usersService.update(req.user.hotelId, req.user.role, id, dto);
   }
 
   @Patch(':id/permissions')
@@ -58,18 +58,18 @@ export class UsersController {
     @Param('id') id: string,
     @Body() dto: UpdateUserPermissionsDto,
   ) {
-    return this.usersService.updatePermissions(req.user.hotelId, req.user.sub, id, dto);
+    return this.usersService.updatePermissions(req.user.hotelId, req.user.role, req.user.sub, id, dto);
   }
 
   @Patch(':id/reset-password')
   @Permissions('manage:hr')
   resetPassword(@Request() req: any, @Param('id') id: string, @Body() dto: ResetPasswordDto) {
-    return this.usersService.resetPassword(req.user.hotelId, id, dto);
+    return this.usersService.resetPassword(req.user.hotelId, req.user.role, id, dto);
   }
 
   @Delete(':id')
   @Permissions('manage:hr')
   remove(@Request() req: any, @Param('id') id: string) {
-    return this.usersService.remove(req.user.hotelId, id);
+    return this.usersService.remove(req.user.hotelId, req.user.role, id);
   }
 }

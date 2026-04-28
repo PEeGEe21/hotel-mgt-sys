@@ -3,6 +3,206 @@ import * as bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
+const DASHBOARD_WIDGETS = [
+  {
+    id: 'occupancy_overview',
+    title: 'Occupancy Overview',
+    permissionKey: 'view:rooms',
+    featureFlag: null,
+    defaultEnabled: true,
+    defaultSize: 'compact',
+    allowedSizes: ['compact', 'wide'],
+  },
+  {
+    id: 'todays_checkins_outs',
+    title: "Today's Check-ins/Outs",
+    permissionKey: 'view:reservations',
+    featureFlag: null,
+    defaultEnabled: true,
+    defaultSize: 'wide',
+    allowedSizes: ['wide', 'full'],
+  },
+  {
+    id: 'room_status_grid',
+    title: 'Room Status Grid',
+    permissionKey: 'view:rooms',
+    featureFlag: null,
+    defaultEnabled: true,
+    defaultSize: 'wide',
+    allowedSizes: ['wide', 'full'],
+  },
+  {
+    id: 'revenue_today',
+    title: 'Revenue Today',
+    permissionKey: 'view:finance',
+    featureFlag: null,
+    defaultEnabled: true,
+    defaultSize: 'compact',
+    allowedSizes: ['compact', 'wide'],
+  },
+  {
+    id: 'outstanding_folios',
+    title: 'Outstanding Folios',
+    permissionKey: 'view:finance',
+    featureFlag: null,
+    defaultEnabled: true,
+    defaultSize: 'compact',
+    allowedSizes: ['compact', 'wide'],
+  },
+  {
+    id: 'pos_sales_today',
+    title: 'POS Sales Today',
+    permissionKey: 'view:pos',
+    featureFlag: null,
+    defaultEnabled: true,
+    defaultSize: 'compact',
+    allowedSizes: ['compact', 'wide'],
+  },
+  {
+    id: 'active_pos_orders',
+    title: 'Active POS Orders',
+    permissionKey: 'view:pos',
+    featureFlag: null,
+    defaultEnabled: true,
+    defaultSize: 'wide',
+    allowedSizes: ['wide', 'full'],
+  },
+  {
+    id: 'low_stock_alerts',
+    title: 'Low Stock Alerts',
+    permissionKey: 'view:inventory',
+    featureFlag: null,
+    defaultEnabled: true,
+    defaultSize: 'compact',
+    allowedSizes: ['compact', 'wide'],
+  },
+  {
+    id: 'housekeeping_queue',
+    title: 'Housekeeping Queue',
+    permissionKey: 'view:housekeeping',
+    featureFlag: null,
+    defaultEnabled: true,
+    defaultSize: 'wide',
+    allowedSizes: ['wide', 'full'],
+  },
+  {
+    id: 'staff_on_duty',
+    title: 'Staff On Duty',
+    permissionKey: 'view:attendance',
+    featureFlag: null,
+    defaultEnabled: true,
+    defaultSize: 'compact',
+    allowedSizes: ['compact', 'wide'],
+  },
+  {
+    id: 'my_attendance_today',
+    title: 'My Attendance Today',
+    permissionKey: 'clock:self',
+    featureFlag: null,
+    defaultEnabled: true,
+    defaultSize: 'compact',
+    allowedSizes: ['compact'],
+  },
+  {
+    id: 'my_tasks_today',
+    title: 'My Tasks Today',
+    permissionKey: 'view:housekeeping',
+    featureFlag: null,
+    defaultEnabled: true,
+    defaultSize: 'wide',
+    allowedSizes: ['wide', 'full'],
+  },
+] as const;
+
+const DASHBOARD_ROLE_LAYOUTS: Record<Role, string[]> = {
+  [Role.SUPER_ADMIN]: [
+    'occupancy_overview',
+    'todays_checkins_outs',
+    'room_status_grid',
+    'revenue_today',
+    'outstanding_folios',
+    'housekeeping_queue',
+    'staff_on_duty',
+    'low_stock_alerts',
+    'pos_sales_today',
+    'active_pos_orders',
+    'my_attendance_today',
+  ],
+  [Role.ADMIN]: [
+    'occupancy_overview',
+    'todays_checkins_outs',
+    'room_status_grid',
+    'revenue_today',
+    'outstanding_folios',
+    'housekeeping_queue',
+    'staff_on_duty',
+    'low_stock_alerts',
+    'pos_sales_today',
+    'active_pos_orders',
+    'my_attendance_today',
+  ],
+  [Role.MANAGER]: [
+    'occupancy_overview',
+    'todays_checkins_outs',
+    'room_status_grid',
+    'revenue_today',
+    'outstanding_folios',
+    'housekeeping_queue',
+    'staff_on_duty',
+    'low_stock_alerts',
+    'pos_sales_today',
+    'active_pos_orders',
+    'my_attendance_today',
+  ],
+  [Role.RECEPTIONIST]: [
+    'todays_checkins_outs',
+    'room_status_grid',
+    'occupancy_overview',
+    'my_attendance_today',
+  ],
+  [Role.HOUSEKEEPING]: [
+    'housekeeping_queue',
+    'my_tasks_today',
+    'room_status_grid',
+    'my_attendance_today',
+  ],
+  [Role.CASHIER]: [
+    'revenue_today',
+    'outstanding_folios',
+    'pos_sales_today',
+    'active_pos_orders',
+    'my_attendance_today',
+  ],
+  [Role.BARTENDER]: [
+    'pos_sales_today',
+    'active_pos_orders',
+    'low_stock_alerts',
+    'my_attendance_today',
+  ],
+  [Role.STAFF]: ['my_attendance_today'],
+};
+
+const DASHBOARD_FEATURE_FLAGS = [
+  {
+    key: 'revenue_analytics',
+    enabled: true,
+    planRequired: null,
+    description: 'Reserved for future finance analytics widgets. Non-blocking pre-SaaS.',
+  },
+  {
+    key: 'guest_satisfaction',
+    enabled: true,
+    planRequired: null,
+    description: 'Reserved for future guest satisfaction widgets. Non-blocking pre-SaaS.',
+  },
+  {
+    key: 'advanced_reports',
+    enabled: true,
+    planRequired: null,
+    description: 'Reserved for future advanced report widgets. Non-blocking pre-SaaS.',
+  },
+] as const;
+
 async function main() {
   console.log('🌱 Seeding database...');
 
@@ -493,21 +693,42 @@ async function main() {
       },
     });
 
-    await prisma.staff.upsert({
-      where: { userId: user.id },
-      update: {},
-      create: {
-        userId: user.id,
-        hotelId: hotel.id,
-        employeeCode: u.employeeCode,
-        firstName: u.firstName,
-        lastName: u.lastName,
-        department: u.department,
-        position: u.position,
-        hireDate: new Date('2024-01-01'),
-        salary: 0,
+    const existingStaff = await prisma.staff.findFirst({
+      where: {
+        OR: [{ userId: user.id }, { employeeCode: u.employeeCode }],
       },
     });
+
+    if (existingStaff) {
+      await prisma.staff.update({
+        where: { id: existingStaff.id },
+        data: {
+          userId: user.id,
+          hotelId: hotel.id,
+          employeeCode: u.employeeCode,
+          firstName: u.firstName,
+          lastName: u.lastName,
+          department: u.department,
+          position: u.position,
+          hireDate: new Date('2024-01-01'),
+          salary: 0,
+        },
+      });
+    } else {
+      await prisma.staff.create({
+        data: {
+          userId: user.id,
+          hotelId: hotel.id,
+          employeeCode: u.employeeCode,
+          firstName: u.firstName,
+          lastName: u.lastName,
+          department: u.department,
+          position: u.position,
+          hireDate: new Date('2024-01-01'),
+          salary: 0,
+        },
+      });
+    }
 
     console.log(`✅ ${u.role}: ${u.email} / ${u.password}`);
   }
@@ -695,6 +916,70 @@ async function main() {
     });
   }
   console.log(`✅ ${Object.keys(rolePermissions).length} role permissions seeded`);
+
+  // ─── Dashboard Widgets / Layouts / Feature Flags ────────────────────────
+  for (const widget of DASHBOARD_WIDGETS) {
+    await prisma.dashboardWidget.upsert({
+      where: { id: widget.id },
+      update: {
+        title: widget.title,
+        permissionKey: widget.permissionKey,
+        featureFlag: widget.featureFlag,
+        defaultEnabled: widget.defaultEnabled,
+        defaultSize: widget.defaultSize,
+        allowedSizes: [...widget.allowedSizes],
+      },
+      create: {
+        id: widget.id,
+        title: widget.title,
+        permissionKey: widget.permissionKey,
+        featureFlag: widget.featureFlag,
+        defaultEnabled: widget.defaultEnabled,
+        defaultSize: widget.defaultSize,
+        allowedSizes: [...widget.allowedSizes],
+      },
+    });
+  }
+  console.log(`✅ ${DASHBOARD_WIDGETS.length} dashboard widgets seeded`);
+
+  for (const flag of DASHBOARD_FEATURE_FLAGS) {
+    await prisma.featureFlag.upsert({
+      where: { key: flag.key },
+      update: {
+        enabled: flag.enabled,
+        planRequired: flag.planRequired,
+        description: flag.description,
+      },
+      create: {
+        key: flag.key,
+        enabled: flag.enabled,
+        planRequired: flag.planRequired,
+        description: flag.description,
+      },
+    });
+  }
+  console.log(`✅ ${DASHBOARD_FEATURE_FLAGS.length} dashboard feature flags seeded`);
+
+  await prisma.roleDashboardConfig.deleteMany({
+    where: { hotelId: hotel.id },
+  });
+
+  const dashboardRoleConfigs = (Object.entries(DASHBOARD_ROLE_LAYOUTS) as [Role, string[]][])
+    .flatMap(([role, widgetIds]) =>
+      widgetIds.map((widgetId, position) => ({
+        hotelId: hotel.id,
+        role,
+        widgetId,
+        position,
+        enabled: true,
+        sizeOverride: null,
+      })),
+    );
+
+  await prisma.roleDashboardConfig.createMany({
+    data: dashboardRoleConfigs,
+  });
+  console.log(`✅ ${dashboardRoleConfigs.length} dashboard role layout rows seeded`);
 
   // ─── Pos Terminal Groups ──────────────────────────────────────────────────────────
   const seedPosTerminalGroups = [
