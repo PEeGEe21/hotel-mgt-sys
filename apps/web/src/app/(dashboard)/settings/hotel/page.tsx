@@ -17,7 +17,11 @@ import {
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import openToast from '@/components/ToastComponent';
-import { useHotelProfile, useUpdateHotelProfile } from '@/hooks/hotel/useHotelProfile';
+import {
+  useHotelProfile,
+  useRunHotelCronJob,
+  useUpdateHotelProfile,
+} from '@/hooks/hotel/useHotelProfile';
 
 const GeofenceMap = dynamic(() => import('@/components/GeofenceMap'), { ssr: false });
 
@@ -128,6 +132,17 @@ function getNextSchedulerRun(
     timeStyle: 'short',
     timeZone: timezone,
   });
+}
+
+function parseReminderLeadDaysInput(value: string) {
+  const normalized = [...new Set(
+    value
+      .split(',')
+      .map((part) => Number(part.trim()))
+      .filter((part) => Number.isInteger(part) && part >= 0 && part <= 30),
+  )].sort((a, b) => b - a);
+
+  return normalized.length ? normalized : [1, 0];
 }
 
 function ToggleRow({
@@ -275,10 +290,14 @@ export default function HotelProfilePage() {
   const router = useRouter();
   const { data, isLoading } = useHotelProfile();
   const updateHotel = useUpdateHotelProfile();
+  const runCronJob = useRunHotelCronJob();
   const logoInputRef = useRef<HTMLInputElement | null>(null);
   const [activeTab, setActiveTab] = useState<SettingsTab>('profile');
   const [savedSection, setSavedSection] = useState<SettingsTab | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [runningJob, setRunningJob] = useState<null | 'checkoutDueScan' | 'housekeepingFollowUpScan'>(
+    null,
+  );
   const [form, setForm] = useState({
     name: '',
     address: '',
@@ -306,10 +325,16 @@ export default function HotelProfilePage() {
     defaultCheckoutHour: '12',
     defaultCheckoutMinute: '0',
     guestCheckoutReminderEnabled: false,
+    guestCheckoutReminderLeadDays: '1, 0',
     checkoutDueScanEnabled: true,
     checkoutDueScanHour: '11',
     checkoutDueScanMinute: '0',
     autoCreateCheckoutHousekeepingTasks: true,
+    housekeepingFollowUpEnabled: false,
+    housekeepingFollowUpGraceHours: '2',
+    housekeepingFollowUpScanEnabled: false,
+    housekeepingFollowUpScanHour: '15',
+    housekeepingFollowUpScanMinute: '0',
   });
 
   const set = (k: string, v: string | boolean | null) => {
@@ -348,11 +373,21 @@ export default function HotelProfilePage() {
       defaultCheckoutHour: String(data.defaultCheckoutHour ?? 12),
       defaultCheckoutMinute: String(data.defaultCheckoutMinute ?? 0),
       guestCheckoutReminderEnabled: Boolean(data.guestCheckoutReminderEnabled ?? false),
+      guestCheckoutReminderLeadDays: (data.guestCheckoutReminderLeadDays ?? [1, 0]).join(', '),
       checkoutDueScanEnabled: Boolean(data.cronSettings?.checkoutDueScanEnabled ?? true),
       checkoutDueScanHour: String(data.cronSettings?.checkoutDueScanHour ?? 11),
       checkoutDueScanMinute: String(data.cronSettings?.checkoutDueScanMinute ?? 0),
       autoCreateCheckoutHousekeepingTasks: Boolean(
         data.autoCreateCheckoutHousekeepingTasks ?? true,
+      ),
+      housekeepingFollowUpEnabled: Boolean(data.housekeepingFollowUpEnabled ?? false),
+      housekeepingFollowUpGraceHours: String(data.housekeepingFollowUpGraceHours ?? 2),
+      housekeepingFollowUpScanEnabled: Boolean(
+        data.cronSettings?.housekeepingFollowUpScanEnabled ?? false,
+      ),
+      housekeepingFollowUpScanHour: String(data.cronSettings?.housekeepingFollowUpScanHour ?? 15),
+      housekeepingFollowUpScanMinute: String(
+        data.cronSettings?.housekeepingFollowUpScanMinute ?? 0,
       ),
     }));
     setLogoPreview(data.logo ?? null);
@@ -412,6 +447,32 @@ export default function HotelProfilePage() {
       form.checkoutDueScanEnabled,
     ),
     lastError: data?.cronSettings?.checkoutDueScanLastError?.trim() || 'None',
+  };
+  const housekeepingFollowUpHealth = getSchedulerHealth({
+    enabled: form.housekeepingFollowUpScanEnabled,
+    lastSucceededAt: data?.cronSettings?.housekeepingFollowUpScanLastSucceededAt,
+    lastFailedAt: data?.cronSettings?.housekeepingFollowUpScanLastFailedAt,
+  });
+  const housekeepingFollowUpStatus = {
+    lastRun: formatSchedulerDate(
+      data?.cronSettings?.housekeepingFollowUpScanLastTriggeredAt,
+      schedulerTimezone,
+    ),
+    lastSuccess: formatSchedulerDate(
+      data?.cronSettings?.housekeepingFollowUpScanLastSucceededAt,
+      schedulerTimezone,
+    ),
+    lastFailure: formatSchedulerDate(
+      data?.cronSettings?.housekeepingFollowUpScanLastFailedAt,
+      schedulerTimezone,
+    ),
+    nextRun: getNextSchedulerRun(
+      schedulerTimezone,
+      Number(form.housekeepingFollowUpScanHour || 15),
+      Number(form.housekeepingFollowUpScanMinute || 0),
+      form.housekeepingFollowUpScanEnabled,
+    ),
+    lastError: data?.cronSettings?.housekeepingFollowUpScanLastError?.trim() || 'None',
   };
 
   const hotelInitials = form.name
@@ -508,16 +569,22 @@ export default function HotelProfilePage() {
         defaultCheckoutHour: Number(form.defaultCheckoutHour || 12),
         defaultCheckoutMinute: Number(form.defaultCheckoutMinute || 0),
         guestCheckoutReminderEnabled: form.guestCheckoutReminderEnabled,
+        guestCheckoutReminderLeadDays: parseReminderLeadDaysInput(form.guestCheckoutReminderLeadDays),
       };
     }
 
     if (section === 'operations') {
       payload = {
         autoCreateCheckoutHousekeepingTasks: form.autoCreateCheckoutHousekeepingTasks,
+        housekeepingFollowUpEnabled: form.housekeepingFollowUpEnabled,
+        housekeepingFollowUpGraceHours: Number(form.housekeepingFollowUpGraceHours || 2),
         cronSettings: {
           checkoutDueScanEnabled: form.checkoutDueScanEnabled,
           checkoutDueScanHour: Number(form.checkoutDueScanHour || 11),
           checkoutDueScanMinute: Number(form.checkoutDueScanMinute || 0),
+          housekeepingFollowUpScanEnabled: form.housekeepingFollowUpScanEnabled,
+          housekeepingFollowUpScanHour: Number(form.housekeepingFollowUpScanHour || 15),
+          housekeepingFollowUpScanMinute: Number(form.housekeepingFollowUpScanMinute || 0),
         },
       };
     }
@@ -530,6 +597,15 @@ export default function HotelProfilePage() {
       }, 2500);
     } catch {
       // handled by toast
+    }
+  };
+
+  const handleRunCronJob = async (job: 'checkoutDueScan' | 'housekeepingFollowUpScan') => {
+    setRunningJob(job);
+    try {
+      await runCronJob.mutateAsync(job);
+    } finally {
+      setRunningJob(null);
     }
   };
 
@@ -553,7 +629,7 @@ export default function HotelProfilePage() {
 
       <div className="grid gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
         <aside className="relative">
-          <div className="rounded-2xl sticky top-0 space-y-2  p-3 bg-[#161b27] border border-[#1e2536]">
+          <div className="rounded-2xl sticky top-0 space-y-2  p-2 bg-[#161b27] border border-[#1e2536]">
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const active = activeTab === tab.id;
@@ -562,7 +638,7 @@ export default function HotelProfilePage() {
                   key={tab.id}
                   type="button"
                   onClick={() => setActiveTab(tab.id)}
-                  className={`w-full rounded-xl border px-4 py-3 text-left transition-all ${
+                  className={`w-full rounded-xl border px-2 py-3 text-left transition-all ${
                     active
                       ? 'border-blue-500/30 bg-blue-500/10 text-white'
                       : 'border-transparent bg-transparent text-slate-400 hover:border-[#1e2536] hover:bg-white/5 hover:text-slate-200'
@@ -938,6 +1014,21 @@ export default function HotelProfilePage() {
                     set('guestCheckoutReminderEnabled', !form.guestCheckoutReminderEnabled)
                   }
                 />
+
+                <div>
+                  <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
+                    Reminder Lead Days
+                  </label>
+                  <input
+                    value={form.guestCheckoutReminderLeadDays}
+                    onChange={(e) => set('guestCheckoutReminderLeadDays', e.target.value)}
+                    className="w-full rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-2.5 text-sm text-slate-200 outline-none transition-colors focus:border-blue-500"
+                  />
+                  <p className="mt-1 text-xs text-slate-500">
+                    Comma-separated day offsets like `3, 1, 0` for three days before, day before,
+                    and same-day reminders.
+                  </p>
+                </div>
               </div>
             </>
           )}
@@ -970,6 +1061,22 @@ export default function HotelProfilePage() {
                     )
                   }
                 />
+                <ToggleRow
+                  title="Enable housekeeping follow-up scheduler"
+                  description="Escalate checkout prep tasks that remain open past the grace window."
+                  enabled={form.housekeepingFollowUpScanEnabled}
+                  onToggle={() =>
+                    set('housekeepingFollowUpScanEnabled', !form.housekeepingFollowUpScanEnabled)
+                  }
+                />
+                <ToggleRow
+                  title="Send housekeeping follow-up alerts"
+                  description="Notify housekeeping-capable staff when checkout prep work stays open too long."
+                  enabled={form.housekeepingFollowUpEnabled}
+                  onToggle={() =>
+                    set('housekeepingFollowUpEnabled', !form.housekeepingFollowUpEnabled)
+                  }
+                />
 
                 <SchedulerStatusCard
                   title="Checkout scheduler status"
@@ -982,6 +1089,40 @@ export default function HotelProfilePage() {
                   lastFailure={checkoutStatus.lastFailure}
                   lastError={checkoutStatus.lastError}
                 />
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => handleRunCronJob('checkoutDueScan')}
+                    disabled={runCronJob.isPending}
+                    className="rounded-lg border border-[#1e2536] bg-white/5 px-3 py-2 text-sm font-medium text-slate-200 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {runningJob === 'checkoutDueScan' ? 'Running checkout scan...' : 'Run checkout scan now'}
+                  </button>
+                </div>
+
+                <SchedulerStatusCard
+                  title="Housekeeping follow-up status"
+                  description="Daily follow-up alerts for checkout prep tasks still open after the configured grace window."
+                  health={housekeepingFollowUpHealth}
+                  lastRun={housekeepingFollowUpStatus.lastRun}
+                  nextRun={housekeepingFollowUpStatus.nextRun}
+                  timezone={schedulerTimezone}
+                  lastSuccess={housekeepingFollowUpStatus.lastSuccess}
+                  lastFailure={housekeepingFollowUpStatus.lastFailure}
+                  lastError={housekeepingFollowUpStatus.lastError}
+                />
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => handleRunCronJob('housekeepingFollowUpScan')}
+                    disabled={runCronJob.isPending}
+                    className="rounded-lg border border-[#1e2536] bg-white/5 px-3 py-2 text-sm font-medium text-slate-200 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {runningJob === 'housekeepingFollowUpScan'
+                      ? 'Running follow-up scan...'
+                      : 'Run housekeeping follow-up now'}
+                  </button>
+                </div>
 
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div>
@@ -1001,6 +1142,39 @@ export default function HotelProfilePage() {
                     <input
                       value={form.checkoutDueScanMinute}
                       onChange={(e) => set('checkoutDueScanMinute', e.target.value)}
+                      className="w-full rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-2.5 text-sm text-slate-200 outline-none transition-colors focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                  <div>
+                    <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
+                      Follow-up Grace Hours
+                    </label>
+                    <input
+                      value={form.housekeepingFollowUpGraceHours}
+                      onChange={(e) => set('housekeepingFollowUpGraceHours', e.target.value)}
+                      className="w-full rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-2.5 text-sm text-slate-200 outline-none transition-colors focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
+                      Follow-up Scan Hour
+                    </label>
+                    <input
+                      value={form.housekeepingFollowUpScanHour}
+                      onChange={(e) => set('housekeepingFollowUpScanHour', e.target.value)}
+                      className="w-full rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-2.5 text-sm text-slate-200 outline-none transition-colors focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
+                      Follow-up Scan Minute
+                    </label>
+                    <input
+                      value={form.housekeepingFollowUpScanMinute}
+                      onChange={(e) => set('housekeepingFollowUpScanMinute', e.target.value)}
                       className="w-full rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-2.5 text-sm text-slate-200 outline-none transition-colors focus:border-blue-500"
                     />
                   </div>

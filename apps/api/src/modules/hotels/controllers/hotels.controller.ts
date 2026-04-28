@@ -1,9 +1,10 @@
-import { Body, Controller, Get, Patch, Request, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Get, Patch, Post, Request, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { Permissions, PermissionsGuard } from '../../auth/guards';
 import { HotelsService } from '../services/hotels.service';
 import { UpdateHotelDto } from '../dtos/update-hotel.dto';
+import { RunHotelCronJobDto } from '../dtos/run-hotel-cron-job.dto';
 
 @ApiTags('Hotels')
 @ApiBearerAuth()
@@ -22,5 +23,12 @@ export class HotelsController {
   @Permissions('manage:settings')
   updateProfile(@Request() req: any, @Body() dto: UpdateHotelDto) {
     return this.hotelsService.updateProfile(req.user.hotelId, dto);
+  }
+
+  @Post('me/cron/run')
+  @Permissions('manage:settings')
+  @ApiOperation({ summary: 'Run a hotel automation job immediately for verification' })
+  runCronJob(@Request() req: any, @Body() dto: RunHotelCronJobDto) {
+    return this.hotelsService.runCronJob(req.user.hotelId, dto);
   }
 }

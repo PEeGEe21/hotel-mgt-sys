@@ -8,6 +8,7 @@ import { Role } from '@prisma/client';
 import { DEFAULT_ROLE_PERMISSIONS } from '../../../common/constants/role-permissions';
 import { UpdateMeDto } from '../dtos/update-me.dto';
 import { EmailService } from '../../../common/email/email.service';
+import { RealtimePresenceService } from '../../realtime/realtime-presence.service';
 
 type PasswordResetTokenRow = {
   id: string;
@@ -26,6 +27,7 @@ export class AuthService {
     private jwt: JwtService,
     private config: ConfigService,
     private email: EmailService,
+    private realtimePresenceService: RealtimePresenceService,
   ) {}
 
   // ─── Validate user credentials (called by LocalStrategy) ──────────────────
@@ -120,16 +122,20 @@ export class AuthService {
     refreshToken?: string,
     meta?: { ipAddress?: string | null; userAgent?: string | null },
   ) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { staff: { select: { hotelId: true } } },
+    });
+
     if (refreshToken) {
       await this.prisma.refreshToken.deleteMany({
         where: { userId, token: refreshToken },
       });
     }
+
+    await this.realtimePresenceService.clearUserPresence(userId, user?.staff?.hotelId ?? null);
+
     if (meta?.ipAddress || meta?.userAgent) {
-      const user = await this.prisma.user.findUnique({
-        where: { id: userId },
-        select: { staff: { select: { hotelId: true } } },
-      });
       await this.logAudit({
         actorUserId: userId,
         hotelId: user?.staff?.hotelId ?? null,
@@ -146,12 +152,14 @@ export class AuthService {
     userId: string,
     meta?: { ipAddress?: string | null; userAgent?: string | null },
   ) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { staff: { select: { hotelId: true } } },
+    });
+
     await this.prisma.refreshToken.deleteMany({ where: { userId } });
+    await this.realtimePresenceService.clearUserPresence(userId, user?.staff?.hotelId ?? null);
     if (meta?.ipAddress || meta?.userAgent) {
-      const user = await this.prisma.user.findUnique({
-        where: { id: userId },
-        select: { staff: { select: { hotelId: true } } },
-      });
       await this.logAudit({
         actorUserId: userId,
         hotelId: user?.staff?.hotelId ?? null,

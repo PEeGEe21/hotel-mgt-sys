@@ -7,10 +7,14 @@ import { UpdateUserPermissionsDto } from './dtos/update-user-permissions.dto';
 import * as bcrypt from 'bcryptjs';
 import { UsersFilterDto } from './dtos/users-filter.dto';
 import { Role } from '@prisma/client';
+import { RealtimePresenceService } from '../realtime/realtime-presence.service';
 
 @Injectable()
 export class UsersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly presenceService: RealtimePresenceService,
+  ) {}
 
   private async resolveHotelId(hotelId?: string | null, role?: string) {
     if (hotelId) return hotelId;
@@ -46,6 +50,8 @@ export class UsersService {
       orderBy: { createdAt: 'desc' },
     });
 
+    const presenceMap = await this.presenceService.getPresenceMap(users.map((user) => user.id));
+
     return users.map((u) => ({
       id: u.id,
       staffId: u.staff?.id ?? null,
@@ -63,6 +69,8 @@ export class UsersService {
       position: u.staff?.position ?? null,
       permissionGrants: u.permissionGrants ?? [],
       permissionDenies: u.permissionDenies ?? [],
+      isOnline: presenceMap.get(u.id)?.isOnline ?? false,
+      lastSeenAt: presenceMap.get(u.id)?.lastSeenAt ?? null,
     }));
   }
 
@@ -96,6 +104,8 @@ export class UsersService {
       this.prisma.user.count({ where }),
     ]);
 
+    const presenceMap = await this.presenceService.getPresenceMap(users.map((user) => user.id));
+
     const usersMapped = users.map((u) => {
       return {
         id: u.id,
@@ -114,6 +124,8 @@ export class UsersService {
         position: u.staff?.position ?? null,
         permissionGrants: u.permissionGrants ?? [],
         permissionDenies: u.permissionDenies ?? [],
+        isOnline: presenceMap.get(u.id)?.isOnline ?? false,
+        lastSeenAt: presenceMap.get(u.id)?.lastSeenAt ?? null,
       };
     });
 

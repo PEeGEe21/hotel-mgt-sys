@@ -74,6 +74,7 @@ enum AttendanceType {
 enum HotelCronJobType {
   ATTENDANCE_ABSENCE_SCAN
   CHECKOUT_DUE_SCAN
+  HOUSEKEEPING_FOLLOW_UP_SCAN
 }
 
 enum OrderStatus {
@@ -155,7 +156,10 @@ model Hotel {
   defaultCheckoutHour                 Int      @default(12)
   defaultCheckoutMinute               Int      @default(0)
   guestCheckoutReminderEnabled        Boolean  @default(false)
+  guestCheckoutReminderLeadDays       Int[]    @default([1, 0])
   autoCreateCheckoutHousekeepingTasks Boolean  @default(true)
+  housekeepingFollowUpEnabled         Boolean  @default(false)
+  housekeepingFollowUpGraceHours      Int      @default(2)
   createdAt                           DateTime @default(now())
   updatedAt                           DateTime @updatedAt
 

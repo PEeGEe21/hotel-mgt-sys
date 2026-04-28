@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { loginAction, logoutAction } from '@/actions/auth.actions'; // ← correct path
+import { disconnectRealtimeSocket, leaveRealtimePresence } from '@/lib/realtime';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 // Single source of truth — auth.actions.ts imports this from here
@@ -73,11 +74,18 @@ export const useAuthStore = create<AuthState>()(
 
       logout: async () => {
         set({ isLoading: true });
-        await logoutAction();
+        await leaveRealtimePresence();
+        disconnectRealtimeSocket();
         set({ user: null, isAuthenticated: false, isLoading: false, error: null });
+        await logoutAction();
       },
 
-      setUser: (user) => set({ user, isAuthenticated: !!user }),
+      setUser: (user) => {
+        if (!user) {
+          disconnectRealtimeSocket();
+        }
+        set({ user, isAuthenticated: !!user });
+      },
       clearError: () => set({ error: null }),
     }),
     {

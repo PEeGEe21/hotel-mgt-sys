@@ -12,6 +12,7 @@ import * as bcrypt from 'bcryptjs';
 import { StaffFilterDto } from '../dtos/staff-filter.dto';
 import { UpdateStaffDto } from '../dtos/update-staff.dto';
 import { CreateStaffDto } from '../dtos/create-staff.dto';
+import { RealtimePresenceService } from '../../realtime/realtime-presence.service';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -34,7 +35,10 @@ const STAFF_INCLUDE = {
 
 @Injectable()
 export class StaffService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly presenceService: RealtimePresenceService,
+  ) {}
 
   async setPin(hotelId: string, staffId: string, dto: SetStaffPinDto) {
     const staff = await this.prisma.staff.findFirst({
@@ -130,6 +134,10 @@ export class StaffService {
     });
     const leaveSet = new Set(activeLeaves.map((l) => l.staffId));
 
+    const presenceMap = await this.presenceService.getPresenceMap(
+      staff.map((member) => member.user.id),
+    );
+
     const staffWithStatus = staff.map((s) => {
       const records = attMap.get(s.id) ?? [];
       const last = records[records.length - 1];
@@ -139,7 +147,15 @@ export class StaffService {
       else if (last?.type === 'CLOCK_IN') clockStatus = 'Clocked In';
       else clockStatus = 'Clocked Out';
 
-      return { ...s, clockStatus };
+      return {
+        ...s,
+        clockStatus,
+        user: {
+          ...s.user,
+          isOnline: presenceMap.get(s.user.id)?.isOnline ?? false,
+          lastSeenAt: presenceMap.get(s.user.id)?.lastSeenAt ?? null,
+        },
+      };
     });
 
     // Stats
@@ -196,7 +212,18 @@ export class StaffService {
       },
     });
     if (!staff) throw new NotFoundException('Staff member not found.');
-    return staff;
+    const presenceMap = await this.presenceService.getPresenceMap(staff.user ? [staff.user.id] : []);
+
+    return {
+      ...staff,
+      user: staff.user
+        ? {
+            ...staff.user,
+            isOnline: presenceMap.get(staff.user.id)?.isOnline ?? false,
+            lastSeenAt: presenceMap.get(staff.user.id)?.lastSeenAt ?? null,
+          }
+        : staff.user,
+    };
   }
 
   // ── Create (Staff + User atomically) ───────────────────────────────────────

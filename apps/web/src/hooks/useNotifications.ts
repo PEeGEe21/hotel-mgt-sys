@@ -12,6 +12,7 @@ export type AppNotificationEvent =
   | 'checkOutDue'
   | 'paymentReceived'
   | 'lowInventory'
+  | 'housekeepingAlert'
   | 'maintenanceAlert'
   | 'attendanceAlert'
   | 'systemAlerts';

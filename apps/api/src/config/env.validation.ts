@@ -64,17 +64,23 @@ export function validateEnv(config: Record<string, unknown>) {
   const corsOrigins = readString(config, 'CORS_ORIGINS');
   const emailFrom = readString(config, 'EMAIL_FROM');
   const resendApiKey = readString(config, 'RESEND_API_KEY');
+  const redisUrl = readString(config, 'REDIS_URL');
 
   assertInteger(readString(config, 'PORT'), 'PORT');
   assertInteger(readString(config, 'RATE_LIMIT_WINDOW_MS'), 'RATE_LIMIT_WINDOW_MS');
   assertInteger(readString(config, 'RATE_LIMIT_MAX'), 'RATE_LIMIT_MAX');
   assertUrl(frontendUrl, 'FRONTEND_URL');
+  assertUrl(redisUrl, 'REDIS_URL');
   assertCorsOrigins(corsOrigins);
   assertEmailFrom(emailFrom, 'EMAIL_FROM');
 
   if (nodeEnv === PRODUCTION) {
     if (!readString(config, 'DATABASE_URL')) {
       throw new Error('DATABASE_URL is required in production');
+    }
+
+    if (!redisUrl) {
+      throw new Error('REDIS_URL is required in production');
     }
 
     if (!frontendUrl && !corsOrigins) {

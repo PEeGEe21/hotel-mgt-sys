@@ -31,7 +31,10 @@ export type HotelProfile = {
   defaultCheckoutHour?: number;
   defaultCheckoutMinute?: number;
   guestCheckoutReminderEnabled?: boolean;
+  guestCheckoutReminderLeadDays?: number[];
   autoCreateCheckoutHousekeepingTasks: boolean;
+  housekeepingFollowUpEnabled?: boolean;
+  housekeepingFollowUpGraceHours?: number;
   cronSettings?: {
     attendanceAbsenceScanEnabled: boolean;
     attendanceAbsenceScanHour: number;
@@ -47,7 +50,22 @@ export type HotelProfile = {
     checkoutDueScanLastSucceededAt?: string | null;
     checkoutDueScanLastFailedAt?: string | null;
     checkoutDueScanLastError?: string | null;
+    housekeepingFollowUpScanEnabled: boolean;
+    housekeepingFollowUpScanHour: number;
+    housekeepingFollowUpScanMinute: number;
+    housekeepingFollowUpScanLastTriggeredAt?: string | null;
+    housekeepingFollowUpScanLastSucceededAt?: string | null;
+    housekeepingFollowUpScanLastFailedAt?: string | null;
+    housekeepingFollowUpScanLastError?: string | null;
   };
+};
+
+export type RunnableHotelCronJob = 'checkoutDueScan' | 'housekeepingFollowUpScan';
+
+export type RunHotelCronJobResponse = {
+  job: RunnableHotelCronJob;
+  result: Record<string, unknown>;
+  profile: HotelProfile;
 };
 
 export function useHotelProfile() {
@@ -89,13 +107,36 @@ export function useUpdateHotelProfile() {
         defaultCheckoutHour: data.defaultCheckoutHour,
         defaultCheckoutMinute: data.defaultCheckoutMinute,
         guestCheckoutReminderEnabled: data.guestCheckoutReminderEnabled,
+        guestCheckoutReminderLeadDays: data.guestCheckoutReminderLeadDays,
         autoCreateCheckoutHousekeepingTasks: data.autoCreateCheckoutHousekeepingTasks,
+        housekeepingFollowUpEnabled: data.housekeepingFollowUpEnabled,
+        housekeepingFollowUpGraceHours: data.housekeepingFollowUpGraceHours,
       });
       openToast('success', 'Hotel profile updated');
     },
     onError: (err: any) => {
       const msg = err?.response?.data?.message ?? 'Something went wrong';
       openToast('error', msg);
+    },
+  });
+}
+
+export function useRunHotelCronJob() {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: (job: RunnableHotelCronJob) =>
+      api.post('/hotels/me/cron/run', { job }).then((r) => r.data as RunHotelCronJobResponse),
+    onSuccess: (data) => {
+      qc.setQueryData(['hotel', 'profile'], data.profile);
+      useAppStore.getState().setHotel({
+        ...(useAppStore.getState().hotel ?? {}),
+        ...data.profile,
+      });
+      openToast('success', 'Scheduler job completed');
+    },
+    onError: (err: any) => {
+      openToast('error', err?.response?.data?.message ?? 'Could not run scheduler job');
     },
   });
 }

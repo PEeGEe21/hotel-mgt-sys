@@ -5,7 +5,7 @@ Last updated: 2026-04-28
 ## Next Up
 
 - [ ] Background jobs / scheduler
-Notes: scheduler foundation is in place and the Redis/Bull attendance loop has been verified. Current focus is checkout automation follow-through: expand reminder timing, add additional timed workflows, and keep pushing DB-backed cron coverage beyond the current attendance and checkout flows.
+Notes: scheduler foundation is in place and the Redis/Bull attendance loop has been verified. Current focus is no longer the foundation layer, but growing scheduler coverage and operational polish across timed workflows.
 
 ## Settings
 
@@ -44,6 +44,7 @@ Still pending:
 - browser review of widget order / span / mobile balance
 - loading, empty, and error state polish across widgets
 - review weak v1 widgets and remove or replace them where needed
+
 - [ ] Facilities module
 Notes: bookings, cancellations, maintenance, inspections, requisitions, reports, complaints, details/actions/delete modal are covered. Remaining work is mostly polish, QA, and edge-case fixes.
 
@@ -145,7 +146,7 @@ Notes: added fail-fast production env validation, including production hardening
 ## Infrastructure
 
 - [ ] Redis
-Notes: still needed for caching, sessions, and eventually distributed rate limiting.
+Notes: Redis foundation is now wired into Bull plus a shared app-level Redis service for realtime presence/pub-sub. Remaining work is broader caching/session use, distributed rate limiting, and production rollout hardening.
 
 - [ ] Background jobs / scheduler
 Notes: needed for timed workflows like attendance absence detection, notification digests, retries, and other non-request-triggered tasks. This is the next infrastructure priority.
@@ -167,6 +168,20 @@ Done recently:
 - hotel settings UI has been restructured into left-side vertical tabs with per-section save actions
 - reservations page now supports `Due Tomorrow`, `Due Today`, and `Overdue` checkout filters
 - reservation creation flow now surfaces the hotel default checkout time to staff
+- guest checkout reminders now support configurable lead days instead of only day-before / same-day timing
+- housekeeping follow-up scheduler added with its own hotel cron settings, grace window, and housekeeping-targeted alerts
+- checkout scheduler metadata now links reminder timing and follow-up task context more clearly across notifications/email logs
+- hotel settings now support manual run-now triggers for checkout and housekeeping follow-up schedulers to speed up QA
+- shared Redis service added for app-level pub/sub and presence state
+- realtime presence tracking added so staff and HR account views can show who is currently online
+- websocket presence sync now invalidates staff/account views in near real time across Redis-backed events
+- logout and logout-all now clear Redis presence directly so online status drops reliably when a user signs out
+
+Still pending:
+- run end-to-end verification for checkout automation
+- add more timed workflows beyond attendance and checkout
+- improve scheduler observability further across future jobs
+- add Redis-backed production hardening for broader caching, session, and distributed job support
 
 - [ ] Connection pooling
 
@@ -180,16 +195,18 @@ Notes: Playwright after feature freeze.
 
 - [ ] Expand DB-backed cron settings beyond attendance absence scanning
 - [~] Add scheduler observability/admin visibility for last run status and failures
-Notes: last run, next run, timezone, enabled state, last success/failure timestamps, and last error are now visible for attendance and checkout scheduling. Remaining work is extending the same model to more job types and richer reminder timing controls.
-- [ ] Add housekeeping follow-up job for cleaning tasks still in progress or not done
-Notes: send staff/admin mail and in-app notifications when checkout-related cleaning remains open beyond the expected window.
-- [ ] Improve dynamic metadata across notifications and email delivery logs
-Notes: expand metadata payloads so reminders, scheduler alerts, and linked follow-up tasks can be traced more cleanly in UI and admin tooling.
+Notes: last run, next run, timezone, enabled state, last success/failure timestamps, and last error are now visible for attendance, checkout, and housekeeping follow-up scheduling. Remaining work is extending the same model to more job types and deeper operational visibility.
+- [x] Add housekeeping follow-up job for cleaning tasks still in progress or not done
+Notes: dedicated housekeeping follow-up scheduler added with grace-hour control plus housekeeping-targeted email and in-app alerts for stale checkout prep tasks.
+- [~] Improve dynamic metadata across notifications and email delivery logs
+Notes: checkout reminder timing and housekeeping follow-up context are now linked more clearly in metadata. Remaining work is broadening the same depth of linkage across more scheduler-driven workflows.
 - [ ] Realtime event naming/payload conventions across modules
+- [~] Realtime presence / online state
+Notes: Redis-backed presence is now live for staff and HR account views, including websocket sync and logout-driven cleanup. Remaining work is expanding presence beyond these views and deciding whether to expose richer states than online/offline.
 
 ## Immediate Pending
 
 - [ ] Run end-to-end verification for checkout automation
-Notes: verify hotel settings save/load across tabs, default checkout time behavior on reservation creation, reservation page checkout filters, guest reminder toggle behavior, staff checkout summary alerts, and housekeeping prep task creation.
+Notes: verify hotel settings save/load across tabs, default checkout time behavior on reservation creation, reservation page checkout filters, guest reminder lead-day behavior, staff checkout summary alerts, housekeeping prep task creation, and housekeeping follow-up alerts.
 - [ ] Finish dashboard QA / polish pass
 Notes: role-by-role browser QA is still pending even though the admin dashboard settings flow is now verified. Remaining work is reviewing seeded role layouts, widget usefulness, and skeleton/empty/error states before calling the dashboard v1 stable.

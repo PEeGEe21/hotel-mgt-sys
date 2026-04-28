@@ -29,6 +29,7 @@ import {
 import openToast from '@/components/ToastComponent';
 import { useDebounce } from '@/hooks/useDebounce';
 import Pagination from '@/components/ui/pagination';
+import { usePresenceRealtime } from '@/hooks/usePresenceRealtime';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const CLOCK_STATUS_STYLE: Record<string, string> = {
@@ -300,6 +301,8 @@ function AddStaffModal({
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function StaffPage() {
+  usePresenceRealtime();
+
   const router = useRouter();
   const [search, setSearch] = useState('');
   const [dept, setDept] = useState('');
@@ -451,7 +454,7 @@ export default function StaffPage() {
             <table className="w-full">
               <thead className="border-b border-[#1e2536] bg-[#0f1117]/50">
                 <tr>
-                  {['Staff Member', 'Contact', 'Department', 'Role', 'Status', 'Salary', ''].map(
+                  {['Staff Member', 'Contact', 'Department', 'Role', 'Status', 'Presence', 'Salary', ''].map(
                     (h) => (
                       <th
                         key={h}
@@ -530,6 +533,22 @@ export default function StaffPage() {
                         {s.clockStatus ?? 'Not Clocked In'}
                       </span>
                     </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`text-xs px-2.5 py-1 rounded-full font-medium flex items-center gap-1 w-fit ${
+                          s.user.isOnline
+                            ? 'bg-emerald-500/15 text-emerald-400'
+                            : 'bg-slate-500/15 text-slate-400'
+                        }`}
+                      >
+                        <span
+                          className={`h-2 w-2 rounded-full ${
+                            s.user.isOnline ? 'bg-emerald-400' : 'bg-slate-500'
+                          }`}
+                        />
+                        {s.user.isOnline ? 'Online' : 'Offline'}
+                      </span>
+                    </td>
                     <td className="px-4 py-3 text-sm text-slate-300">
                       {Number(s.salary) > 0 ? `₦${Number(s.salary).toLocaleString()}/mo` : '—'}
                     </td>
@@ -540,7 +559,7 @@ export default function StaffPage() {
                 ))}
                 {staff.length === 0 && !isLoading && (
                   <tr>
-                    <td colSpan={7} className="py-16 text-center">
+                    <td colSpan={8} className="py-16 text-center">
                       <UserCheck size={32} className="text-slate-700 mx-auto mb-3" />
                       <p className="text-slate-500 text-sm">No staff found</p>
                     </td>

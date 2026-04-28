@@ -10,6 +10,7 @@ export type NotificationEvent =
   | 'checkOut'
   | 'paymentReceived'
   | 'lowInventory'
+  | 'housekeepingAlert'
   | 'maintenanceAlert'
   | 'attendanceAlert'
   | 'systemAlerts';

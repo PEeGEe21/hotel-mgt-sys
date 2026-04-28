@@ -21,6 +21,8 @@ export type UserAccount = {
   position: string | null;
   permissionGrants: string[];
   permissionDenies: string[];
+  isOnline?: boolean;
+  lastSeenAt?: string | null;
 };
 
 export type UserAccountInput = {

@@ -23,3 +23,29 @@ export function getRealtimeSocket() {
 
   return realtimeSocket;
 }
+
+export function disconnectRealtimeSocket() {
+  if (!realtimeSocket) return;
+  realtimeSocket.removeAllListeners();
+  realtimeSocket.disconnect();
+  realtimeSocket = null;
+}
+
+export async function leaveRealtimePresence() {
+  if (!realtimeSocket || !realtimeSocket.connected) return;
+
+  await new Promise<void>((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+
+    realtimeSocket!.timeout(1000).emit('presence.leave', undefined, () => {
+      finish();
+    });
+
+    window.setTimeout(finish, 1100);
+  });
+}

@@ -35,7 +35,9 @@ export type ApiStaff = {
     email: string;
     role: StaffRole;
     isActive: boolean;
+    isOnline?: boolean;
     lastLoginAt: string | null;
+    lastSeenAt?: string | null;
     mustChangePassword: boolean;
   };
   _count?: { tasks: number; attendance: number };

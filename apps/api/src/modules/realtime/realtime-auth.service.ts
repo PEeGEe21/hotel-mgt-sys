@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { Socket } from 'socket.io';
 import { PrismaService } from '../../prisma/prisma.service';
+import { Role } from '@prisma/client';
 
 type RealtimeJwtPayload = {
   sub: string;
@@ -64,6 +65,31 @@ export class RealtimeAuthService {
     return cookies.get('hotel_access_token') ?? null;
   }
 
+  private async resolveHotelId(args: { userId: string; role: string; staffHotelId: string | null }) {
+    if (args.staffHotelId) return args.staffHotelId;
+
+    if (args.role === Role.SUPER_ADMIN || args.role === Role.ADMIN) {
+      const roleDashboardHotel = await this.prisma.roleDashboardConfig.findFirst({
+        where: { role: args.role as Role },
+        select: { hotelId: true },
+        orderBy: { createdAt: 'asc' },
+      });
+
+      if (roleDashboardHotel?.hotelId) {
+        return roleDashboardHotel.hotelId;
+      }
+
+      const firstHotel = await this.prisma.hotel.findFirst({
+        select: { id: true },
+        orderBy: { createdAt: 'asc' },
+      });
+
+      return firstHotel?.id ?? null;
+    }
+
+    return null;
+  }
+
   async authenticate(client: Socket): Promise<RealtimeUser> {
     const token = this.extractToken(client);
     if (!token) {
@@ -92,6 +118,12 @@ export class RealtimeAuthService {
       throw new UnauthorizedException('Account not found or inactive.');
     }
 
+    const hotelId = await this.resolveHotelId({
+      userId: payload.sub,
+      role: payload.role,
+      staffHotelId: user.staff?.hotelId ?? null,
+    });
+
     return {
       sub: payload.sub,
       email: payload.email,
@@ -99,7 +131,7 @@ export class RealtimeAuthService {
       impersonatorId: payload.impersonatorId ?? null,
       isImpersonation: Boolean(payload.isImpersonation),
       staffId: user.staff?.id ?? null,
-      hotelId: user.staff?.hotelId ?? null,
+      hotelId,
     };
   }
 }

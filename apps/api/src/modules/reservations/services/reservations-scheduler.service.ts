@@ -4,6 +4,8 @@ import { Queue } from 'bull';
 import {
   CHECKOUT_DUE_SCAN_JOB,
   CHECKOUT_DUE_SCAN_REPEAT_JOB_ID,
+  HOUSEKEEPING_FOLLOW_UP_SCAN_JOB,
+  HOUSEKEEPING_FOLLOW_UP_SCAN_REPEAT_JOB_ID,
   RESERVATIONS_QUEUE,
 } from '../reservations.constants';
 
@@ -19,45 +21,65 @@ export class ReservationsSchedulerService implements OnModuleInit {
     name?: string;
     cron?: string | null;
     tz?: string | null;
-  }) {
+  }, expected: { id: string; name: string }) {
     return (
-      job.id === CHECKOUT_DUE_SCAN_REPEAT_JOB_ID &&
-      job.name === CHECKOUT_DUE_SCAN_JOB &&
+      job.id === expected.id &&
+      job.name === expected.name &&
       job.cron === this.heartbeatCron &&
       !job.tz
     );
   }
 
-  async onModuleInit() {
-    const repeatableJobs = await this.reservationsQueue.getRepeatableJobs();
-
+  private async ensureHeartbeatJob(
+    repeatableJobs: Array<{
+      id?: string;
+      name?: string;
+      key: string;
+      cron?: string | null;
+      tz?: string | null;
+    }>,
+    expected: { id: string; name: string },
+  ) {
     for (const job of repeatableJobs) {
-      const isCheckoutDueJob =
-        job.id === CHECKOUT_DUE_SCAN_REPEAT_JOB_ID && job.name === CHECKOUT_DUE_SCAN_JOB;
+      const isTargetJob = job.id === expected.id && job.name === expected.name;
 
-      if (!isCheckoutDueJob || this.isCurrentHeartbeatJob(job)) continue;
+      if (!isTargetJob || this.isCurrentHeartbeatJob(job, expected)) continue;
 
       await this.reservationsQueue.removeRepeatableByKey(job.key);
-      this.logger.warn(`Removed stale checkout scheduler job: ${job.key}`);
+      this.logger.warn(`Removed stale scheduler job: ${job.key}`);
     }
 
-    const hasCurrentHeartbeat = repeatableJobs.some((job) => this.isCurrentHeartbeatJob(job));
+    const hasCurrentHeartbeat = repeatableJobs.some((job) =>
+      this.isCurrentHeartbeatJob(job, expected),
+    );
 
-    if (!hasCurrentHeartbeat) {
-      await this.reservationsQueue.add(
-        CHECKOUT_DUE_SCAN_JOB,
-        {},
-        {
-          jobId: CHECKOUT_DUE_SCAN_REPEAT_JOB_ID,
-          repeat: {
-            cron: this.heartbeatCron,
-          },
-          removeOnComplete: true,
-          removeOnFail: 25,
+    if (hasCurrentHeartbeat) return;
+
+    await this.reservationsQueue.add(
+      expected.name,
+      {},
+      {
+        jobId: expected.id,
+        repeat: {
+          cron: this.heartbeatCron,
         },
-      );
-    }
+        removeOnComplete: true,
+        removeOnFail: 25,
+      },
+    );
+  }
 
-    this.logger.log('Scheduled checkout-due heartbeat every 5 minutes');
+  async onModuleInit() {
+    const repeatableJobs = await this.reservationsQueue.getRepeatableJobs();
+    await this.ensureHeartbeatJob(repeatableJobs, {
+      id: CHECKOUT_DUE_SCAN_REPEAT_JOB_ID,
+      name: CHECKOUT_DUE_SCAN_JOB,
+    });
+    await this.ensureHeartbeatJob(repeatableJobs, {
+      id: HOUSEKEEPING_FOLLOW_UP_SCAN_REPEAT_JOB_ID,
+      name: HOUSEKEEPING_FOLLOW_UP_SCAN_JOB,
+    });
+
+    this.logger.log('Scheduled reservation scheduler heartbeats every 5 minutes');
   }
 }

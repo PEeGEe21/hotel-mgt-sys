@@ -29,6 +29,7 @@ import { impersonateAction } from '@/actions/auth.actions';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAppStore } from '@/store/app.store';
 import { useRouter } from 'next/navigation';
+import { usePresenceRealtime } from '@/hooks/usePresenceRealtime';
 
 type Role =
   | 'SUPER_ADMIN'
@@ -199,6 +200,8 @@ function AccountModal({
 }
 
 export default function UserAccountsPage() {
+  usePresenceRealtime();
+
   const router = useRouter();
   const queryClient = useQueryClient();
   const currentUser = useAuthStore((s) => s.user);
@@ -324,7 +327,7 @@ export default function UserAccountsPage() {
         <table className="w-full">
           <thead className="border-b border-[#1e2536] bg-[#0f1117]/50">
             <tr>
-              {['Staff Member', 'Username', 'Role', 'Status', 'Last Login', 'Created', ''].map(
+              {['Staff Member', 'Username', 'Role', 'Status', 'Presence', 'Last Login', 'Created', ''].map(
                 (h) => (
                   <th
                     key={h}
@@ -339,13 +342,13 @@ export default function UserAccountsPage() {
           <tbody>
             {isLoading ? (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-slate-500 text-sm">
+                <td colSpan={8} className="px-4 py-8 text-center text-slate-500 text-sm">
                   Loading accounts…
                 </td>
               </tr>
             ) : accounts.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-slate-500 text-sm">
+                <td colSpan={8} className="px-4 py-8 text-center text-slate-500 text-sm">
                   No accounts found
                 </td>
               </tr>
@@ -389,6 +392,22 @@ export default function UserAccountsPage() {
                         <XCircle size={10} />
                       ) : null}
                       {acc.status}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`text-xs px-2.5 py-1 rounded-full font-medium flex items-center gap-1 w-fit ${
+                        acc.isOnline
+                          ? 'bg-emerald-500/15 text-emerald-400'
+                          : 'bg-slate-500/15 text-slate-400'
+                      }`}
+                    >
+                      <span
+                        className={`h-2 w-2 rounded-full ${
+                          acc.isOnline ? 'bg-emerald-400' : 'bg-slate-500'
+                        }`}
+                      />
+                      {acc.isOnline ? 'Online' : 'Offline'}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">

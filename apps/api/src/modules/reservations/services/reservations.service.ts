@@ -24,6 +24,9 @@ import { EmailService } from '../../../common/email/email.service';
 
 // ─── Service ──────────────────────────────────────────────────────────────────
 
+const HOUSEKEEPING_FOLLOW_UP_SCAN_JOB_TYPE =
+  'HOUSEKEEPING_FOLLOW_UP_SCAN' as HotelCronJobType;
+
 const RESERVATION_INCLUDE = {
   guest: true,
   room: { include: { floor: { select: { name: true } } } },
@@ -481,23 +484,30 @@ export class ReservationsService {
     roomNumber: string;
     reservationNo: string;
     checkOut: Date;
-    stage: 'dayBefore' | 'sameDay';
+    daysUntilCheckout: number;
   }) {
     const hotelName = escapeHtml(args.hotelName);
     const guestName = escapeHtml(args.guestName);
     const roomNumber = escapeHtml(args.roomNumber);
     const reservationNo = escapeHtml(args.reservationNo);
     const checkOut = fmtDateTime(args.checkOut);
-
+    const leadLabel =
+      args.daysUntilCheckout === 0
+        ? 'today'
+        : args.daysUntilCheckout === 1
+          ? 'tomorrow'
+          : `in ${args.daysUntilCheckout} days`;
     const intro =
-      args.stage === 'dayBefore'
-        ? `This is a reminder from ${args.hotelName} that your checkout for room ${args.roomNumber} is tomorrow at ${checkOut}.`
-        : `This is a reminder from ${args.hotelName} that your checkout for room ${args.roomNumber} is scheduled for ${checkOut}.`;
+      args.daysUntilCheckout === 0
+        ? `This is a reminder from ${args.hotelName} that your checkout for room ${args.roomNumber} is scheduled for ${checkOut}.`
+        : `This is a reminder from ${args.hotelName} that your checkout for room ${args.roomNumber} is ${leadLabel} at ${checkOut}.`;
 
     return {
       subject:
-        args.stage === 'dayBefore'
+        args.daysUntilCheckout === 1
           ? `Checkout tomorrow for reservation ${args.reservationNo}`
+          : args.daysUntilCheckout > 1
+            ? `Checkout in ${args.daysUntilCheckout} days for reservation ${args.reservationNo}`
           : `Checkout reminder for reservation ${args.reservationNo}`,
       text:
         `Hello ${args.guestName},\n` +
@@ -518,6 +528,21 @@ export class ReservationsService {
     };
   }
 
+  private buildGuestCheckoutReminderEvent(daysUntilCheckout: number) {
+    if (daysUntilCheckout === 0) return 'checkOutDueGuestSameDay';
+    if (daysUntilCheckout === 1) return 'checkOutDueGuestDayBefore';
+    return `checkOutDueGuest${daysUntilCheckout}Days`;
+  }
+
+  private normalizeGuestCheckoutReminderLeadDays(days?: number[] | null) {
+    const normalized = [...new Set((days ?? [1, 0]).filter((value) => Number.isInteger(value)))]
+      .map((value) => Math.max(0, value))
+      .filter((value) => value <= 30)
+      .sort((a, b) => b - a);
+
+    return normalized.length ? normalized : [1, 0];
+  }
+
   private async hasSentGuestCheckoutReminder(args: {
     hotelId: string;
     recipient: string;
@@ -536,6 +561,98 @@ export class ReservationsService {
     });
 
     return Boolean(existing);
+  }
+
+  private buildHousekeepingFollowUpEmail(args: {
+    hotelName: string;
+    alertDate: string;
+    graceHours: number;
+    tasks: Array<{
+      taskId: string;
+      roomNumber: string;
+      status: TaskStatus;
+      dueBy: Date | null;
+      assignedToName: string | null;
+      notes: string | null;
+    }>;
+  }) {
+    const rows = args.tasks
+      .map(
+        (task) => `
+          <tr>
+            <td style="padding: 6px 12px 6px 0;">${escapeHtml(task.roomNumber)}</td>
+            <td style="padding: 6px 12px 6px 0;">${escapeHtml(task.status)}</td>
+            <td style="padding: 6px 12px 6px 0;">${task.dueBy ? fmtDateTime(task.dueBy) : '—'}</td>
+            <td style="padding: 6px 0;">${escapeHtml(task.assignedToName ?? 'Unassigned')}</td>
+          </tr>
+        `,
+      )
+      .join('');
+
+    return {
+      subject: `Checkout housekeeping follow-up for ${args.hotelName}`,
+      text:
+        `${args.tasks.length} checkout housekeeping tasks are still open beyond ${args.graceHours} hours as of ${args.alertDate}.\n` +
+        args.tasks
+          .map(
+            (task) =>
+              `- Room ${task.roomNumber}: ${task.status} (${task.dueBy ? fmtDateTime(task.dueBy) : 'no due date'})`,
+          )
+          .join('\n'),
+      html: `
+        <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.6;">
+          <p style="margin: 0 0 12px;">
+            <strong>${escapeHtml(args.hotelName)}</strong> has ${args.tasks.length} checkout prep tasks still open beyond the ${args.graceHours}-hour follow-up window on ${escapeHtml(args.alertDate)}.
+          </p>
+          <table style="border-collapse: collapse;">
+            <thead>
+              <tr>
+                <th style="padding: 0 12px 6px 0; text-align: left;">Room</th>
+                <th style="padding: 0 12px 6px 0; text-align: left;">Status</th>
+                <th style="padding: 0 12px 6px 0; text-align: left;">Due By</th>
+                <th style="padding: 0; text-align: left;">Assigned</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      `,
+    };
+  }
+
+  private buildHousekeepingFollowUpInAppNotification(args: {
+    alertDate: string;
+    graceHours: number;
+    tasks: Array<{
+      taskId: string;
+      roomId: string;
+      roomNumber: string;
+      status: TaskStatus;
+      dueBy: Date | null;
+      assignedTo: string | null;
+      assignedToName: string | null;
+      notes: string | null;
+    }>;
+  }) {
+    return {
+      title: 'Checkout housekeeping follow-up',
+      message: `${args.tasks.length} checkout prep tasks are still open beyond ${args.graceHours} hours as of ${args.alertDate}.`,
+      metadata: {
+        alertDate: args.alertDate,
+        graceHours: args.graceHours,
+        jobType: HOUSEKEEPING_FOLLOW_UP_SCAN_JOB_TYPE,
+        tasks: args.tasks.map((task) => ({
+          taskId: task.taskId,
+          roomId: task.roomId,
+          roomNumber: task.roomNumber,
+          status: task.status,
+          dueBy: task.dueBy?.toISOString() ?? null,
+          assignedTo: task.assignedTo,
+          assignedToName: task.assignedToName,
+          notes: task.notes,
+        })),
+      },
+    };
   }
 
   private async ensureCheckoutHousekeepingTask(args: {
@@ -1183,14 +1300,16 @@ export class ReservationsService {
     return updated;
   }
 
-  async runCheckoutDueScanForDate(referenceDate = new Date()) {
+  async runCheckoutDueScanForDate(referenceDate = new Date(), hotelIdFilter?: string) {
     const reference = new Date(referenceDate);
     const hotels = (await this.prisma.hotel.findMany({
+      where: hotelIdFilter ? { id: hotelIdFilter } : undefined,
       select: {
         id: true,
         name: true,
         timezone: true,
         guestCheckoutReminderEnabled: true,
+        guestCheckoutReminderLeadDays: true,
         autoCreateCheckoutHousekeepingTasks: true,
         cronSettings: {
           where: { jobType: HotelCronJobType.CHECKOUT_DUE_SCAN },
@@ -1203,6 +1322,7 @@ export class ReservationsService {
       name: string;
       timezone: string | null;
       guestCheckoutReminderEnabled?: boolean;
+      guestCheckoutReminderLeadDays?: number[] | null;
       autoCreateCheckoutHousekeepingTasks?: boolean;
       cronSettings: Array<{
         enabled: boolean;
@@ -1231,9 +1351,6 @@ export class ReservationsService {
       if (localMinutes < scheduledMinutes) continue;
 
       const alertDate = localNow.date;
-      const tomorrow = new Date(reference);
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      const tomorrowDate = getZonedDateParts(tomorrow, timezone).date;
       if (cronSetting?.lastTriggeredAt) {
         const lastTriggeredDate = getZonedDateParts(cronSetting.lastTriggeredAt, timezone).date;
         if (lastTriggeredDate === alertDate) continue;
@@ -1325,6 +1442,9 @@ export class ReservationsService {
         });
 
         if (hotel.guestCheckoutReminderEnabled) {
+          const reminderLeadDays = this.normalizeGuestCheckoutReminderLeadDays(
+            hotel.guestCheckoutReminderLeadDays,
+          );
           for (const reservation of checkedInReservations
             .map((item) => ({
               reservationId: item.id,
@@ -1336,24 +1456,24 @@ export class ReservationsService {
               checkOut: item.checkOut,
               localCheckoutDate: getZonedDateParts(item.checkOut, timezone).date,
             }))
+            .map((item) => ({
+              ...item,
+              daysUntilCheckout: diffDaysBetweenLocalDates(alertDate, item.localCheckoutDate),
+            }))
             .filter(
               (item) =>
                 item.guestEmail &&
-                (item.localCheckoutDate === alertDate || item.localCheckoutDate === tomorrowDate),
+                item.daysUntilCheckout >= 0 &&
+                reminderLeadDays.includes(item.daysUntilCheckout),
             )) {
-            const stage =
-              reservation.localCheckoutDate === tomorrowDate ? 'dayBefore' : 'sameDay';
-            const event =
-              stage === 'dayBefore'
-                ? 'checkOutDueGuestDayBefore'
-                : 'checkOutDueGuestSameDay';
+            const event = this.buildGuestCheckoutReminderEvent(reservation.daysUntilCheckout);
             const emailContent = this.buildGuestCheckoutReminderEmail({
               hotelName: hotel.name,
               guestName: reservation.guestName,
               roomNumber: reservation.roomNumber,
               reservationNo: reservation.reservationNo,
               checkOut: reservation.checkOut,
-              stage,
+              daysUntilCheckout: reservation.daysUntilCheckout,
             });
 
             const alreadySent = await this.hasSentGuestCheckoutReminder({
@@ -1375,7 +1495,8 @@ export class ReservationsService {
               metadata: {
                 reservationId: reservation.reservationId,
                 reservationNo: reservation.reservationNo,
-                stage,
+                daysUntilCheckout: reservation.daysUntilCheckout,
+                localCheckoutDate: reservation.localCheckoutDate,
               },
             });
           }
@@ -1426,6 +1547,159 @@ export class ReservationsService {
       hotelsProcessed,
       hotelsFailed,
       reservationsFlagged,
+    };
+  }
+
+  async runHousekeepingFollowUpScanForDate(referenceDate = new Date(), hotelIdFilter?: string) {
+    const reference = new Date(referenceDate);
+    const hotels = (await this.prisma.hotel.findMany({
+      where: hotelIdFilter ? { id: hotelIdFilter } : undefined,
+      select: {
+        id: true,
+        name: true,
+        timezone: true,
+          housekeepingFollowUpEnabled: true,
+          housekeepingFollowUpGraceHours: true,
+          cronSettings: {
+            where: { jobType: HOUSEKEEPING_FOLLOW_UP_SCAN_JOB_TYPE },
+            take: 1,
+          },
+      } as any,
+      orderBy: { createdAt: 'asc' },
+    })) as unknown as Array<{
+      id: string;
+      name: string;
+      timezone: string | null;
+      housekeepingFollowUpEnabled?: boolean;
+      housekeepingFollowUpGraceHours?: number | null;
+      cronSettings: Array<{
+        enabled: boolean;
+        runAtHour: number;
+        runAtMinute: number;
+        lastTriggeredAt?: Date | null;
+      }>;
+    }>;
+
+    let tasksFlagged = 0;
+    let hotelsProcessed = 0;
+    let hotelsFailed = 0;
+
+    for (const hotel of hotels) {
+      const cronSetting = hotel.cronSettings[0];
+      const enabled = cronSetting?.enabled ?? false;
+      const runAtHour = cronSetting?.runAtHour ?? 15;
+      const runAtMinute = cronSetting?.runAtMinute ?? 0;
+      const timezone = hotel.timezone || 'Africa/Lagos';
+      const graceHours = Math.max(1, hotel.housekeepingFollowUpGraceHours ?? 2);
+
+      if (!enabled || !hotel.housekeepingFollowUpEnabled) continue;
+
+      const localNow = getZonedDateParts(reference, timezone);
+      const localMinutes = localNow.hour * 60 + localNow.minute;
+      const scheduledMinutes = runAtHour * 60 + runAtMinute;
+      if (localMinutes < scheduledMinutes) continue;
+
+      const alertDate = localNow.date;
+      if (cronSetting?.lastTriggeredAt) {
+        const lastTriggeredDate = getZonedDateParts(cronSetting.lastTriggeredAt, timezone).date;
+        if (lastTriggeredDate === alertDate) continue;
+      }
+
+      try {
+        const cutoff = new Date(reference.getTime() - graceHours * 60 * 60 * 1000);
+        const tasks = await this.prisma.housekeepingTask.findMany({
+          where: {
+            hotelId: hotel.id,
+            type: 'CHECKOUT_PREP',
+            status: { in: [TaskStatus.PENDING, TaskStatus.IN_PROGRESS] },
+            dueBy: { lte: cutoff },
+          },
+          select: {
+            id: true,
+            roomId: true,
+            status: true,
+            dueBy: true,
+            notes: true,
+            assignedTo: true,
+            room: { select: { number: true } },
+            staff: { select: { firstName: true, lastName: true } },
+          },
+          orderBy: [{ dueBy: 'asc' }, { createdAt: 'asc' }],
+        });
+
+        if (!tasks.length) {
+          await this.recordCronJobSuccess({
+            hotelId: hotel.id,
+            jobType: HOUSEKEEPING_FOLLOW_UP_SCAN_JOB_TYPE,
+            enabled,
+            runAtHour,
+            runAtMinute,
+            triggeredAt: reference,
+          });
+          hotelsProcessed += 1;
+          continue;
+        }
+
+        const taskRows = tasks.map((task) => ({
+          taskId: task.id,
+          roomId: task.roomId,
+          roomNumber: task.room.number,
+          status: task.status,
+          dueBy: task.dueBy,
+          assignedTo: task.assignedTo,
+          assignedToName:
+            `${task.staff?.firstName ?? ''} ${task.staff?.lastName ?? ''}`.trim() || null,
+          notes: task.notes ?? null,
+        }));
+
+        await this.notifications.dispatch({
+          hotelId: hotel.id,
+          event: 'housekeepingAlert',
+          email: this.buildHousekeepingFollowUpEmail({
+            hotelName: hotel.name,
+            alertDate,
+            graceHours,
+            tasks: taskRows,
+          }),
+          inApp: this.buildHousekeepingFollowUpInAppNotification({
+            alertDate,
+            graceHours,
+            tasks: taskRows,
+          }),
+        });
+
+        await this.recordCronJobSuccess({
+          hotelId: hotel.id,
+          jobType: HOUSEKEEPING_FOLLOW_UP_SCAN_JOB_TYPE,
+          enabled,
+          runAtHour,
+          runAtMinute,
+          triggeredAt: reference,
+        });
+
+        tasksFlagged += taskRows.length;
+        hotelsProcessed += 1;
+      } catch (error) {
+        hotelsFailed += 1;
+        this.logger.error(`Housekeeping follow-up scan failed for hotel ${hotel.id}: ${String(error)}`);
+
+        await this.recordCronJobFailure({
+          hotelId: hotel.id,
+          jobType: HOUSEKEEPING_FOLLOW_UP_SCAN_JOB_TYPE,
+          enabled,
+          runAtHour,
+          runAtMinute,
+          triggeredAt: reference,
+          error,
+        });
+      }
+    }
+
+    return {
+      date: reference.toISOString(),
+      hotelsProcessed,
+      hotelsFailed,
+      tasksFlagged,
     };
   }
 
@@ -1757,4 +2031,12 @@ function getZonedDateParts(value: Date, timezone: string) {
     minute: Number(map.minute ?? 0),
     second: Number(map.second ?? 0),
   };
+}
+
+function diffDaysBetweenLocalDates(fromDate: string, toDate: string) {
+  const [fromYear, fromMonth, fromDay] = fromDate.split('-').map(Number);
+  const [toYear, toMonth, toDay] = toDate.split('-').map(Number);
+  const fromMs = Date.UTC(fromYear, fromMonth - 1, fromDay);
+  const toMs = Date.UTC(toYear, toMonth - 1, toDay);
+  return Math.round((toMs - fromMs) / 86_400_000);
 }

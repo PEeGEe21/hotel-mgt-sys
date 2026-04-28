@@ -26,6 +26,7 @@ const EVENT_OPTIONS = [
   'newReservation',
   'paymentReceived',
   'lowInventory',
+  'housekeepingAlert',
   'checkIn',
   'checkOut',
   'maintenanceAlert',

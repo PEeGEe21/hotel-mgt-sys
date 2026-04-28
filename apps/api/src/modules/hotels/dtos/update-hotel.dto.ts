@@ -1,5 +1,16 @@
 import { Type } from 'class-transformer';
-import { IsBoolean, IsInt, IsNumber, IsOptional, IsString, Max, Min, ValidateNested } from 'class-validator';
+import {
+  IsArray,
+  ArrayMinSize,
+  IsBoolean,
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class UpdateHotelCronSettingsDto {
@@ -9,6 +20,9 @@ export class UpdateHotelCronSettingsDto {
   @ApiPropertyOptional() @IsBoolean() @IsOptional() checkoutDueScanEnabled?: boolean;
   @ApiPropertyOptional() @IsInt() @Min(0) @Max(23) @IsOptional() checkoutDueScanHour?: number;
   @ApiPropertyOptional() @IsInt() @Min(0) @Max(59) @IsOptional() checkoutDueScanMinute?: number;
+  @ApiPropertyOptional() @IsBoolean() @IsOptional() housekeepingFollowUpScanEnabled?: boolean;
+  @ApiPropertyOptional() @IsInt() @Min(0) @Max(23) @IsOptional() housekeepingFollowUpScanHour?: number;
+  @ApiPropertyOptional() @IsInt() @Min(0) @Max(59) @IsOptional() housekeepingFollowUpScanMinute?: number;
 }
 
 export class UpdateHotelDto {
@@ -35,6 +49,9 @@ export class UpdateHotelDto {
   @ApiPropertyOptional() @IsInt() @Min(0) @Max(23) @IsOptional() defaultCheckoutHour?: number;
   @ApiPropertyOptional() @IsInt() @Min(0) @Max(59) @IsOptional() defaultCheckoutMinute?: number;
   @ApiPropertyOptional() @IsBoolean() @IsOptional() guestCheckoutReminderEnabled?: boolean;
+  @ApiPropertyOptional({ type: [Number] }) @IsArray() @ArrayMinSize(1) @IsInt({ each: true }) @Min(0, { each: true }) @Max(30, { each: true }) @IsOptional() guestCheckoutReminderLeadDays?: number[];
   @ApiPropertyOptional() @IsBoolean() @IsOptional() autoCreateCheckoutHousekeepingTasks?: boolean;
+  @ApiPropertyOptional() @IsBoolean() @IsOptional() housekeepingFollowUpEnabled?: boolean;
+  @ApiPropertyOptional() @IsInt() @Min(1) @Max(168) @IsOptional() housekeepingFollowUpGraceHours?: number;
   @ApiPropertyOptional({ type: UpdateHotelCronSettingsDto }) @ValidateNested() @Type(() => UpdateHotelCronSettingsDto) @IsOptional() cronSettings?: UpdateHotelCronSettingsDto;
 }

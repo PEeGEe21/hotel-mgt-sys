@@ -34,6 +34,7 @@ import { HealthModule } from './modules/health/health.module';
 import { MailingModule } from './modules/mailing/mailing.module';
 import { RealtimeModule } from './modules/realtime/realtime.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { RedisModule } from './common/redis/redis.module';
 
 @Module({
   imports: [
@@ -59,6 +60,7 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
         };
       },
     }),
+    RedisModule,
     PrismaModule,
     HealthModule,
     AuthModule,
