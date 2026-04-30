@@ -1,4 +1,5 @@
 import { IsArray, IsBoolean, IsInt, IsNumber, IsObject, IsOptional, IsString } from 'class-validator';
+import { IsSafeImageReference } from '../../../../common/utils/image-input.utils';
 
 export class CreateFacilityDto {
   @IsString() name!: string;
@@ -14,7 +15,7 @@ export class CreateFacilityDto {
   @IsOptional() @IsBoolean() requiresApproval?: boolean;
   @IsOptional() @IsInt() minDurationMins?: number;
   @IsOptional() @IsInt() maxDurationMins?: number;
-  @IsOptional() @IsArray() @IsString({ each: true }) images?: string[];
+  @IsOptional() @IsArray() @IsString({ each: true }) @IsSafeImageReference({}, { each: true }) images?: string[];
   @IsOptional() @IsArray() @IsString({ each: true }) amenities?: string[];
   @IsOptional() @IsString() typeId?: string;
   @IsOptional() @IsString() locationId?: string;

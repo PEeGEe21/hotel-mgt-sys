@@ -13,6 +13,7 @@ import { useGuests } from '@/hooks/useGuests';
 import ManageFacilityComplaintModal from './_components/ManageFacilityComplaintModal';
 import ComplaintDrawer from './_components/ComplaintDrawer';
 import Pagination from '@/components/ui/pagination';
+import { usePermissions } from '@/hooks/usePermissions';
 
 type Priority = 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
 type ComplaintStatus = 'NEW' | 'ACKNOWLEDGED' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED';
@@ -34,6 +35,7 @@ const statusStyle: Record<string, string> = {
 };
 
 export default function FacilityComplaintsPage() {
+  const { can } = usePermissions();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
@@ -61,7 +63,7 @@ export default function FacilityComplaintsPage() {
   const createComplaint = useCreateFacilityComplaint();
 
   const complaints = data?.complaints ?? [];
-  const { data: facilitiesData } = useFacilities({ page: 1, limit: 200 });
+  const { data: facilitiesData } = useFacilities({ page: 1, limit: 100 });
   const { data: staffData } = useStaff({ page: 1, limit: 200 });
   const { data: guestsData } = useGuests({ page: 1, limit: 200 });
 
@@ -75,6 +77,7 @@ export default function FacilityComplaintsPage() {
       value: g.id,
       label: `${g.firstName} ${g.lastName}`.trim(),
     })) ?? [];
+  const canManageComplaints = can('manage:facilities');
 
   return (
     <div>
@@ -96,12 +99,14 @@ export default function FacilityComplaintsPage() {
               )}
             </p>
           </div>
-          <button
-            onClick={() => setShowAdd(true)}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
-          >
-            <Plus size={15} /> Log Complaint
-          </button>
+          {canManageComplaints ? (
+            <button
+              onClick={() => setShowAdd(true)}
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
+            >
+              <Plus size={15} /> Log Complaint
+            </button>
+          ) : null}
         </div>
 
         {/* Stats */}
@@ -309,7 +314,7 @@ export default function FacilityComplaintsPage() {
         )}
       </div>
       <ManageFacilityComplaintModal
-        isOpen={showAdd}
+        isOpen={showAdd && canManageComplaints}
         onClose={() => setShowAdd(false)}
         facilityOptions={facilityOptions}
         staffOptions={staffOptions}

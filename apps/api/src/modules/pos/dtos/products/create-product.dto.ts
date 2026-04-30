@@ -10,6 +10,7 @@ import {
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IngredientDto } from '../ingredient.dto';
+import { IsSafeImageReference } from '../../../../common/utils/image-input.utils';
 
 export class CreateProductDto {
   @ApiProperty() @IsString() name!: string;
@@ -18,7 +19,7 @@ export class CreateProductDto {
   @ApiPropertyOptional() @IsString() @IsOptional() sku?: string;
   @ApiPropertyOptional() @IsString() @IsOptional() description?: string;
   @ApiPropertyOptional() @IsString() @IsOptional() unit?: string;
-  @ApiPropertyOptional() @IsString() @IsOptional() image?: string;
+  @ApiPropertyOptional() @IsString() @IsOptional() @IsSafeImageReference() image?: string;
   @ApiPropertyOptional() @IsBoolean() @IsOptional() isAvailable?: boolean;
   @ApiPropertyOptional() @IsNumber() @Min(0) @IsOptional() stock?: number;
   @ApiProperty({ default: 'PHYSICAL' }) @IsString() type!: string; // PHYSICAL | SERVICE | BUNDLE

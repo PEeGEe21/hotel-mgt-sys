@@ -1,4 +1,5 @@
 import { IsArray, IsDateString, IsInt, IsNumber, IsObject, IsOptional, IsString } from 'class-validator';
+import { IsSafeImageReference } from '../../../../common/utils/image-input.utils';
 
 export class UpdateMaintenanceRequestDto {
   @IsOptional() @IsString() facilityId?: string;
@@ -19,7 +20,7 @@ export class UpdateMaintenanceRequestDto {
   @IsOptional() @IsInt() actualMins?: number;
   @IsOptional() @IsObject() partsUsed?: Record<string, unknown>;
   @IsOptional() @IsNumber() totalCost?: number;
-  @IsOptional() @IsArray() @IsString({ each: true }) images?: string[];
+  @IsOptional() @IsArray() @IsString({ each: true }) @IsSafeImageReference({}, { each: true }) images?: string[];
   @IsOptional() @IsString() notes?: string;
   @IsOptional() @IsString() inspectionId?: string;
   @IsOptional() @IsString() verificationInspectionId?: string;

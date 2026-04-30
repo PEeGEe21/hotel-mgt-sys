@@ -11,6 +11,8 @@ import {
 } from '@/hooks/facility/useFacilityBooking';
 import { useFacilities } from '@/hooks/facility/useFacility';
 import Pagination from '@/components/ui/pagination';
+import { usePermissions } from '@/hooks/usePermissions';
+import { Drawer, DrawerContent, DrawerHeader, DrawerOverlay, DrawerTitle } from '@/components/ui/drawer';
 
 const statusStyle: Record<string, string> = {
   PENDING: 'bg-amber-500/15 text-amber-400',
@@ -41,6 +43,7 @@ function toTime(value?: string) {
 }
 
 export default function FacilityBookingsPage() {
+  const { can } = usePermissions();
   const [error, setError] = useState<string | null>(null);
 
   const [statusFilter, setStatusFilter] = useState<'All' | string>('All');
@@ -68,10 +71,11 @@ export default function FacilityBookingsPage() {
   });
   const createBooking = useCreateFacilityBooking();
   const cancelBooking = useCancelFacilityBooking();
-  const { data: facilitiesData } = useFacilities({ page: 1, limit: 200 });
+  const { data: facilitiesData } = useFacilities({ page: 1, limit: 100 });
 
   const bookings = data?.bookings ?? [];
   const facilities = facilitiesData?.facilities ?? [];
+  const canCreateBooking = can('create:facilities');
 
   const [form, setForm] = useState({
     facilityId: '',
@@ -158,12 +162,14 @@ export default function FacilityBookingsPage() {
             {error && <span className="ml-2 text-xs text-red-400">{error}</span>}
           </p>
         </div>
-        <button
-          onClick={() => setShowAdd(true)}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
-        >
-          <Plus size={15} /> New Booking
-        </button>
+        {canCreateBooking ? (
+          <button
+            onClick={() => setShowAdd(true)}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
+          >
+            <Plus size={15} /> New Booking
+          </button>
+        ) : null}
       </div>
 
       <div className="flex flex-wrap items-center gap-3 justify-between w-full">
@@ -330,18 +336,21 @@ export default function FacilityBookingsPage() {
         <Pagination meta={data.meta} currentPage={page} handlePageChange={setPage} />
       )}
 
-      {showAdd && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-[#161b27] border border-[#1e2536] rounded-2xl p-6 w-full max-w-lg shadow-2xl">
-            <div className="flex items-center justify-between mb-5">
+      <Drawer open={showAdd && canCreateBooking} onOpenChange={() => setShowAdd(false)} direction="right">
+        <DrawerOverlay className="bg-black/50 backdrop-blur-sm data-[state=open]:animate-fadeIn" />
+        <DrawerContent className="flex h-full w-full max-w-xl flex-col border-l border-[#1e2536] bg-[#161b27] sm:!max-w-xl">
+          <DrawerHeader className="flex flex-row items-center justify-between border-b border-[#1e2536] px-5 py-4">
+            <DrawerTitle className="text-base font-bold text-white">
               <h2 className="text-lg font-bold text-white">New Booking</h2>
-              <button
-                onClick={() => setShowAdd(false)}
-                className="text-slate-500 hover:text-slate-300"
-              >
-                <X size={18} />
-              </button>
-            </div>
+            </DrawerTitle>
+            <button
+              onClick={() => setShowAdd(false)}
+              className="text-slate-500 hover:text-slate-300"
+            >
+              <X size={18} />
+            </button>
+          </DrawerHeader>
+          <div className="flex-1 overflow-y-auto p-5">
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2">
                 <label className="text-xs text-slate-500 uppercase tracking-wider mb-1.5 block">
@@ -499,28 +508,31 @@ export default function FacilityBookingsPage() {
               </button>
             </div>
           </div>
-        </div>
-      )}
+        </DrawerContent>
+      </Drawer>
 
-      {showCancel && cancelTarget && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-[#161b27] border border-[#1e2536] rounded-2xl p-6 w-full max-w-md shadow-2xl">
-            <div className="flex items-center justify-between mb-5">
+      <Drawer open={showCancel && Boolean(cancelTarget)} onOpenChange={() => setShowCancel(false)} direction="right">
+        <DrawerOverlay className="bg-black/50 backdrop-blur-sm data-[state=open]:animate-fadeIn" />
+        <DrawerContent className="flex h-full w-full max-w-lg flex-col border-l border-[#1e2536] bg-[#161b27] sm:!max-w-lg">
+          <DrawerHeader className="flex flex-row items-center justify-between border-b border-[#1e2536] px-5 py-4">
+            <DrawerTitle className="text-base font-bold text-white">
               <h2 className="text-lg font-bold text-white">Cancel Booking</h2>
-              <button
-                onClick={() => setShowCancel(false)}
-                className="text-slate-500 hover:text-slate-300"
-              >
-                <X size={18} />
-              </button>
-            </div>
+            </DrawerTitle>
+            <button
+              onClick={() => setShowCancel(false)}
+              className="text-slate-500 hover:text-slate-300"
+            >
+              <X size={18} />
+            </button>
+          </DrawerHeader>
+          <div className="flex-1 overflow-y-auto p-5">
             <div className="space-y-4">
               <div>
                 <p className="text-sm text-slate-300">
-                  {cancelTarget.facility?.name ?? 'Facility'} · {cancelTarget.guestName}
+                  {cancelTarget?.facility?.name ?? 'Facility'} · {cancelTarget?.guestName ?? '—'}
                 </p>
                 <p className="text-xs text-slate-500">
-                  {toDate(cancelTarget.startTime)} {toTime(cancelTarget.startTime)}
+                  {toDate(cancelTarget?.startTime)} {toTime(cancelTarget?.startTime)}
                 </p>
               </div>
               <div>
@@ -563,8 +575,8 @@ export default function FacilityBookingsPage() {
               </button>
             </div>
           </div>
-        </div>
-      )}
+        </DrawerContent>
+      </Drawer>
     </div>
   );
 }

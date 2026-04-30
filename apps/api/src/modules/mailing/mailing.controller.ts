@@ -1,18 +1,18 @@
 import { Controller, Get, Query, Request, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { JwtAuthGuard, Roles, RolesGuard } from '../auth/guards';
+import { JwtAuthGuard, Permissions, PermissionsGuard } from '../auth/guards';
 import { MailingService } from './mailing.service';
 
 @ApiTags('Mailing')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('mailing')
 export class MailingController {
   constructor(private mailingService: MailingService) {}
 
-  @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('SUPER_ADMIN', 'ADMIN')
   @Get('emails')
-  @ApiOperation({ summary: 'List outbound email delivery logs (admin only)' })
+  @Permissions('view:mailing')
+  @ApiOperation({ summary: 'List outbound email delivery logs' })
   list(
     @Request() req: any,
     @Query('page') page?: string,

@@ -111,6 +111,10 @@ export class FacilitiesService {
     await this.assertStaffBelongsToHotel(hotelId, dto.managerId);
   }
 
+  private groupCounts(rows: Array<{ group: string; count: number }>) {
+    return rows.sort((a, b) => b.count - a.count || a.group.localeCompare(b.group));
+  }
+
   private isUrgentMaintenancePriority(priority?: string | null) {
     return ['HIGH', 'URGENT', 'CRITICAL'].includes((priority ?? '').toUpperCase());
   }
@@ -191,6 +195,212 @@ export class FacilitiesService {
   }
 
   // ============ FACILITIES =========== //
+
+  async getReportsSummary(
+    hotelId: string,
+    filters: { dateFrom?: string; dateTo?: string },
+  ) {
+    const complaintWhere: any = { hotelId };
+    const maintenanceWhere: any = { hotelId };
+    const requisitionWhere: any = { hotelId };
+    const inspectionWhere: any = { hotelId };
+
+    if (filters.dateFrom || filters.dateTo) {
+      complaintWhere.createdAt = {};
+      maintenanceWhere.createdAt = {};
+      requisitionWhere.createdAt = {};
+      inspectionWhere.scheduledAt = {};
+
+      if (filters.dateFrom) {
+        const dateFrom = new Date(filters.dateFrom);
+        complaintWhere.createdAt.gte = dateFrom;
+        maintenanceWhere.createdAt.gte = dateFrom;
+        requisitionWhere.createdAt.gte = dateFrom;
+        inspectionWhere.scheduledAt.gte = dateFrom;
+      }
+
+      if (filters.dateTo) {
+        const dateTo = new Date(filters.dateTo);
+        complaintWhere.createdAt.lte = dateTo;
+        maintenanceWhere.createdAt.lte = dateTo;
+        requisitionWhere.createdAt.lte = dateTo;
+        inspectionWhere.scheduledAt.lte = dateTo;
+      }
+    }
+
+    const [facilities, complaints, inspections, maintenanceRequests, requisitions] =
+      await Promise.all([
+        this.prisma.facility.findMany({
+          where: { hotelId },
+          select: {
+            id: true,
+            name: true,
+            status: true,
+            type: { select: { name: true } },
+            location: { select: { name: true } },
+            department: { select: { name: true } },
+          },
+        }),
+        this.prisma.facilityComplaint.findMany({
+          where: complaintWhere,
+          select: { facilityId: true, status: true },
+        }),
+        this.prisma.facilityInspection.findMany({
+          where: inspectionWhere,
+          select: { facilityId: true, status: true, score: true },
+        }),
+        this.prisma.maintenanceRequest.findMany({
+          where: maintenanceWhere,
+          select: { facilityId: true, status: true, totalCost: true },
+        }),
+        this.prisma.facilityRequisition.findMany({
+          where: requisitionWhere,
+          select: { status: true },
+        }),
+      ]);
+
+    const activeFacilities = facilities.filter((facility) => facility.status === 'ACTIVE').length;
+    const inactiveFacilities = facilities.filter((facility) => facility.status === 'INACTIVE').length;
+    const maintenanceFacilities = facilities.filter((facility) => facility.status === 'MAINTENANCE').length;
+
+    const openComplaints = complaints.filter((complaint) =>
+      ['NEW', 'ACKNOWLEDGED', 'IN_PROGRESS'].includes(complaint.status),
+    ).length;
+    const resolvedComplaints = complaints.filter((complaint) =>
+      ['RESOLVED', 'CLOSED'].includes(complaint.status),
+    ).length;
+
+    const submittedInspections = inspections.filter(
+      (inspection) => inspection.status === 'SUBMITTED',
+    ).length;
+    const scheduledInspections = inspections.filter(
+      (inspection) => inspection.status === 'SCHEDULED',
+    ).length;
+
+    const activeMaintenance = maintenanceRequests.filter(
+      (request) => !['RESOLVED', 'CLOSED'].includes(request.status),
+    ).length;
+    const closedMaintenance = maintenanceRequests.filter((request) =>
+      ['RESOLVED', 'CLOSED'].includes(request.status),
+    ).length;
+
+    const pendingRequisitions = requisitions.filter(
+      (requisition) => requisition.status === 'PENDING',
+    ).length;
+    const approvedRequisitions = requisitions.filter(
+      (requisition) => requisition.status === 'APPROVED',
+    ).length;
+    const fulfilledRequisitions = requisitions.filter(
+      (requisition) => requisition.status === 'FULFILLED',
+    ).length;
+
+    const maintenanceSpend = maintenanceRequests
+      .filter((request) => ['RESOLVED', 'CLOSED'].includes(request.status))
+      .reduce((sum, request) => sum + Number(request.totalCost ?? 0), 0);
+
+    const facilityHealth = facilities.map((facility) => {
+      const facilityComplaints = complaints.filter((complaint) => complaint.facilityId === facility.id);
+      const facilityInspections = inspections.filter((inspection) => inspection.facilityId === facility.id);
+      const facilityMaintenance = maintenanceRequests.filter(
+        (request) => request.facilityId === facility.id,
+      );
+      const score = facilityInspections.length
+        ? Math.round(
+            facilityInspections.reduce((sum, inspection) => sum + Number(inspection.score ?? 0), 0) /
+              facilityInspections.length,
+          )
+        : 0;
+
+      const health =
+        score >= 80
+          ? 'Good'
+          : score >= 60
+            ? 'Fair'
+            : score > 0
+              ? 'Poor'
+              : facilityMaintenance.length > 0
+                ? 'Maintenance'
+                : 'Not Inspected';
+
+      return {
+        name: facility.name,
+        complaints: facilityComplaints.length,
+        inspections: facilityInspections.length,
+        maintenance: facilityMaintenance.length,
+        score,
+        health,
+      };
+    });
+
+    const groupedType = this.groupCounts(
+      Object.entries(
+        facilities.reduce<Record<string, number>>((acc, facility) => {
+          const key = facility.type?.name ?? 'Unassigned';
+          acc[key] = (acc[key] || 0) + 1;
+          return acc;
+        }, {}),
+      ).map(([group, count]) => ({ group, count })),
+    );
+
+    const groupedLocation = this.groupCounts(
+      Object.entries(
+        facilities.reduce<Record<string, number>>((acc, facility) => {
+          const key = facility.location?.name ?? 'Unassigned';
+          acc[key] = (acc[key] || 0) + 1;
+          return acc;
+        }, {}),
+      ).map(([group, count]) => ({ group, count })),
+    );
+
+    const groupedDepartment = this.groupCounts(
+      Object.entries(
+        facilities.reduce<Record<string, number>>((acc, facility) => {
+          const key = facility.department?.name ?? 'Unassigned';
+          acc[key] = (acc[key] || 0) + 1;
+          return acc;
+        }, {}),
+      ).map(([group, count]) => ({ group, count })),
+    );
+
+    return {
+      summary: {
+        facilities: {
+          total: facilities.length,
+          active: activeFacilities,
+          inactive: inactiveFacilities,
+          maintenance: maintenanceFacilities,
+        },
+        complaints: {
+          total: complaints.length,
+          open: openComplaints,
+          resolved: resolvedComplaints,
+        },
+        inspections: {
+          total: inspections.length,
+          submitted: submittedInspections,
+          scheduled: scheduledInspections,
+        },
+        maintenance: {
+          total: maintenanceRequests.length,
+          active: activeMaintenance,
+          closed: closedMaintenance,
+          spend: maintenanceSpend,
+        },
+        requisitions: {
+          total: requisitions.length,
+          pending: pendingRequisitions,
+          approved: approvedRequisitions,
+          fulfilled: fulfilledRequisitions,
+        },
+      },
+      facilityHealth,
+      grouped: {
+        type: groupedType,
+        location: groupedLocation,
+        department: groupedDepartment,
+      },
+    };
+  }
 
   async listFacilities(hotelId: string, filters: any) {
     const page = filters.page ?? 1;

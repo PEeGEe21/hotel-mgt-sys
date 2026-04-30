@@ -68,6 +68,8 @@ export type Permission =
   // Reports
   | 'view:reports'
   | 'export:reports'
+  // Mailing
+  | 'view:mailing'
   // Facilities
   | 'view:facilities'
   | 'create:facilities'
@@ -166,6 +168,13 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     ],
   },
   {
+    label: 'Mailing',
+    key: 'mailing',
+    permissions: [
+      { key: 'view:mailing', label: 'View Mailing', description: 'Access outbound email logs and mailing history' },
+    ],
+  },
+  {
     label: 'Facilities',
     key: 'facilities',
     permissions: [
@@ -257,6 +266,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'approve:finance',
     'view:reports',
     'export:reports',
+    'view:mailing',
     'view:facilities',
     'create:facilities',
     'manage:facilities',
@@ -308,6 +318,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'approve:finance',
     'view:reports',
     'export:reports',
+    'view:mailing',
     'view:facilities',
     'create:facilities',
     'manage:facilities',
@@ -418,6 +429,7 @@ export const NAV_PERMISSIONS: Record<string, Permission> = {
   '/housekeeping': 'view:housekeeping',
   '/finance': 'view:finance',
   '/reports': 'view:reports',
+  '/mailing': 'view:mailing',
   '/facilities': 'view:facilities',
   '/facilities/bookings': 'view:facilities',
   '/facilities/reservations': 'view:facilities',

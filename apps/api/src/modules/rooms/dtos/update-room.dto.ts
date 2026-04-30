@@ -2,6 +2,7 @@ import { IsString, IsNumber, IsEnum, IsOptional, IsArray, IsInt, Min } from 'cla
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { RoomStatus, RoomType } from '@prisma/client';
+import { IsSafeImageReference } from '../../../common/utils/image-input.utils';
 
 export class UpdateRoomDto {
   @ApiPropertyOptional() @IsString() @IsOptional() number?: string;
@@ -12,5 +13,5 @@ export class UpdateRoomDto {
   @ApiPropertyOptional() @IsInt() @Min(1) @IsOptional() maxGuests?: number;
   @ApiPropertyOptional() @IsString() @IsOptional() description?: string;
   @ApiPropertyOptional() @IsArray() @IsString({ each: true }) @IsOptional() amenities?: string[];
-  @ApiPropertyOptional() @IsArray() @IsString({ each: true }) @IsOptional() images?: string[];
+  @ApiPropertyOptional() @IsArray() @IsString({ each: true }) @IsOptional() @IsSafeImageReference({}, { each: true }) images?: string[];
 }

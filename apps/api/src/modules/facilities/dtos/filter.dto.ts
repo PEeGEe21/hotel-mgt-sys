@@ -97,3 +97,15 @@ export class FacilityInspectionFilterDto extends FacilityActivityFilterDto {
   @IsString()
   inspectionType?: string;
 }
+
+export class FacilityReportsFilterDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  dateFrom?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  dateTo?: string;
+}

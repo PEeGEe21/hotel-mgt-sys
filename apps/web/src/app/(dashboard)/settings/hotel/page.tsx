@@ -22,6 +22,7 @@ import {
   useRunHotelCronJob,
   useUpdateHotelProfile,
 } from '@/hooks/hotel/useHotelProfile';
+import { validateImageFile } from '@/utils/image-file';
 
 const GeofenceMap = dynamic(() => import('@/components/GeofenceMap'), { ssr: false });
 
@@ -502,12 +503,10 @@ export default function HotelProfilePage() {
   const handleLogoChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      openToast('error', 'Please select an image file');
-      return;
-    }
-    if (file.size > 2 * 1024 * 1024) {
-      openToast('error', 'Logo must be under 2MB');
+    const result = validateImageFile(file, { label: 'Logo' });
+    if (!result.ok) {
+      openToast('error', result.message);
+      if (logoInputRef.current) logoInputRef.current.value = '';
       return;
     }
 
@@ -713,7 +712,7 @@ export default function HotelProfilePage() {
                       <input
                         ref={logoInputRef}
                         type="file"
-                        accept="image/*"
+                        accept="image/png,image/jpeg,image/webp"
                         className="hidden"
                         onChange={handleLogoChange}
                       />

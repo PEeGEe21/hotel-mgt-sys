@@ -108,6 +108,30 @@ function ManageFacilityModal({
       setError('Manager is required.');
       return;
     }
+    if (values.capacity && Number(values.capacity) < 0) {
+      setError('Capacity cannot be negative.');
+      return;
+    }
+    if (values.baseRate && Number(values.baseRate) < 0) {
+      setError('Base rate cannot be negative.');
+      return;
+    }
+    if (values.minDurationMins && Number(values.minDurationMins) < 0) {
+      setError('Minimum duration cannot be negative.');
+      return;
+    }
+    if (values.maxDurationMins && Number(values.maxDurationMins) < 0) {
+      setError('Maximum duration cannot be negative.');
+      return;
+    }
+    if (
+      values.minDurationMins &&
+      values.maxDurationMins &&
+      Number(values.minDurationMins) > Number(values.maxDurationMins)
+    ) {
+      setError('Minimum duration cannot be greater than maximum duration.');
+      return;
+    }
     if (values.operatingSchedule?.trim()) {
       try {
         JSON.parse(values.operatingSchedule);

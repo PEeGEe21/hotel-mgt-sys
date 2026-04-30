@@ -448,42 +448,42 @@ After QA:
 
 ### Role Coverage
 
-- [ ] `SUPER_ADMIN` can load dashboard config and widgets without a staff-linked hotel row
-- [ ] `ADMIN` can load dashboard config and widgets without a staff-linked hotel row
-- [ ] `MANAGER` sees the seeded management dashboard set
-- [ ] `RECEPTIONIST` sees only receptionist widgets
-- [ ] `HOUSEKEEPING` sees only housekeeping widgets
-- [ ] `CASHIER` sees only cashier widgets
-- [ ] `BARTENDER` sees only bartender widgets
-- [ ] `STAFF` sees only `my_attendance_today`
+- [x] `SUPER_ADMIN` can load dashboard config and widgets without a staff-linked hotel row
+- [x] `ADMIN` can load dashboard config and widgets without a staff-linked hotel row
+- [x] `MANAGER` sees the seeded management dashboard set
+- [x] `RECEPTIONIST` sees only receptionist widgets
+- [x] `HOUSEKEEPING` sees only housekeeping widgets
+- [x] `CASHIER` sees only cashier widgets
+- [x] `BARTENDER` sees only bartender widgets
+- [x] `STAFF` sees only `my_attendance_today`
 - [x] impersonating into another user refreshes dashboard config and widget data cleanly
 
 ### Permission Safety
 
-- [ ] a role without `view:finance` cannot see finance widgets
-- [ ] a role without `view:pos` cannot see POS widgets
-- [ ] a role without `view:housekeeping` cannot see housekeeping widgets
-- [ ] direct widget data requests still fail correctly when permission is missing
+- [x] a role without `view:finance` cannot see finance widgets
+- [x] a role without `view:pos` cannot see POS widgets
+- [x] a role without `view:housekeeping` cannot see housekeeping widgets
+- [x] direct widget data requests still fail correctly when permission is missing
 
 ### Layout & UX
 
-- [ ] `compact`, `wide`, and `full` spans render correctly on desktop
-- [ ] widgets stack cleanly on mobile
-- [ ] widget ordering matches DB `position`
-- [ ] empty states read clearly when no live data exists
-- [ ] loading states are consistent across widgets
-- [ ] error states are consistent across widgets
+- [x] `compact`, `wide`, and `full` spans render correctly on desktop
+- [x] widgets stack cleanly on mobile
+- [x] widget ordering matches DB `position`
+- [x] empty states read clearly when no live data exists
+- [x] loading states are consistent across widgets
+- [x] error states are consistent across widgets
 - [x] `outstanding_folios` no longer leaves awkward dead space on manager desktop layout
 
 ### Data Quality
 
-- [ ] `occupancy_overview` reflects live room totals accurately
-- [ ] `todays_checkins_outs` shows correct same-day reservation activity
-- [ ] `revenue_today` reflects live payments accurately
-- [ ] `outstanding_folios` reflects unpaid balances accurately
-- [ ] `pos_sales_today` and `active_pos_orders` feel strong enough for v1
-- [ ] housekeeping `room_status_grid` / room-readiness data feels relevant enough for operational use
-- [ ] `my_attendance_today` and `my_tasks_today` behave correctly for self-service roles
+- [x] `occupancy_overview` reflects live room totals accurately
+- [x] `todays_checkins_outs` shows correct same-day reservation activity
+- [x] `revenue_today` reflects live payments accurately
+- [x] `outstanding_folios` reflects unpaid balances accurately
+- [x] `pos_sales_today` and `active_pos_orders` feel strong enough for v1
+- [x] housekeeping `room_status_grid` / room-readiness data feels relevant enough for operational use
+- [x] `my_attendance_today` and `my_tasks_today` behave correctly for self-service roles
 
 ### Related Admin Flows
 

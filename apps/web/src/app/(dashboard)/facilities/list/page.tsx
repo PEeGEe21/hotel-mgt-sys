@@ -22,7 +22,7 @@ import {
   useFacilityDepartments,
   useUpdateFacilityDepartment,
 } from '@/hooks/facility/useFacilityDepartment';
-import { useStaff, useStaffAll } from '@/hooks/staff/useStaff';
+import { useStaffAll } from '@/hooks/staff/useStaff';
 import Pagination from '@/components/ui/pagination';
 import ManageFacilityTypeModal from './_components/facilityType/ManageFacilityTypeModal';
 import {
@@ -62,6 +62,11 @@ function stringifySchedule(value: any) {
   if (!value) return '';
   if (typeof value === 'string') return value;
   return JSON.stringify(value);
+}
+
+function parseSchedule(value?: string) {
+  if (!value?.trim()) return undefined;
+  return JSON.parse(value);
 }
 
 function facilityInitialValues(facility: Facility): FacilityFormValues {
@@ -111,13 +116,13 @@ function FacilityListTab() {
   const { data: typeData } = useFacilityTypes({ page: 1, limit: 200 });
   const { data: locationData } = useFacilityLocations({ page: 1, limit: 200 });
   const { data: departmentData } = useFacilityDepartments({ page: 1, limit: 200 });
-  const { data: staffData } = useStaff({ page: 1, limit: 200 });
+  const { data: staffData } = useStaffAll();
 
   const facilities = data?.facilities ?? [];
   const types = typeData?.types ?? [];
   const locations = locationData?.locations ?? [];
   const departments = departmentData?.departments ?? [];
-  const staff = staffData?.staff ?? [];
+  const staff = staffData ?? [];
 
   const typeOptions = types.map((t) => ({ value: t.id, label: t.name }));
   const locationOptions = locations.map((l) => ({ value: l.id, label: l.name }));
@@ -143,9 +148,7 @@ function FacilityListTab() {
           .map((s) => s.trim())
           .filter(Boolean)
       : undefined;
-    const operatingSchedule = values.operatingSchedule?.trim()
-      ? JSON.parse(values.operatingSchedule)
-      : undefined;
+    const operatingSchedule = parseSchedule(values.operatingSchedule);
 
     return {
       name: values.name.trim(),
@@ -230,8 +233,8 @@ function FacilityListTab() {
                 '#',
                 'Facility Name',
                 'Type',
-                'Qty',
-                'Assigned Locations',
+                'Capacity',
+                'Location',
                 'Status',
                 'Inspections',
                 'Manager',
@@ -269,11 +272,9 @@ function FacilityListTab() {
                 <td className="px-4 py-3 text-sm text-slate-400 whitespace-nowrap">
                   {f.type ?? '—'}
                 </td>
-                <td className="px-4 py-3 text-sm text-slate-400 text-center">{f.quantities}</td>
-                <td className="px-4 py-3">
-                  <span className="text-xs text-slate-400 flex items-center gap-1 whitespace-nowrap">
-                    <Eye size={11} className="text-slate-600" /> {f.quantities}
-                  </span>
+                <td className="px-4 py-3 text-sm text-slate-400 text-center">{f.capacity ?? '—'}</td>
+                <td className="px-4 py-3 text-xs text-slate-400 whitespace-nowrap">
+                  {f.location ?? '—'}
                 </td>
                 <td className="px-4 py-3">
                   <span

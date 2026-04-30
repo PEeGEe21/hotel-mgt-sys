@@ -4,6 +4,12 @@ Last updated: 2026-04-30
 
 ## Next Up
 
+- [ ] Facilities module end-to-end verification
+Notes: reports, requisitions, maintenance, and inspections have had recent structural work, but they still need a real end-to-end QA pass before the module can be called complete. Maintenance updates are supported through `PATCH /facilities/maintenances/:id`; the remaining gap is workflow verification, not the existence of an update endpoint.
+
+- [ ] Run end-to-end verification for checkout automation
+Notes: verify hotel settings save/load across tabs, default checkout time behavior on reservation creation, reservation page checkout filters, guest reminder lead-day behavior, staff checkout summary alerts, housekeeping prep task creation, and housekeeping follow-up alerts.
+
 - [ ] Background jobs / scheduler
 Notes: scheduler foundation is in place and the Redis/Bull attendance loop has been verified. Current focus is no longer the foundation layer, but growing scheduler coverage and operational polish across timed workflows.
 
@@ -22,7 +28,7 @@ Notes: scheduler foundation is in place and the Redis/Bull attendance loop has b
 
 ## Core Features
 
-- [ ] Role-based dashboards
+- [x] Role-based dashboards
 Done recently:
 - Prisma-backed dashboard widget registry, role layout config, and feature flag tables added
 - seeded default dashboard widgets, role layouts, and non-blocking pre-SaaS feature flags
@@ -38,15 +44,13 @@ Done recently:
 - dashboard widget allowed sizes standardized to `compact`, `wide`, and `full`
 - existing dashboard widget size options backfilled safely via Prisma migration
 - dashboard settings flow verified end-to-end after migration rollout
-
-Still pending:
-- role-by-role browser QA across seeded roles
-- browser review of widget order / span / mobile balance
-- loading, empty, and error state polish across widgets
+- role-by-role browser QA confirmed across seeded roles
+- browser review of widget order, span, and mobile balance completed
+- loading, empty, and error state polish completed across widgets
 - review weak v1 widgets and remove or replace them where needed
 
 - [ ] Facilities module
-Notes: bookings, cancellations, maintenance, inspections, requisitions, reports, complaints, details/actions/delete modal are covered. Remaining work is mostly polish, QA, and edge-case fixes.
+Notes: facility list/detail flows have recent polish fixes, facilities activity flows now use shared drawers, and facilities reporting aggregation has been moved into a backend summary endpoint with a thin React Query hook on the frontend. Remaining work is end-to-end verification across reports, requisitions, maintenance, and inspections before calling the module done.
 
 - [x] Reports
 Done recently:
@@ -80,6 +84,8 @@ Done recently:
 - attendance absence alerts now use per-staff in-app notifications plus a summary email instead of one email per absent staff member
 - guest-facing checkout reminder emails added with hotel-level enable/disable control
 - guest checkout reminders now support day-before and same-day stages with email-log deduping
+- explicit `view:mailing` permission added to frontend/backend permission matrices
+- mailing API access moved from hard-coded admin roles to permission guards
 
 Still pending:
 - richer email templates and branding consistency
@@ -106,7 +112,7 @@ Still pending:
 - [ ] Payroll PAYE + pension
 - [ ] Transactional email template library polish
 - [ ] Global currency/date formatting consistency
-- [ ] Dashboard loading, empty, and error state standardization
+- [x] Dashboard loading, empty, and error state standardization
 - [ ] UI-only action audit and wiring
 - [ ] Duplicate/legacy page cleanup (`page2.tsx`, `page3.tsx`, `v2`)
 
@@ -193,8 +199,10 @@ Notes: Playwright after feature freeze.
 - [ ] Proxy Routing
 Notes: Remove proxy routing.
 
-- [ ] File Input Validation
-Notes: Validate input being allowed into system to avoid hidden virus or malicious entities.
+- [x] File Input Validation
+Notes: client-side image pickers now enforce allowed types and size limits consistently, and API DTOs validate image data URLs / image references for logo, avatar, product, room, and facilities image fields.
+
+- [ ] Sessions.
 
 ## Newly Added
 
@@ -208,19 +216,3 @@ Notes: checkout reminder timing and housekeeping follow-up context are now linke
 - [ ] Realtime event naming/payload conventions across modules
 - [~] Realtime presence / online state
 Notes: Redis-backed presence is now live for staff and HR account views, including websocket sync and logout-driven cleanup. Remaining work is expanding presence beyond these views and deciding whether to expose richer states than online/offline.
-
-## Immediate Pending
-
-- [ ] Run end-to-end verification for checkout automation
-Notes: verify hotel settings save/load across tabs, default checkout time behavior on reservation creation, reservation page checkout filters, guest reminder lead-day behavior, staff checkout summary alerts, housekeeping prep task creation, and housekeeping follow-up alerts.
-- [ ] Finish dashboard QA / polish pass
-Notes: role-by-role browser QA is still pending even though the admin dashboard settings flow is now verified. Remaining work is reviewing seeded role layouts, widget usefulness, and skeleton/empty/error states before calling the dashboard v1 stable.
-
-## Quick Resolves
-
-- [ ] Finish dashboard QA / polish pass
-Notes: highest-impact quick resolve because the system is already built and only needs focused browser QA, widget usefulness review, and loading/empty/error state polish.
-- [ ] File input validation
-Notes: relatively contained hardening pass for uploads and file-like inputs across the system.
-- [ ] Facilities module polish / edge-case fixes
-Notes: core facilities workflows are already covered, so the remaining work is mostly QA, polish, and operational edge-case cleanup.

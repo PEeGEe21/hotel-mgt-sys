@@ -12,6 +12,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsSafeImageReference } from '../../../common/utils/image-input.utils';
 
 export class UpdateHotelCronSettingsDto {
   @ApiPropertyOptional() @IsBoolean() @IsOptional() attendanceAbsenceScanEnabled?: boolean;
@@ -34,7 +35,7 @@ export class UpdateHotelDto {
   @ApiPropertyOptional() @IsString() @IsOptional() phone?: string;
   @ApiPropertyOptional() @IsString() @IsOptional() email?: string;
   @ApiPropertyOptional() @IsString() @IsOptional() website?: string;
-  @ApiPropertyOptional() @IsString() @IsOptional() logo?: string;
+  @ApiPropertyOptional() @IsString() @IsOptional() @IsSafeImageReference({ maxBytes: 2 * 1024 * 1024 }) logo?: string;
   @ApiPropertyOptional() @IsString() @IsOptional() description?: string;
   @ApiPropertyOptional() @IsString() @IsOptional() currency?: string;
   @ApiPropertyOptional() @IsString() @IsOptional() timezone?: string;

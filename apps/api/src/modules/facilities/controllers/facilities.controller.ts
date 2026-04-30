@@ -15,7 +15,7 @@ import { JwtAuthGuard, Permissions, PermissionsGuard } from '../../auth/guards';
 import { FacilitiesService } from '../services/facilities.service';
 import { CreateFacilityDto } from '../dtos/facility/create-facility.dto';
 import { UpdateFacilityDto } from '../dtos/facility/update-facility.dto';
-import { FacilityListFilterDto } from '../dtos/filter.dto';
+import { FacilityListFilterDto, FacilityReportsFilterDto } from '../dtos/filter.dto';
 
 @ApiTags('Facilities')
 @ApiBearerAuth()
@@ -29,6 +29,13 @@ export class FacilitiesController {
   @ApiOperation({ summary: 'List facilities' })
   listFacilities(@Request() req: any, @Query() filters: FacilityListFilterDto) {
     return this.facilitiesService.listFacilities(req.user.hotelId, filters);
+  }
+
+  @Get('reports/summary')
+  @Permissions('view:facilities')
+  @ApiOperation({ summary: 'Get facilities reports summary' })
+  getReportsSummary(@Request() req: any, @Query() filters: FacilityReportsFilterDto) {
+    return this.facilitiesService.getReportsSummary(req.user.hotelId, filters);
   }
 
   @Post()

@@ -34,6 +34,7 @@ import {
 } from '@/hooks/useNotificationPreferences';
 import { useSearchParams } from 'next/navigation';
 import { type Permission } from '@/lib/permissions';
+import { validateImageFile } from '@/utils/image-file';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 type Tab = 'profile' | 'password' | 'notifications' | 'sessions' | 'permissions';
@@ -288,15 +289,11 @@ function ProfileTab({ user }: { user: LiveUser }) {
   const handleAvatarChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      setToast({ msg: 'Please select an image file', type: 'error' });
-      openToast('error', 'Please select an image file');
-      setTimeout(() => setToast(null), 3000);
-      return;
-    }
-    if (file.size > 2 * 1024 * 1024) {
-      setToast({ msg: 'Avatar must be under 2MB', type: 'error' });
-      openToast('error', 'Avatar must be under 2MB');
+    const result = validateImageFile(file, { label: 'Avatar' });
+    if (!result.ok) {
+      setToast({ msg: result.message, type: 'error' });
+      openToast('error', result.message);
+      if (fileInputRef.current) fileInputRef.current.value = '';
       setTimeout(() => setToast(null), 3000);
       return;
     }
@@ -366,7 +363,7 @@ function ProfileTab({ user }: { user: LiveUser }) {
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*"
+              accept="image/png,image/jpeg,image/webp"
               className="hidden"
               onChange={handleAvatarChange}
             />
@@ -533,7 +530,7 @@ function PasswordTab() {
     try {
       await changePassword.mutateAsync({
         currentPassword: form.current,
-        newPassword: form.newPw,  
+        newPassword: form.newPw,
       });
       setForm({ current: '', newPw: '', confirm: '' });
       setToast({ msg: 'Password changed successfully', type: 'success' });
@@ -677,24 +674,28 @@ function PasswordTab() {
 
 // ─── Notifications Tab ────────────────────────────────────────────────────────
 function NotificationsTab() {
-  const defaultPrefs: Record<NotificationEvent, { email: boolean; inApp: boolean; push: boolean }> = {
-    newReservation: { email: true, inApp: true, push: false },
-    checkIn: { email: false, inApp: true, push: true },
-    checkOut: { email: false, inApp: true, push: false },
-    paymentReceived: { email: true, inApp: true, push: false },
-    lowInventory: { email: true, inApp: true, push: false },
-    housekeepingAlert: { email: true, inApp: true, push: true },
-    maintenanceAlert: { email: false, inApp: true, push: true },
-    attendanceAlert: { email: false, inApp: false, push: false },
-    systemAlerts: { email: true, inApp: true, push: true },
-  };
+  const defaultPrefs: Record<NotificationEvent, { email: boolean; inApp: boolean; push: boolean }> =
+    {
+      newReservation: { email: true, inApp: true, push: false },
+      checkIn: { email: false, inApp: true, push: true },
+      checkOut: { email: false, inApp: true, push: false },
+      paymentReceived: { email: true, inApp: true, push: false },
+      lowInventory: { email: true, inApp: true, push: false },
+      housekeepingAlert: { email: true, inApp: true, push: true },
+      maintenanceAlert: { email: false, inApp: true, push: true },
+      attendanceAlert: { email: false, inApp: false, push: false },
+      systemAlerts: { email: true, inApp: true, push: true },
+    };
   const labels: Record<NotificationEvent, { label: string; sub: string }> = {
     newReservation: { label: 'New Reservation', sub: 'When a reservation is created' },
     checkIn: { label: 'Guest Check-in', sub: 'When a guest checks in' },
     checkOut: { label: 'Guest Check-out', sub: 'When a guest checks out' },
     paymentReceived: { label: 'Payment Received', sub: 'When a payment is recorded' },
     lowInventory: { label: 'Low Inventory', sub: 'When stock falls below par' },
-    housekeepingAlert: { label: 'Housekeeping Alert', sub: 'Checkout prep tasks needing follow-up' },
+    housekeepingAlert: {
+      label: 'Housekeeping Alert',
+      sub: 'Checkout prep tasks needing follow-up',
+    },
     maintenanceAlert: { label: 'Maintenance Alert', sub: 'Urgent maintenance requests' },
     attendanceAlert: { label: 'Attendance Issues', sub: 'Late or absent staff' },
     systemAlerts: { label: 'System Alerts', sub: 'Security and system events' },
@@ -779,44 +780,44 @@ function NotificationsTab() {
         )}
         {!isLoading &&
           visibleKeys.map((key, i, arr) => {
-          const { label, sub } = labels[key];
-          const p = prefs[key];
-          return (
-            <div
-              key={key}
-              className={`grid grid-cols-[1fr_auto_auto_auto] items-center px-5 py-4 gap-0 ${i < arr.length - 1 ? 'border-b border-[#1e2536]' : ''} hover:bg-white/[0.01] transition-colors`}
-            >
-              <div>
-                <p className="text-sm font-medium text-slate-200">{label}</p>
-                <p className="text-xs text-slate-600 mt-0.5">{sub}</p>
+            const { label, sub } = labels[key] ?? '';
+            const p = prefs[key];
+            return (
+              <div
+                key={key}
+                className={`grid grid-cols-[1fr_auto_auto_auto] items-center px-5 py-4 gap-0 ${i < arr.length - 1 ? 'border-b border-[#1e2536]' : ''} hover:bg-white/[0.01] transition-colors`}
+              >
+                <div>
+                  <p className="text-sm font-medium text-slate-200">{label}</p>
+                  <p className="text-xs text-slate-600 mt-0.5">{sub}</p>
+                </div>
+                <div className="flex justify-center w-16">
+                  <Switch
+                    checked={p.email}
+                    onCheckedChange={() => toggle(key, 'email')}
+                    className="data-[state=checked]:bg-blue-600 data-[state=unchecked]:bg-[#0f1117] border border-[#1e2536]"
+                    aria-label={`${label} email`}
+                  />
+                </div>
+                <div className="flex justify-center w-16">
+                  <Switch
+                    checked={p.inApp}
+                    onCheckedChange={() => toggle(key, 'inApp')}
+                    className="data-[state=checked]:bg-blue-600 data-[state=unchecked]:bg-[#0f1117] border border-[#1e2536]"
+                    aria-label={`${label} in-app`}
+                  />
+                </div>
+                <div className="flex justify-center w-16">
+                  <Switch
+                    checked={p.push}
+                    onCheckedChange={() => toggle(key, 'push')}
+                    className="data-[state=checked]:bg-blue-600 data-[state=unchecked]:bg-[#0f1117] border border-[#1e2536]"
+                    aria-label={`${label} push`}
+                  />
+                </div>
               </div>
-              <div className="flex justify-center w-16">
-                <Switch
-                  checked={p.email}
-                  onCheckedChange={() => toggle(key, 'email')}
-                  className="data-[state=checked]:bg-blue-600 data-[state=unchecked]:bg-[#0f1117] border border-[#1e2536]"
-                  aria-label={`${label} email`}
-                />
-              </div>
-              <div className="flex justify-center w-16">
-                <Switch
-                  checked={p.inApp}
-                  onCheckedChange={() => toggle(key, 'inApp')}
-                  className="data-[state=checked]:bg-blue-600 data-[state=unchecked]:bg-[#0f1117] border border-[#1e2536]"
-                  aria-label={`${label} in-app`}
-                />
-              </div>
-              <div className="flex justify-center w-16">
-                <Switch
-                  checked={p.push}
-                  onCheckedChange={() => toggle(key, 'push')}
-                  className="data-[state=checked]:bg-blue-600 data-[state=unchecked]:bg-[#0f1117] border border-[#1e2536]"
-                  aria-label={`${label} push`}
-                />
-              </div>
-            </div>
-          );
-        })}
+            );
+          })}
       </div>
 
       <div className="flex justify-end">
@@ -879,12 +880,12 @@ function PermissionsTab() {
             {permissions.map((p) => {
               const permission = String(p);
               return (
-              <span
-                key={permission}
-                className="text-xs px-2.5 py-1 rounded-full bg-white/5 border border-[#1e2536] text-slate-300"
-              >
-                {permission}
-              </span>
+                <span
+                  key={permission}
+                  className="text-xs px-2.5 py-1 rounded-full bg-white/5 border border-[#1e2536] text-slate-300"
+                >
+                  {permission}
+                </span>
               );
             })}
           </div>

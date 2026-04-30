@@ -10,7 +10,6 @@ import {
   Clock,
   DollarSign,
   DoorOpen,
-  Loader2,
   ShoppingCart,
   Sparkles,
   Users,
@@ -61,23 +60,80 @@ function WidgetState({
   widgetId: string;
   children: (data: any) => ReactNode;
 }) {
-  const { data, isLoading, error } = useDashboardWidgetData(widgetId);
+  const { data, isLoading, error, refetch, isRefetching } = useDashboardWidgetData(widgetId);
 
   if (isLoading) {
-    return (
-      <WidgetSkeleton />
-    );
+    return <WidgetSkeleton />;
   }
 
   if (error) {
     return (
-      <div className="flex min-h-[160px] items-center justify-center text-sm text-rose-400">
-        Unable to load this widget.
-      </div>
+      <WidgetMessageState
+        icon={<AlertCircle size={18} className="text-rose-400" />}
+        title="Unable to load this widget"
+        description="Something went wrong while fetching its latest data."
+        actionLabel={isRefetching ? 'Retrying...' : 'Retry'}
+        actionDisabled={isRefetching}
+        onAction={() => {
+          void refetch();
+        }}
+      />
     );
   }
 
   return <>{children(data)}</>;
+}
+
+function WidgetMessageState({
+  icon,
+  title,
+  description,
+  actionLabel,
+  actionDisabled,
+  onAction,
+}: {
+  icon: ReactNode;
+  title: string;
+  description: string;
+  actionLabel?: string;
+  actionDisabled?: boolean;
+  onAction?: () => void;
+}) {
+  return (
+    <div className="flex min-h-[160px] flex-col items-center justify-center text-center">
+      <div className="mb-3 rounded-full border border-[#25304a] bg-[#111623] p-3">{icon}</div>
+      <h3 className="text-sm font-semibold text-white">{title}</h3>
+      <p className="mt-2 max-w-xs text-sm text-slate-400">{description}</p>
+      {actionLabel && onAction ? (
+        <button
+          type="button"
+          onClick={onAction}
+          disabled={actionDisabled}
+          className="mt-4 rounded-lg border border-[#2a3650] bg-[#111623] px-3 py-2 text-sm font-medium text-slate-200 transition hover:border-[#3b4c72] hover:text-white disabled:cursor-not-allowed disabled:opacity-70"
+        >
+          {actionLabel}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function WidgetEmptyState({
+  icon,
+  title,
+  description,
+}: {
+  icon?: ReactNode;
+  title: string;
+  description?: string;
+}) {
+  return (
+    <WidgetMessageState
+      icon={icon ?? <CheckCircle2 size={18} className="text-emerald-400" />}
+      title={title}
+      description={description ?? 'There is nothing requiring attention right now.'}
+    />
+  );
 }
 
 function WidgetSkeleton() {
@@ -181,7 +237,11 @@ export function TodaysCheckinsOutsWidget() {
               ))}
             </div>
           ) : (
-            <p className="text-sm text-slate-500">No check-ins or check-outs scheduled today.</p>
+            <WidgetEmptyState
+              icon={<ClipboardList size={18} className="text-slate-300" />}
+              title="No arrivals or departures today"
+              description="No check-ins or check-outs are scheduled for the current day."
+            />
           )
         }
       </WidgetState>
@@ -200,6 +260,16 @@ export function RoomStatusGridWidget() {
             { label: 'Housekeeping', key: 'HOUSEKEEPING' },
             { label: 'Maintenance', key: 'MAINTENANCE' },
           ];
+
+          if (!data.rooms?.length) {
+            return (
+              <WidgetEmptyState
+                icon={<DoorOpen size={18} className="text-slate-300" />}
+                title="No room status data yet"
+                description="Room readiness will appear here once rooms and statuses are available."
+              />
+            );
+          }
 
           return (
             <div className="space-y-4">
@@ -283,7 +353,11 @@ export function OutstandingFoliosWidget() {
               ))}
             </div>
           ) : (
-            <p className="text-sm text-slate-500">No outstanding folios right now.</p>
+            <WidgetEmptyState
+              icon={<ClipboardCheck size={18} className="text-emerald-400" />}
+              title="No outstanding folios"
+              description="All tracked guest folios are currently settled."
+            />
           )
         }
       </WidgetState>
@@ -343,7 +417,11 @@ export function ActivePosOrdersWidget() {
               ))}
             </div>
           ) : (
-            <p className="text-sm text-slate-500">No active POS orders.</p>
+            <WidgetEmptyState
+              icon={<UtensilsCrossed size={18} className="text-slate-300" />}
+              title="No active POS orders"
+              description="Open orders will show here while service is in progress."
+            />
           )
         }
       </WidgetState>
@@ -372,7 +450,11 @@ export function LowStockAlertsWidget() {
               ))}
             </div>
           ) : (
-            <p className="text-sm text-slate-500">No low stock alerts.</p>
+            <WidgetEmptyState
+              icon={<Boxes size={18} className="text-emerald-400" />}
+              title="Stock levels look healthy"
+              description="No inventory items are currently below their alert thresholds."
+            />
           )
         }
       </WidgetState>
@@ -409,7 +491,11 @@ export function HousekeepingQueueWidget() {
               ))}
             </div>
           ) : (
-            <p className="text-sm text-slate-500">No housekeeping tasks in queue.</p>
+            <WidgetEmptyState
+              icon={<Sparkles size={18} className="text-emerald-400" />}
+              title="Queue is clear"
+              description="There are no housekeeping tasks waiting in the queue right now."
+            />
           )
         }
       </WidgetState>
@@ -439,7 +525,11 @@ export function StaffOnDutyWidget() {
               ))}
             </div>
           ) : (
-            <p className="text-sm text-slate-500">No staff clocked in yet.</p>
+            <WidgetEmptyState
+              icon={<Users size={18} className="text-slate-300" />}
+              title="No staff clocked in yet"
+              description="Clocked-in team members will appear here as shifts begin."
+            />
           )
         }
       </WidgetState>
@@ -466,7 +556,11 @@ export function PendingApprovalsWidget() {
               ))}
             </div>
           ) : (
-            <p className="text-sm text-slate-500">No pending approvals.</p>
+            <WidgetEmptyState
+              icon={<BadgeCheck size={18} className="text-emerald-400" />}
+              title="No pending approvals"
+              description="Approval items will appear here when attention is needed."
+            />
           )
         }
       </WidgetState>
@@ -525,12 +619,11 @@ export function MyTasksTodayWidget() {
               ))}
             </div>
           ) : (
-            <div className="space-y-2 text-sm text-slate-400">
-              <p>No assigned tasks right now.</p>
-              <p className="text-xs text-slate-500">
-                If you&apos;re on shift, check the housekeeping queue for unassigned or newly created work.
-              </p>
-            </div>
+            <WidgetEmptyState
+              icon={<Boxes size={18} className="text-slate-300" />}
+              title="No assigned tasks right now"
+              description="If you're on shift, check the housekeeping queue for unassigned or newly created work."
+            />
           )
         }
       </WidgetState>
