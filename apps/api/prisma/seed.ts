@@ -241,12 +241,12 @@ async function main() {
     create: {
       id: 'seed-hotel-id',
       name: 'Grand Lagos Hotel',
-      domain: 'grandlagos.com',
+      domain: 'hotel.com',
       address: '14 Adeola Odeku Street',
       city: 'Lagos',
       country: 'Nigeria',
       phone: '+234 801 234 5678',
-      email: 'info@grandlagos.com',
+      email: 'info@hotel.com',
       currency: 'NGN',
       timezone: 'Africa/Lagos',
     },
@@ -666,7 +666,7 @@ async function main() {
       employeeCode: 'EMP-001',
     },
     {
-      email: 'manager@grandlagos.com',
+      email: 'manager@hotel.com',
       password: 'password',
       role: Role.MANAGER,
       firstName: 'Ngozi',
@@ -676,7 +676,7 @@ async function main() {
       employeeCode: 'EMP-002',
     },
     {
-      email: 'reception@grandlagos.com',
+      email: 'reception@hotel.com',
       password: 'password',
       role: Role.RECEPTIONIST,
       firstName: 'Fatima',
@@ -686,7 +686,7 @@ async function main() {
       employeeCode: 'EMP-003',
     },
     {
-      email: 'housekeeping@grandlagos.com',
+      email: 'housekeeping@hotel.com',
       password: 'password',
       role: Role.HOUSEKEEPING,
       firstName: 'Emeka',
@@ -696,7 +696,7 @@ async function main() {
       employeeCode: 'EMP-004',
     },
     {
-      email: 'cashier@grandlagos.com',
+      email: 'cashier@hotel.com',
       password: 'password',
       role: Role.CASHIER,
       firstName: 'Adaeze',
@@ -1944,9 +1944,9 @@ async function main() {
   console.log('\n🏨 Seed complete!');
   console.log('─────────────────────────────────────');
   console.log('Login credentials:');
-  console.log('  Admin:        admin@example.com     / password');
-  console.log('  Manager:      manager@grandlagos.com   / password');
-  console.log('  Receptionist: reception@grandlagos.com / password');
+  console.log('  Admin:        admin@hotel.com     / password');
+  console.log('  Manager:      manager@hotel.com   / password');
+  console.log('  Receptionist: reception@hotel.com / password');
   console.log('─────────────────────────────────────');
 }
 

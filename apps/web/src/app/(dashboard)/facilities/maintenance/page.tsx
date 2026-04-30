@@ -1,13 +1,14 @@
 'use client';
 
-import { useState } from 'react';
-import { Plus, Search, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ChevronRight, Plus, Search, X } from 'lucide-react';
 import { useDebounce } from '@/hooks/useDebounce';
 import { useFacilities } from '@/hooks/facility/useFacility';
 import {
   FacilityMaintenanceRequest,
   useCreateFacilityMaintenance,
   useFacilityMaintenance,
+  useUpdateFacilityMaintenance,
 } from '@/hooks/facility/useFacilityMaintenance';
 import { useStaff } from '@/hooks/staff/useStaff';
 import Pagination from '@/components/ui/pagination';
@@ -65,10 +66,19 @@ const statuses: Array<'All' | MaintenanceStatus> = [
   'CLOSED',
 ];
 
+const inputCls =
+  'w-full rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 outline-none transition-colors focus:border-blue-500 disabled:cursor-not-allowed disabled:opacity-60';
+
 function toDate(value?: string | null) {
   if (!value) return '—';
   const d = new Date(value);
   return Number.isNaN(d.getTime()) ? '—' : d.toISOString().slice(0, 10);
+}
+
+function toDateTime(value?: string | null) {
+  if (!value) return '—';
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString();
 }
 
 function staffName(staff?: { firstName: string; lastName: string } | null) {
@@ -87,6 +97,8 @@ export default function FacilityMaintenancePage() {
   const [limit, setLimit] = useState(10);
   const [filter, setFilter] = useState<'All' | MaintenanceStatus>('All');
   const [showAdd, setShowAdd] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
+  const [selectedMaintenanceId, setSelectedMaintenanceId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [form, setForm] = useState({
@@ -98,6 +110,19 @@ export default function FacilityMaintenancePage() {
     estimatedMins: '',
     totalCost: '',
     description: '',
+  });
+  const [detailForm, setDetailForm] = useState({
+    title: '',
+    facilityId: '',
+    assignedTo: '',
+    category: 'OTHER',
+    priority: 'NORMAL',
+    estimatedMins: '',
+    actualMins: '',
+    totalCost: '',
+    description: '',
+    notes: '',
+    status: 'OPEN',
   });
 
   const debouncedSearch = useDebounce(search, 400);
@@ -120,7 +145,30 @@ export default function FacilityMaintenancePage() {
   const records = data?.maintenanceRequests ?? [];
   const facilities = facilitiesData?.facilities ?? [];
   const staff = staffData?.staff ?? [];
+  const selectedMaintenance =
+    records.find((request) => request.id === selectedMaintenanceId) ?? null;
+  const updateMaintenance = useUpdateFacilityMaintenance(selectedMaintenance?.id ?? '');
   const canCreateMaintenance = can('create:facilities');
+  const canManageMaintenance = can('manage:facilities');
+
+  useEffect(() => {
+    if (!selectedMaintenance || !showDetails) return;
+    setDetailForm({
+      title: selectedMaintenance.title ?? '',
+      facilityId: selectedMaintenance.facilityId ?? '',
+      assignedTo: selectedMaintenance.assignedTo ?? '',
+      category: selectedMaintenance.category ?? 'OTHER',
+      priority: selectedMaintenance.priority ?? 'NORMAL',
+      estimatedMins: selectedMaintenance.estimatedMins?.toString() ?? '',
+      actualMins: selectedMaintenance.actualMins?.toString() ?? '',
+      totalCost:
+        selectedMaintenance.totalCost != null ? String(selectedMaintenance.totalCost) : '',
+      description: selectedMaintenance.description ?? '',
+      notes: selectedMaintenance.notes ?? '',
+      status: selectedMaintenance.status ?? 'OPEN',
+    });
+    setError(null);
+  }, [selectedMaintenance, showDetails]);
 
   const activeCount = records.filter((r) => !['RESOLVED', 'CLOSED'].includes(r.status)).length;
   const totalCost = records
@@ -161,6 +209,48 @@ export default function FacilityMaintenancePage() {
     }
   };
 
+  const handleUpdate = async () => {
+    if (!selectedMaintenance || !canManageMaintenance) return;
+    if (!detailForm.title.trim() || !detailForm.description.trim()) {
+      setError('Title and description are required.');
+      return;
+    }
+
+    try {
+      setError(null);
+      const now = new Date().toISOString();
+      const nextStatus = detailForm.status as MaintenanceStatus;
+      await updateMaintenance.mutateAsync({
+        title: detailForm.title.trim(),
+        facilityId: detailForm.facilityId || undefined,
+        assignedTo: detailForm.assignedTo || undefined,
+        category: detailForm.category,
+        priority: detailForm.priority,
+        estimatedMins: detailForm.estimatedMins ? Number(detailForm.estimatedMins) : undefined,
+        actualMins: detailForm.actualMins ? Number(detailForm.actualMins) : undefined,
+        totalCost: detailForm.totalCost ? Number(detailForm.totalCost) : undefined,
+        description: detailForm.description.trim(),
+        notes: detailForm.notes.trim() || undefined,
+        status: nextStatus,
+        assignedAt:
+          (detailForm.assignedTo && !selectedMaintenance.assignedAt) || nextStatus === 'ASSIGNED'
+            ? selectedMaintenance.assignedAt ?? now
+            : undefined,
+        startedAt:
+          nextStatus === 'IN_PROGRESS'
+            ? selectedMaintenance.startedAt ?? now
+            : undefined,
+        resolvedAt:
+          nextStatus === 'RESOLVED' || nextStatus === 'CLOSED'
+            ? selectedMaintenance.resolvedAt ?? now
+            : undefined,
+        closedAt: nextStatus === 'CLOSED' ? selectedMaintenance.closedAt ?? now : undefined,
+      } as any);
+    } catch (e: any) {
+      setError(e?.response?.data?.message ?? e?.message ?? 'Failed to update maintenance');
+    }
+  };
+
   return (
     <>
       <div className="space-y-6">
@@ -181,7 +271,7 @@ export default function FacilityMaintenancePage() {
           {canCreateMaintenance ? (
             <button
               onClick={() => setShowAdd(true)}
-              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
+              className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-500"
             >
               <Plus size={15} /> New Request
             </button>
@@ -270,7 +360,7 @@ export default function FacilityMaintenancePage() {
         </div>
 
         <div className="bg-[#161b27] border border-[#1e2536] rounded-xl overflow-x-auto">
-          <table className="w-full min-w-[900px]">
+          <table className="w-full min-w-[980px]">
             <thead className="border-b border-[#1e2536] bg-[#0f1117]/50">
               <tr>
                 {[
@@ -284,6 +374,7 @@ export default function FacilityMaintenancePage() {
                   'Priority',
                   'Status',
                   'Cost',
+                  '',
                 ].map((h) => (
                   <th
                     key={h}
@@ -297,7 +388,7 @@ export default function FacilityMaintenancePage() {
             <tbody>
               {records.length === 0 && (
                 <tr className="border-b border-[#1e2536] last:border-0 text-center">
-                  <td colSpan={10} className="px-4 py-3 text-sm text-slate-500">
+                  <td colSpan={11} className="px-4 py-3 text-sm text-slate-500">
                     {isLoading
                       ? 'Loading maintenance requests...'
                       : 'No maintenance requests found'}
@@ -307,7 +398,11 @@ export default function FacilityMaintenancePage() {
               {records.map((r, i) => (
                 <tr
                   key={r.id}
-                  className="border-b border-[#1e2536] last:border-0 hover:bg-white/[0.02] transition-colors"
+                  onClick={() => {
+                    setSelectedMaintenanceId(r.id);
+                    setShowDetails(true);
+                  }}
+                  className="cursor-pointer border-b border-[#1e2536] last:border-0 transition-colors hover:bg-white/[0.02]"
                 >
                   <td className="px-4 py-3 text-sm text-slate-500">
                     {(page - 1) * (data?.meta?.per_page ?? limit) + i + 1}
@@ -350,6 +445,9 @@ export default function FacilityMaintenancePage() {
                   <td className="px-4 py-3 text-sm text-slate-300 whitespace-nowrap">
                     ₦{maintenanceCost(r).toLocaleString()}
                   </td>
+                  <td className="px-4 py-3">
+                    <ChevronRight size={16} className="text-slate-600" />
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -361,17 +459,18 @@ export default function FacilityMaintenancePage() {
         )}
       </div>
 
-      <Drawer open={showAdd && canCreateMaintenance} onOpenChange={() => setShowAdd(false)} direction="right">
+      <Drawer
+        open={showAdd && canCreateMaintenance}
+        onOpenChange={() => setShowAdd(false)}
+        direction="right"
+      >
         <DrawerOverlay className="bg-black/50 backdrop-blur-sm data-[state=open]:animate-fadeIn" />
         <DrawerContent className="flex h-full w-full max-w-xl flex-col border-l border-[#1e2536] bg-[#161b27] sm:!max-w-xl">
           <DrawerHeader className="flex flex-row items-center justify-between border-b border-[#1e2536] px-5 py-4">
             <DrawerTitle className="text-base font-bold text-white">
               New Maintenance Request
             </DrawerTitle>
-            <button
-              onClick={() => setShowAdd(false)}
-              className="text-slate-500 hover:text-slate-300"
-            >
+            <button onClick={() => setShowAdd(false)} className="text-slate-500 hover:text-slate-300">
               <X size={18} />
             </button>
           </DrawerHeader>
@@ -385,7 +484,7 @@ export default function FacilityMaintenancePage() {
                   value={form.title}
                   onChange={(e) => setForm({ ...form, title: e.target.value })}
                   placeholder="What needs fixing?"
-                  className="w-full bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 outline-none focus:border-blue-500 transition-colors"
+                  className={inputCls}
                 />
               </div>
               <div>
@@ -395,7 +494,7 @@ export default function FacilityMaintenancePage() {
                 <select
                   value={form.facilityId}
                   onChange={(e) => setForm({ ...form, facilityId: e.target.value })}
-                  className="w-full bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-2.5 text-sm text-slate-200 outline-none focus:border-blue-500 transition-colors"
+                  className={inputCls}
                 >
                   <option value="">Select facility</option>
                   {facilities.map((facility) => (
@@ -412,7 +511,7 @@ export default function FacilityMaintenancePage() {
                 <select
                   value={form.assignedTo}
                   onChange={(e) => setForm({ ...form, assignedTo: e.target.value })}
-                  className="w-full bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-2.5 text-sm text-slate-200 outline-none focus:border-blue-500 transition-colors"
+                  className={inputCls}
                 >
                   <option value="">Unassigned</option>
                   {staff.map((member) => (
@@ -429,7 +528,7 @@ export default function FacilityMaintenancePage() {
                 <select
                   value={form.category}
                   onChange={(e) => setForm({ ...form, category: e.target.value })}
-                  className="w-full bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-2.5 text-sm text-slate-200 outline-none focus:border-blue-500 transition-colors"
+                  className={inputCls}
                 >
                   {categories.map((category) => (
                     <option key={category} value={category}>
@@ -445,7 +544,7 @@ export default function FacilityMaintenancePage() {
                 <select
                   value={form.priority}
                   onChange={(e) => setForm({ ...form, priority: e.target.value })}
-                  className="w-full bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-2.5 text-sm text-slate-200 outline-none focus:border-blue-500 transition-colors"
+                  className={inputCls}
                 >
                   {priorities.map((priority) => (
                     <option key={priority} value={priority}>
@@ -460,10 +559,11 @@ export default function FacilityMaintenancePage() {
                 </label>
                 <input
                   type="number"
+                  min="0"
                   value={form.estimatedMins}
                   onChange={(e) => setForm({ ...form, estimatedMins: e.target.value })}
                   placeholder="0"
-                  className="w-full bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 outline-none focus:border-blue-500 transition-colors"
+                  className={inputCls}
                 />
               </div>
               <div>
@@ -472,28 +572,29 @@ export default function FacilityMaintenancePage() {
                 </label>
                 <input
                   type="number"
+                  min="0"
                   value={form.totalCost}
                   onChange={(e) => setForm({ ...form, totalCost: e.target.value })}
                   placeholder="0"
-                  className="w-full bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 outline-none focus:border-blue-500 transition-colors"
+                  className={inputCls}
                 />
               </div>
               <div className="col-span-2">
                 <label className="text-xs text-slate-500 uppercase tracking-wider mb-1.5 block">
                   Description
                 </label>
-                <input
+                <textarea
                   value={form.description}
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
                   placeholder="Detailed description"
-                  className="w-full bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 outline-none focus:border-blue-500 transition-colors"
+                  className={`${inputCls} min-h-[120px]`}
                 />
               </div>
             </div>
             <div className="flex gap-3 mt-5">
               <button
                 onClick={() => setShowAdd(false)}
-                className="flex-1 bg-white/5 hover:bg-white/10 text-slate-300 rounded-lg py-2.5 text-sm font-medium transition-colors"
+                className="flex-1 rounded-lg bg-white/5 py-2.5 text-sm font-medium text-slate-300 transition-colors hover:bg-white/10"
               >
                 Cancel
               </button>
@@ -502,11 +603,271 @@ export default function FacilityMaintenancePage() {
                 disabled={
                   createMaintenance.isPending || !form.title.trim() || !form.description.trim()
                 }
-                className="flex-1 bg-blue-600 hover:bg-blue-500 text-white rounded-lg py-2.5 text-sm font-semibold transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                className="flex-1 rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {createMaintenance.isPending ? 'Submitting...' : 'Submit'}
               </button>
             </div>
+          </div>
+        </DrawerContent>
+      </Drawer>
+
+      <Drawer
+        open={showDetails}
+        onOpenChange={(open) => {
+          setShowDetails(open);
+          if (!open) setSelectedMaintenanceId(null);
+        }}
+        direction="right"
+      >
+        <DrawerOverlay className="bg-black/50 backdrop-blur-sm data-[state=open]:animate-fadeIn" />
+        <DrawerContent className="flex h-full w-full max-w-xl flex-col border-l border-[#1e2536] bg-[#161b27] sm:!max-w-xl">
+          <DrawerHeader className="flex flex-row items-center justify-between border-b border-[#1e2536] px-5 py-4">
+            <div>
+              <DrawerTitle className="text-base font-bold text-white">
+                Maintenance Details
+              </DrawerTitle>
+              <p className="mt-1 text-xs text-slate-500">
+                {selectedMaintenance?.requestNo ?? 'Select a request'}
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                setShowDetails(false);
+                setSelectedMaintenanceId(null);
+              }}
+              className="text-slate-500 hover:text-slate-300"
+            >
+              <X size={18} />
+            </button>
+          </DrawerHeader>
+          <div className="flex-1 overflow-y-auto p-5">
+            {selectedMaintenance ? (
+              <div className="space-y-6">
+                <div className="grid grid-cols-2 gap-4 rounded-xl border border-[#1e2536] bg-[#0f1117]/60 p-4">
+                  <div>
+                    <p className="text-xs text-slate-500">Created</p>
+                    <p className="text-sm text-slate-200">{toDateTime(selectedMaintenance.createdAt)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">Assigned At</p>
+                    <p className="text-sm text-slate-200">{toDateTime(selectedMaintenance.assignedAt)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">Started At</p>
+                    <p className="text-sm text-slate-200">{toDateTime(selectedMaintenance.startedAt)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">Resolved / Closed</p>
+                    <p className="text-sm text-slate-200">
+                      {toDateTime(selectedMaintenance.closedAt ?? selectedMaintenance.resolvedAt)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-2">
+                    <label className="text-xs text-slate-500 uppercase tracking-wider mb-1.5 block">
+                      Task Title
+                    </label>
+                    <input
+                      value={detailForm.title}
+                      onChange={(e) => setDetailForm({ ...detailForm, title: e.target.value })}
+                      disabled={!canManageMaintenance || updateMaintenance.isPending}
+                      className={inputCls}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-500 uppercase tracking-wider mb-1.5 block">
+                      Facility
+                    </label>
+                    <select
+                      value={detailForm.facilityId}
+                      onChange={(e) =>
+                        setDetailForm({ ...detailForm, facilityId: e.target.value })
+                      }
+                      disabled={!canManageMaintenance || updateMaintenance.isPending}
+                      className={inputCls}
+                    >
+                      <option value="">Select facility</option>
+                      {facilities.map((facility) => (
+                        <option key={facility.id} value={facility.id}>
+                          {facility.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-500 uppercase tracking-wider mb-1.5 block">
+                      Assigned To
+                    </label>
+                    <select
+                      value={detailForm.assignedTo}
+                      onChange={(e) =>
+                        setDetailForm({ ...detailForm, assignedTo: e.target.value })
+                      }
+                      disabled={!canManageMaintenance || updateMaintenance.isPending}
+                      className={inputCls}
+                    >
+                      <option value="">Unassigned</option>
+                      {staff.map((member) => (
+                        <option key={member.id} value={member.id}>
+                          {member.firstName} {member.lastName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-500 uppercase tracking-wider mb-1.5 block">
+                      Category
+                    </label>
+                    <select
+                      value={detailForm.category}
+                      onChange={(e) => setDetailForm({ ...detailForm, category: e.target.value })}
+                      disabled={!canManageMaintenance || updateMaintenance.isPending}
+                      className={inputCls}
+                    >
+                      {categories.map((category) => (
+                        <option key={category} value={category}>
+                          {category}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-500 uppercase tracking-wider mb-1.5 block">
+                      Priority
+                    </label>
+                    <select
+                      value={detailForm.priority}
+                      onChange={(e) => setDetailForm({ ...detailForm, priority: e.target.value })}
+                      disabled={!canManageMaintenance || updateMaintenance.isPending}
+                      className={inputCls}
+                    >
+                      {priorities.map((priority) => (
+                        <option key={priority} value={priority}>
+                          {priority}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-500 uppercase tracking-wider mb-1.5 block">
+                      Status
+                    </label>
+                    <select
+                      value={detailForm.status}
+                      onChange={(e) => setDetailForm({ ...detailForm, status: e.target.value })}
+                      disabled={!canManageMaintenance || updateMaintenance.isPending}
+                      className={inputCls}
+                    >
+                      {statuses
+                        .filter((status) => status !== 'All')
+                        .map((status) => (
+                          <option key={status} value={status}>
+                            {status}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-500 uppercase tracking-wider mb-1.5 block">
+                      Estimated Mins
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={detailForm.estimatedMins}
+                      onChange={(e) =>
+                        setDetailForm({ ...detailForm, estimatedMins: e.target.value })
+                      }
+                      disabled={!canManageMaintenance || updateMaintenance.isPending}
+                      className={inputCls}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-500 uppercase tracking-wider mb-1.5 block">
+                      Actual Mins
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={detailForm.actualMins}
+                      onChange={(e) =>
+                        setDetailForm({ ...detailForm, actualMins: e.target.value })
+                      }
+                      disabled={!canManageMaintenance || updateMaintenance.isPending}
+                      className={inputCls}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-500 uppercase tracking-wider mb-1.5 block">
+                      Total Cost (₦)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={detailForm.totalCost}
+                      onChange={(e) => setDetailForm({ ...detailForm, totalCost: e.target.value })}
+                      disabled={!canManageMaintenance || updateMaintenance.isPending}
+                      className={inputCls}
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="text-xs text-slate-500 uppercase tracking-wider mb-1.5 block">
+                      Description
+                    </label>
+                    <textarea
+                      value={detailForm.description}
+                      onChange={(e) =>
+                        setDetailForm({ ...detailForm, description: e.target.value })
+                      }
+                      disabled={!canManageMaintenance || updateMaintenance.isPending}
+                      className={`${inputCls} min-h-[120px]`}
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="text-xs text-slate-500 uppercase tracking-wider mb-1.5 block">
+                      Notes
+                    </label>
+                    <textarea
+                      value={detailForm.notes}
+                      onChange={(e) => setDetailForm({ ...detailForm, notes: e.target.value })}
+                      disabled={!canManageMaintenance || updateMaintenance.isPending}
+                      className={`${inputCls} min-h-[100px]`}
+                    />
+                  </div>
+                </div>
+
+                {canManageMaintenance ? (
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => {
+                        setShowDetails(false);
+                        setSelectedMaintenanceId(null);
+                      }}
+                      className="flex-1 rounded-lg bg-white/5 py-2.5 text-sm font-medium text-slate-300 transition-colors hover:bg-white/10"
+                    >
+                      Close
+                    </button>
+                    <button
+                      onClick={handleUpdate}
+                      disabled={updateMaintenance.isPending}
+                      className="flex-1 rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {updateMaintenance.isPending ? 'Saving...' : 'Save Changes'}
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-400">
+                    You can review maintenance details here, but only facilities managers can
+                    update them.
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-400">Select a maintenance request to review.</p>
+            )}
           </div>
         </DrawerContent>
       </Drawer>

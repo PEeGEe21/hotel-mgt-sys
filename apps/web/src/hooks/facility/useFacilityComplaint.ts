@@ -16,6 +16,7 @@ export type Complaint = {
   status: string;
   channel: string;
   reporterType: string;
+  facilityId?: string | null;
   reporterStaffId?: string | null;
   reporterGuestId?: string | null;
   reporter?: string | null;
@@ -96,5 +97,17 @@ export function useCreateFacilityComplaint() {
       openToast('success', 'Complaint logged');
     },
     onError: (e: any) => openToast('error', e?.response?.data?.message ?? 'Create failed'),
+  });
+}
+
+export function useUpdateFacilityComplaint(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: Partial<ComplaintInput>) => api.patch(`${baseUrl}/${id}`, dto).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['facility-complaints'] });
+      openToast('success', 'Complaint updated');
+    },
+    onError: (e: any) => openToast('error', e?.response?.data?.message ?? 'Update failed'),
   });
 }

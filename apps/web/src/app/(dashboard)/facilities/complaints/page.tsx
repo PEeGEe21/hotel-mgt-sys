@@ -44,7 +44,7 @@ export default function FacilityComplaintsPage() {
   const [reporterIdFilter, setReporterIdFilter] = useState('');
   const [showAdd, setShowAdd] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [selectedComplaint, setSelectedComplaint] = useState<any | null>(null);
+  const [selectedComplaintId, setSelectedComplaintId] = useState<string | null>(null);
 
   const debouncedSearch = useDebounce(search, 400);
   const resetPage = () => setPage(1);
@@ -78,6 +78,9 @@ export default function FacilityComplaintsPage() {
       label: `${g.firstName} ${g.lastName}`.trim(),
     })) ?? [];
   const canManageComplaints = can('manage:facilities');
+  const canCreateMaintenance = can('create:facilities');
+  const selectedComplaint =
+    complaints.find((complaint) => complaint.id === selectedComplaintId) ?? null;
 
   return (
     <div>
@@ -255,7 +258,7 @@ export default function FacilityComplaintsPage() {
                 <tr
                   key={c.id}
                   onClick={() => {
-                    setSelectedComplaint(c);
+                    setSelectedComplaintId(c.id);
                     setDrawerOpen(true);
                   }}
                   className="border-b border-[#1e2536] last:border-0 hover:bg-white/[0.02] transition-colors cursor-pointer"
@@ -339,9 +342,12 @@ export default function FacilityComplaintsPage() {
       <ComplaintDrawer
         isOpen={drawerOpen}
         complaint={selectedComplaint}
+        canManageComplaints={canManageComplaints}
+        canCreateMaintenance={canCreateMaintenance}
+        staffOptions={staffOptions}
         onClose={() => {
           setDrawerOpen(false);
-          setSelectedComplaint(null);
+          setSelectedComplaintId(null);
         }}
       />
     </div>
