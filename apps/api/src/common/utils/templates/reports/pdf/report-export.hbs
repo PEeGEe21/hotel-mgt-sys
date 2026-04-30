@@ -1,0 +1,33 @@
+{{hotelName}} Reports
+Range: {{from}} to {{to}}
+Generated: {{generatedAt}}
+
+{{#if isFullReport}}
+Full report export
+{{else}}
+Single report export
+{{/if}}
+
+{{#each reports}}
+============================================================
+{{title}}
+============================================================
+
+{{#if summary.length}}
+Summary
+{{#each summary}}
+- {{label}}: {{value}}
+{{/each}}
+
+{{/if}}
+{{#each sections}}
+{{title}}
+{{#each lines}}
+- {{this}}
+{{/each}}
+{{#if truncated}}
+- Showing first 20 rows. {{remainingCount}} more row(s) not shown.
+{{/if}}
+
+{{/each}}
+{{/each}}

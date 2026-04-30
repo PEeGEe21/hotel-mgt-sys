@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-04-28
+Last updated: 2026-04-30
 
 ## Next Up
 
@@ -48,7 +48,7 @@ Still pending:
 - [ ] Facilities module
 Notes: bookings, cancellations, maintenance, inspections, requisitions, reports, complaints, details/actions/delete modal are covered. Remaining work is mostly polish, QA, and edge-case fixes.
 
-- [ ] Reports
+- [x] Reports
 Done recently:
 - shadcn tabs for consistency
 - reports split into `_components`
@@ -56,16 +56,15 @@ Done recently:
 - per-tab lazy loading
 - reduced frontend-heavy report computation
 - naira formatting fixed in reporting UI
-
-Still pending:
-- PDF export
-- Excel export
-- backend-driven occupancy trends
-- backend-driven room-type performance
-- richer guest historical analytics
-- staff attendance reporting by date range
-- remove remaining report-only frontend computation
-- loading, empty, and error state polish for report tabs
+- backend-driven occupancy trends and room-type performance completed
+- staff reporting now respects selected date ranges
+- guest analytics expanded with trend-oriented data
+- report contracts moved further into the backend to reduce frontend-only computation
+- Excel and PDF export flows added for tab and full-report downloads
+- export loading/success UI state added in the reports header
+- Excel export formatting improved for widths, wrapping, currency, percentages, and dates
+- export output cleaned up to avoid leaking internal IDs and nested item JSON blobs
+Notes: Reports are considered v1 complete. Remaining deeper polish like bespoke PDF layouts or true per-card export should be treated as backlog, not active feature work.
 
 - [ ] Email + notifications
 Done recently:
@@ -191,6 +190,12 @@ Notes: API compression middleware added.
 - [ ] E2E testing
 Notes: Playwright after feature freeze.
 
+- [ ] Proxy Routing
+Notes: Remove proxy routing.
+
+- [ ] File Input Validation
+Notes: Validate input being allowed into system to avoid hidden virus or malicious entities.
+
 ## Newly Added
 
 - [ ] Expand DB-backed cron settings beyond attendance absence scanning
@@ -210,3 +215,12 @@ Notes: Redis-backed presence is now live for staff and HR account views, includi
 Notes: verify hotel settings save/load across tabs, default checkout time behavior on reservation creation, reservation page checkout filters, guest reminder lead-day behavior, staff checkout summary alerts, housekeeping prep task creation, and housekeeping follow-up alerts.
 - [ ] Finish dashboard QA / polish pass
 Notes: role-by-role browser QA is still pending even though the admin dashboard settings flow is now verified. Remaining work is reviewing seeded role layouts, widget usefulness, and skeleton/empty/error states before calling the dashboard v1 stable.
+
+## Quick Resolves
+
+- [ ] Finish dashboard QA / polish pass
+Notes: highest-impact quick resolve because the system is already built and only needs focused browser QA, widget usefulness review, and loading/empty/error state polish.
+- [ ] File input validation
+Notes: relatively contained hardening pass for uploads and file-like inputs across the system.
+- [ ] Facilities module polish / edge-case fixes
+Notes: core facilities workflows are already covered, so the remaining work is mostly QA, polish, and operational edge-case cleanup.

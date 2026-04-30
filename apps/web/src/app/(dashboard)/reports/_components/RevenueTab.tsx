@@ -29,7 +29,7 @@ export function RevenueTab({
   eventRevenue: number;
   revenueTotal: number;
   outstanding: number;
-  revenueData: { month: string; rooms: number; fnb: number; events: number; total: number }[];
+  revenueData: { month: string; rooms: number; fnb: number; events: number; total: number; momChange: number | null }[];
 }) {
   return (
     <TabsContent value="revenue" className="space-y-5">
@@ -64,7 +64,7 @@ export function RevenueTab({
         title="Revenue Breakdown by Stream"
         icon={DollarSign}
         color="text-emerald-400"
-        exportTitle="revenue-breakdown"
+        exportReport="revenue"
       >
         <ResponsiveContainer width="100%" height={280}>
           <BarChart data={revenueData}>
@@ -88,7 +88,7 @@ export function RevenueTab({
         title="Revenue Table"
         icon={Table}
         color="text-slate-400"
-        exportTitle="revenue-table"
+        exportReport="revenue"
       >
         <table className="w-full text-sm">
           <thead className="border-b border-[#1e2536]">
@@ -106,9 +106,7 @@ export function RevenueTab({
             </tr>
           </thead>
           <tbody>
-            {revenueData.map((row, index) => {
-              const prev = revenueData[index - 1];
-              const change = prev ? ((row.total - prev.total) / prev.total) * 100 : null;
+            {revenueData.map((row) => {
               return (
                 <tr
                   key={row.month}
@@ -120,12 +118,12 @@ export function RevenueTab({
                   <td className="px-2 py-2.5 text-sm text-slate-400">{formatMoney(row.events)}</td>
                   <td className="px-2 py-2.5 text-sm font-bold text-white">{formatMoney(row.total)}</td>
                   <td className="px-2 py-2.5 text-xs font-semibold">
-                    {change === null ? (
+                    {row.momChange === null ? (
                       <span className="text-slate-600">—</span>
                     ) : (
-                      <span className={change >= 0 ? 'text-emerald-400' : 'text-red-400'}>
-                        {change >= 0 ? '+' : ''}
-                        {change.toFixed(1)}%
+                      <span className={row.momChange >= 0 ? 'text-emerald-400' : 'text-red-400'}>
+                        {row.momChange >= 0 ? '+' : ''}
+                        {row.momChange.toFixed(1)}%
                       </span>
                     )}
                   </td>

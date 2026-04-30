@@ -30,6 +30,11 @@ export type RevenueReport = {
     paidAmount: number;
     outstanding: number;
     count: number;
+    byStream: {
+      rooms: number;
+      fnb: number;
+      events: number;
+    };
   };
   byType: {
     type: string;
@@ -58,6 +63,7 @@ export type RevenueReport = {
     fnb: number;
     events: number;
     total: number;
+    momChange: number | null;
   }[];
   rows: RevenueReportRow[];
 };
@@ -99,6 +105,20 @@ export type GuestsInsightsReport = {
   sourceData: { name: string; value: number; color: string }[];
   nationalityMix: { country: string; pct: number; color: string }[];
   reservationStatusRows: { status: string; count: number; revenue: number; avg: string; pct: number }[];
+  guestTrend: {
+    period: string;
+    totalGuests: number;
+    repeatGuests: number;
+    vipGuests: number;
+    avgStayNights: number;
+  }[];
+  bookingSourceTrend: {
+    period: string;
+    direct: number;
+    ota: number;
+    walkIn: number;
+    other: number;
+  }[];
 };
 
 export type StaffInsightsReport = {
@@ -143,6 +163,8 @@ export type CogsReport = {
     totalCost: number;
     totalQuantity: number;
     count: number;
+    costRatio: number;
+    grossProfit: number;
   };
   byCategory: {
     category: string;
@@ -166,11 +188,24 @@ export type CogsReport = {
     quantity: number;
     count: number;
   }[];
+  expenseRows: {
+    month: string;
+    payroll: number;
+    supplies: number;
+    utilities: number;
+    maintenance: number;
+    marketing: number;
+    total: number;
+  }[];
   rows: {
     id: string;
     createdAt: string;
     sourceId: string | null;
     quantity: number;
+    itemName: string;
+    itemSku: string;
+    itemCategory: string;
+    itemUnit: string;
     unitCost: number;
     cost: number;
     note: string | null;

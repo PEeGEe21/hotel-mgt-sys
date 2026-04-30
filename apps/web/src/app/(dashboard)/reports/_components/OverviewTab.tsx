@@ -83,7 +83,7 @@ export function OverviewTab({
           title="Monthly Revenue"
           icon={DollarSign}
           color="text-emerald-400"
-          exportTitle="revenue"
+          exportReport="overview"
         >
           <ResponsiveContainer width="100%" height={220}>
             <AreaChart data={revenueData}>
@@ -120,7 +120,7 @@ export function OverviewTab({
           title="Occupancy vs ADR"
           icon={BedDouble}
           color="text-blue-400"
-          exportTitle="occupancy"
+          exportReport="overview"
         >
           <ResponsiveContainer width="100%" height={220}>
             <LineChart data={occupancyData}>
@@ -168,7 +168,7 @@ export function OverviewTab({
           title="Guest Source Mix"
           icon={Users}
           color="text-violet-400"
-          exportTitle="sources"
+          exportReport="overview"
         >
           <ResponsiveContainer width="100%" height={200}>
             <PieChart>
@@ -206,7 +206,7 @@ export function OverviewTab({
             title="Revenue by Room Type"
             icon={BedDouble}
             color="text-sky-400"
-            exportTitle="room-types"
+            exportReport="overview"
           >
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={roomTypeRevenue} layout="vertical">

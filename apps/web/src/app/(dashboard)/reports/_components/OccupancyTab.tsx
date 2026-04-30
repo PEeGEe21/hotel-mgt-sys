@@ -32,7 +32,7 @@ export function OccupancyTab({
         <KPI label="Avg RevPAR" value={revPar ? formatMoney(revPar) : formatMoney(237)} sub="ADR x occupancy" color="text-amber-400" />
       </div>
 
-      <SectionCard title="Occupancy Rate Trend" icon={BedDouble} color="text-blue-400" exportTitle="occupancy-trend">
+      <SectionCard title="Occupancy Rate Trend" icon={BedDouble} color="text-blue-400" exportReport="occupancy">
         <ResponsiveContainer width="100%" height={260}>
           <AreaChart data={occupancyData}>
             <defs>
@@ -51,7 +51,7 @@ export function OccupancyTab({
       </SectionCard>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        <SectionCard title="ADR Trend" icon={DollarSign} color="text-violet-400" exportTitle="adr-trend">
+        <SectionCard title="ADR Trend" icon={DollarSign} color="text-violet-400" exportReport="occupancy">
           <ResponsiveContainer width="100%" height={200}>
             <LineChart data={occupancyData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#1e2536" />
@@ -63,7 +63,7 @@ export function OccupancyTab({
           </ResponsiveContainer>
         </SectionCard>
 
-        <SectionCard title="Room Type Performance" icon={BedDouble} color="text-sky-400" exportTitle="room-type-perf">
+        <SectionCard title="Room Type Performance" icon={BedDouble} color="text-sky-400" exportReport="occupancy">
           <table className="w-full text-sm">
             <thead className="border-b border-[#1e2536]">
               <tr>

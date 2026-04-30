@@ -20,8 +20,7 @@ import { ReportsHeader } from './_components/ReportsHeader';
 import { ReportsTabsNav } from './_components/ReportsTabsNav';
 import { RevenueTab } from './_components/RevenueTab';
 import { StaffTab } from './_components/StaffTab';
-import { attendanceWeek, expenseData, occupancyData, roomTypeRevenue } from '../../../lib/reports-seed-data';
-import { type Tab } from './_components/reports-shared';
+import { ReportsExportProvider, type Tab } from './_components/reports-shared';
 import { resolveReportRange } from '../../../utils/report-utils';
 
 export default function ReportsPage() {
@@ -41,7 +40,7 @@ export default function ReportsPage() {
     enabled: activeTab === 'inventory',
   });
   const occupancyReport = useOccupancyInsightsReport(reportRange, {
-    enabled: activeTab === 'occupancy',
+    enabled: activeTab === 'overview' || activeTab === 'occupancy',
   });
 
   const overview = overviewReport.data;
@@ -51,34 +50,15 @@ export default function ReportsPage() {
   const occupancy = occupancyReport.data;
 
   const revenueTotal = revenueReport.data?.summary.invoiceTotal ?? overview?.summary.revenueTotal ?? 0;
-  const roomRevenue =
-    revenueReport.data?.byType.find((item) => item.type === 'RESERVATION')?.invoiceTotal ?? 0;
-  const fnbRevenue =
-    revenueReport.data?.byType.find((item) => item.type === 'POS')?.invoiceTotal ?? 0;
-  const eventRevenue =
-    revenueReport.data?.byType.find((item) => item.type === 'FACILITY')?.invoiceTotal ?? 0;
-
-  const cogsDaily = cogsReport.data?.daily ?? [];
-  const liveExpenseData = cogsDaily.length
-    ? cogsDaily.map((row) => ({
-        month: row.date,
-        payroll: 0,
-        supplies: row.cost,
-        utilities: 0,
-        maintenance: 0,
-        marketing: 0,
-      }))
-    : expenseData;
-  const cogsTotal = cogsReport.data?.summary.totalCost ?? expenseData.at(-1)?.supplies ?? 0;
-  const costRatio = revenueTotal ? (cogsTotal / revenueTotal) * 100 : 0;
 
   return (
-    <Tabs
-      value={activeTab}
-      onValueChange={(value) => setActiveTab(value as Tab)}
-      className="space-y-6 flex-col"
-    >
-      <ReportsHeader dateRange={dateRange} onDateRangeChange={setDateRange} />
+    <ReportsExportProvider range={reportRange}>
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) => setActiveTab(value as Tab)}
+        className="space-y-6 flex-col"
+      >
+      <ReportsHeader activeTab={activeTab} dateRange={dateRange} onDateRangeChange={setDateRange} />
       <ReportsTabsNav />
 
       <OverviewTab
@@ -95,15 +75,15 @@ export default function ReportsPage() {
         outstandingFolios={overview?.summary.outstandingFolios ?? 0}
         outstandingCount={overview?.summary.outstandingCount ?? 0}
         revenueData={overview?.revenueChart ?? []}
-        occupancyData={occupancyData}
+        occupancyData={occupancy?.occupancyData ?? []}
         guestSourceData={overview?.guestSourceData ?? []}
-        roomTypeRevenue={roomTypeRevenue}
+        roomTypeRevenue={occupancy?.roomTypeRevenue ?? []}
       />
 
       <RevenueTab
-        roomRevenue={roomRevenue}
-        fnbRevenue={fnbRevenue}
-        eventRevenue={eventRevenue}
+        roomRevenue={revenueReport.data?.summary.byStream.rooms ?? 0}
+        fnbRevenue={revenueReport.data?.summary.byStream.fnb ?? 0}
+        eventRevenue={revenueReport.data?.summary.byStream.events ?? 0}
         revenueTotal={revenueTotal}
         outstanding={revenueReport.data?.summary.outstanding ?? 0}
         revenueData={revenueReport.data?.streamDaily ?? []}
@@ -117,18 +97,16 @@ export default function ReportsPage() {
         checkedIn={occupancy?.summary.checkedIn ?? 0}
         adr={occupancy?.summary.adr ?? 0}
         revPar={occupancy?.summary.revPar ?? 0}
-        occupancyData={occupancy?.occupancyData?.length ? occupancy.occupancyData : occupancyData}
-        roomTypeRevenue={
-          occupancy?.roomTypeRevenue?.length ? occupancy.roomTypeRevenue : roomTypeRevenue
-        }
+        occupancyData={occupancy?.occupancyData ?? []}
+        roomTypeRevenue={occupancy?.roomTypeRevenue ?? []}
       />
 
       <ExpensesTab
-        cogsTotal={cogsTotal}
+        cogsTotal={cogsReport.data?.summary.totalCost ?? 0}
         totalQuantity={cogsReport.data?.summary.totalQuantity ?? 0}
-        costRatio={costRatio}
-        grossProfit={Math.max(revenueTotal - cogsTotal, 0)}
-        expenseData={liveExpenseData}
+        costRatio={cogsReport.data?.summary.costRatio ?? 0}
+        grossProfit={cogsReport.data?.summary.grossProfit ?? 0}
+        expenseData={cogsReport.data?.expenseRows ?? []}
         dateRange={dateRange}
       />
 
@@ -153,14 +131,16 @@ export default function ReportsPage() {
         sourceData={guests?.sourceData ?? []}
         nationalityMix={guests?.nationalityMix ?? []}
         reservationStatusRows={guests?.reservationStatusRows ?? []}
+        guestTrend={guests?.guestTrend ?? []}
+        bookingSourceTrend={guests?.bookingSourceTrend ?? []}
       />
 
       <StaffTab
         totalStaff={`${staff?.summary.totalStaff ?? 21}`}
-        attendanceRate={`${staff?.summary.attendanceRate ?? 89}%`}
-        avgHoursWorked={`${staff?.summary.avgHoursWorked ?? '7.8'}h`}
-        lateArrivals={`${staff?.summary.lateArrivals ?? 9}`}
-        attendanceWeek={staff?.attendanceWeek ?? attendanceWeek}
+        attendanceRate={`${staff?.summary.attendanceRate ?? 0}%`}
+        avgHoursWorked={`${staff?.summary.avgHoursWorked ?? '0.0'}h`}
+        lateArrivals={`${staff?.summary.lateArrivals ?? 0}`}
+        attendanceWeek={staff?.attendanceWeek ?? []}
         departmentRows={staff?.departmentRows ?? []}
       />
 
@@ -171,6 +151,7 @@ export default function ReportsPage() {
         turnoverRate={`${inventory?.summary.turnoverRate ?? 0}`}
         inventoryAlertRows={inventory?.inventoryAlertRows ?? []}
       />
-    </Tabs>
+      </Tabs>
+    </ReportsExportProvider>
   );
 }

@@ -25,12 +25,12 @@ export function StaffTab({
     <TabsContent value="staff" className="space-y-5">
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <KPI label="Total Staff" value={totalStaff} sub="Active headcount" color="text-blue-400" />
-        <KPI label="Attendance Rate" value={attendanceRate} sub="Today" color="text-emerald-400" />
-        <KPI label="Avg Hours/Day" value={avgHoursWorked} sub="Clocked hours" color="text-violet-400" />
-        <KPI label="Late Arrivals" value={lateArrivals} sub="Today" color="text-amber-400" />
+        <KPI label="Attendance Rate" value={attendanceRate} sub="Selected range" color="text-emerald-400" />
+        <KPI label="Avg Hours/Day" value={avgHoursWorked} sub="Across selected range" color="text-violet-400" />
+        <KPI label="Late Arrivals" value={lateArrivals} sub="Selected range" color="text-amber-400" />
       </div>
 
-      <SectionCard title="Attendance This Week" icon={Clock} color="text-blue-400" exportTitle="attendance-week">
+      <SectionCard title="Attendance Trend" icon={Clock} color="text-blue-400" exportReport="staff">
         <ResponsiveContainer width="100%" height={260}>
           <BarChart data={attendanceWeek}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1e2536" />
@@ -45,11 +45,11 @@ export function StaffTab({
         </ResponsiveContainer>
       </SectionCard>
 
-      <SectionCard title="Staff by Department" icon={Users} color="text-slate-400" exportTitle="dept-headcount">
+      <SectionCard title="Staff by Department" icon={Users} color="text-slate-400" exportReport="staff">
         <table className="w-full text-sm">
           <thead className="border-b border-[#1e2536]">
             <tr>
-              {['Department', 'Headcount', 'Present Today', 'Attendance %', 'Avg Hours'].map((header) => (
+              {['Department', 'Headcount', 'Present Days', 'Attendance %', 'Avg Hours'].map((header) => (
                 <th key={header} className="whitespace-nowrap px-2 py-2 text-left text-xs font-medium text-slate-500">
                   {header}
                 </th>

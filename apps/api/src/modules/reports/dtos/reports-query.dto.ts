@@ -1,5 +1,5 @@
 import { Transform } from 'class-transformer';
-import { IsDateString, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsDateString, IsIn, IsInt, IsOptional, IsString, Max, Min, ValidateIf } from 'class-validator';
 
 export class ReportsRangeQueryDto {
   @IsOptional()
@@ -31,3 +31,32 @@ export class ReportsListQueryDto extends ReportsRangeQueryDto {
 }
 
 export class OutstandingFoliosQueryDto extends ReportsListQueryDto {}
+
+export const REPORT_EXPORT_SCOPES = ['tab', 'full'] as const;
+export const REPORT_EXPORT_FORMATS = ['excel', 'pdf'] as const;
+export const REPORT_EXPORT_TYPES = [
+  'overview',
+  'revenue',
+  'expenses',
+  'occupancy',
+  'guests',
+  'staff',
+  'inventory',
+] as const;
+
+export type ReportExportScope = (typeof REPORT_EXPORT_SCOPES)[number];
+export type ReportExportFormat = (typeof REPORT_EXPORT_FORMATS)[number];
+export type ReportExportType = (typeof REPORT_EXPORT_TYPES)[number];
+
+export class ReportsExportQueryDto extends ReportsRangeQueryDto {
+  @IsIn(REPORT_EXPORT_SCOPES)
+  scope!: ReportExportScope;
+
+  @IsIn(REPORT_EXPORT_FORMATS)
+  format!: ReportExportFormat;
+
+  @ValidateIf((value: ReportsExportQueryDto) => value.scope === 'tab')
+  @IsString()
+  @IsIn(REPORT_EXPORT_TYPES)
+  report?: ReportExportType;
+}

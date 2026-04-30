@@ -60,7 +60,7 @@ export function InventoryTab({
         title="Stock Levels vs Par — Critical Items"
         icon={Package}
         color="text-red-400"
-        exportTitle="low-stock"
+        exportReport="inventory"
       >
         <ResponsiveContainer width="100%" height={220}>
           <BarChart data={inventoryAlertRows} layout="vertical">
@@ -91,7 +91,7 @@ export function InventoryTab({
         title="Low Stock Alert List"
         icon={Table}
         color="text-slate-400"
-        exportTitle="inventory-alerts"
+        exportReport="inventory"
       >
         <table className="w-full text-sm">
           <thead className="border-b border-[#1e2536]">

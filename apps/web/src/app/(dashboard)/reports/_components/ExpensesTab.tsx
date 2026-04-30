@@ -23,6 +23,7 @@ type ExpenseRow = {
   utilities: number;
   maintenance: number;
   marketing: number;
+  total: number;
 };
 
 export function ExpensesTab({
@@ -73,7 +74,7 @@ export function ExpensesTab({
         title="Expense Breakdown by Category"
         icon={TrendingUp}
         color="text-red-400"
-        exportTitle="expenses"
+        exportReport="expenses"
       >
         <ResponsiveContainer width="100%" height={280}>
           <BarChart data={expenseData}>
@@ -105,7 +106,7 @@ export function ExpensesTab({
         title="Expense Table"
         icon={Table}
         color="text-slate-400"
-        exportTitle="expense-table"
+        exportReport="expenses"
       >
         <table className="w-full text-sm">
           <thead className="border-b border-[#1e2536]">
@@ -129,24 +130,20 @@ export function ExpensesTab({
             </tr>
           </thead>
           <tbody>
-            {expenseData.map((row) => {
-              const total =
-                row.payroll + row.supplies + row.utilities + row.maintenance + row.marketing;
-              return (
-                <tr
-                  key={row.month}
-                  className="border-b border-[#1e2536] last:border-0 hover:bg-white/[0.02]"
-                >
-                  <td className="px-2 py-2.5 font-medium text-slate-200">{row.month}</td>
-                  <td className="px-2 py-2.5 text-slate-400">{formatMoney(row.payroll)}</td>
-                  <td className="px-2 py-2.5 text-slate-400">{formatMoney(row.supplies)}</td>
-                  <td className="px-2 py-2.5 text-slate-400">{formatMoney(row.utilities)}</td>
-                  <td className="px-2 py-2.5 text-slate-400">{formatMoney(row.maintenance)}</td>
-                  <td className="px-2 py-2.5 text-slate-400">{formatMoney(row.marketing)}</td>
-                  <td className="px-2 py-2.5 font-bold text-red-400">{formatMoney(total)}</td>
-                </tr>
-              );
-            })}
+            {expenseData.map((row) => (
+              <tr
+                key={row.month}
+                className="border-b border-[#1e2536] last:border-0 hover:bg-white/[0.02]"
+              >
+                <td className="px-2 py-2.5 font-medium text-slate-200">{row.month}</td>
+                <td className="px-2 py-2.5 text-slate-400">{formatMoney(row.payroll)}</td>
+                <td className="px-2 py-2.5 text-slate-400">{formatMoney(row.supplies)}</td>
+                <td className="px-2 py-2.5 text-slate-400">{formatMoney(row.utilities)}</td>
+                <td className="px-2 py-2.5 text-slate-400">{formatMoney(row.maintenance)}</td>
+                <td className="px-2 py-2.5 text-slate-400">{formatMoney(row.marketing)}</td>
+                <td className="px-2 py-2.5 font-bold text-red-400">{formatMoney(row.total)}</td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </SectionCard>

@@ -1,15 +1,19 @@
-import { Controller, Get, Query, Request, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, Request, Res, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ReportsService } from './reports.service';
 import { JwtAuthGuard, Permissions, PermissionsGuard } from '../auth/guards';
-import { OutstandingFoliosQueryDto, ReportsRangeQueryDto } from './dtos/reports-query.dto';
+import { OutstandingFoliosQueryDto, ReportsExportQueryDto, ReportsRangeQueryDto } from './dtos/reports-query.dto';
+import { ReportsExportService } from './reports-export.service';
 
 @ApiTags('Reports')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('reports')
 export class ReportsController {
-  constructor(private reportsService: ReportsService) {}
+  constructor(
+    private reportsService: ReportsService,
+    private reportsExportService: ReportsExportService,
+  ) {}
 
   @Get('overview')
   @Permissions('view:reports')
@@ -65,5 +69,35 @@ export class ReportsController {
   @ApiOperation({ summary: 'Occupancy report snapshot with daily trend and room type performance' })
   getOccupancy(@Request() req: any, @Query() query: ReportsRangeQueryDto) {
     return this.reportsService.getOccupancyInsights(req.user.hotelId, query);
+  }
+
+  @Get('export')
+  @Permissions('export:reports')
+  @ApiOperation({ summary: 'Download tab or full reports as Excel or PDF' })
+  async exportReport(
+    @Request() req: any,
+    @Query() query: ReportsExportQueryDto,
+    @Res() res: any,
+  ) {
+    const file = await this.reportsExportService.generateExport(req.user.hotelId, query);
+    res.setHeader('Content-Type', file.contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
+    res.setHeader('Content-Length', String(file.buffer.length));
+    res.send(file.buffer);
+  }
+
+  @Post('export')
+  @Permissions('export:reports')
+  @ApiOperation({ summary: 'Download tab or full reports as Excel or PDF' })
+  async exportReportPost(
+    @Request() req: any,
+    @Body() body: ReportsExportQueryDto,
+    @Res() res: any,
+  ) {
+    const file = await this.reportsExportService.generateExport(req.user.hotelId, body);
+    res.setHeader('Content-Type', file.contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
+    res.setHeader('Content-Length', String(file.buffer.length));
+    res.send(file.buffer);
   }
 }

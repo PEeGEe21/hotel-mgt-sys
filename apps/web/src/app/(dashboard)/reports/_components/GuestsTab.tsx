@@ -1,14 +1,41 @@
 'use client';
 
-import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
-import { Table, Users } from 'lucide-react';
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Line,
+  LineChart,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
+import { Table, TrendingUp, Users } from 'lucide-react';
 import { TabsContent } from '@/components/ui/tabs';
 import { KPI, SectionCard, tooltipStyle } from './reports-shared';
-import { formatMoney } from '@/utils/report-utils';
+import { C, formatMoney } from '@/utils/report-utils';
 
 type SourceRow = { name: string; value: number; color: string };
 type NationalityRow = { country: string; pct: number; color: string };
 type ReservationStatusRow = { status: string; count: number; revenue: number; avg: string; pct: number };
+type GuestTrendRow = {
+  period: string;
+  totalGuests: number;
+  repeatGuests: number;
+  vipGuests: number;
+  avgStayNights: number;
+};
+type BookingSourceTrendRow = {
+  period: string;
+  direct: number;
+  ota: number;
+  walkIn: number;
+  other: number;
+};
 
 export function GuestsTab({
   totalGuests,
@@ -21,6 +48,8 @@ export function GuestsTab({
   sourceData,
   nationalityMix,
   reservationStatusRows,
+  guestTrend,
+  bookingSourceTrend,
 }: {
   totalGuests: string;
   totalGuestsSub: string;
@@ -32,6 +61,8 @@ export function GuestsTab({
   sourceData: SourceRow[];
   nationalityMix: NationalityRow[];
   reservationStatusRows: ReservationStatusRow[];
+  guestTrend: GuestTrendRow[];
+  bookingSourceTrend: BookingSourceTrendRow[];
 }) {
   return (
     <TabsContent value="guests" className="space-y-5">
@@ -43,7 +74,38 @@ export function GuestsTab({
       </div>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        <SectionCard title="Booking Source Distribution" icon={Users} color="text-violet-400" exportTitle="guest-sources">
+        <SectionCard title="Guest Trend" icon={TrendingUp} color="text-emerald-400" exportReport="guests">
+          <ResponsiveContainer width="100%" height={220}>
+            <LineChart data={guestTrend}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#1e2536" />
+              <XAxis dataKey="period" stroke="#475569" tick={{ fontSize: 11 }} />
+              <YAxis stroke="#475569" tick={{ fontSize: 11 }} />
+              <Tooltip {...tooltipStyle} />
+              <Line type="monotone" dataKey="totalGuests" stroke={C.blue} strokeWidth={2} dot={{ fill: C.blue, r: 3 }} name="Guests" />
+              <Line type="monotone" dataKey="repeatGuests" stroke={C.emerald} strokeWidth={2} dot={{ fill: C.emerald, r: 3 }} name="Repeat" />
+              <Line type="monotone" dataKey="vipGuests" stroke={C.amber} strokeWidth={2} dot={{ fill: C.amber, r: 3 }} name="VIP" />
+            </LineChart>
+          </ResponsiveContainer>
+        </SectionCard>
+
+        <SectionCard title="Booking Source Trend" icon={Users} color="text-violet-400" exportReport="guests">
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={bookingSourceTrend}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#1e2536" />
+              <XAxis dataKey="period" stroke="#475569" tick={{ fontSize: 11 }} />
+              <YAxis stroke="#475569" tick={{ fontSize: 11 }} />
+              <Tooltip {...tooltipStyle} />
+              <Bar dataKey="direct" stackId="a" fill={C.blue} name="Direct" />
+              <Bar dataKey="ota" stackId="a" fill={C.violet} name="OTA" />
+              <Bar dataKey="walkIn" stackId="a" fill={C.emerald} name="Walk-in" />
+              <Bar dataKey="other" stackId="a" fill={C.slate} name="Other" />
+            </BarChart>
+          </ResponsiveContainer>
+        </SectionCard>
+      </div>
+
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+        <SectionCard title="Booking Source Distribution" icon={Users} color="text-violet-400" exportReport="guests">
           <ResponsiveContainer width="100%" height={220}>
             <PieChart>
               <Pie data={sourceData} cx="50%" cy="50%" outerRadius={90} dataKey="value" label={({ name, value }) => `${name} ${value}%`} labelLine={false}>
@@ -56,7 +118,7 @@ export function GuestsTab({
           </ResponsiveContainer>
         </SectionCard>
 
-        <SectionCard title="Nationality Mix" icon={Users} color="text-sky-400" exportTitle="nationality">
+        <SectionCard title="Nationality Mix" icon={Users} color="text-sky-400" exportReport="guests">
           <div className="space-y-2.5 pt-2">
             {nationalityMix.map(({ country, pct, color }) => (
               <div key={country}>
@@ -75,7 +137,7 @@ export function GuestsTab({
         </SectionCard>
       </div>
 
-      <SectionCard title="Reservation Status Summary" icon={Table} color="text-slate-400" exportTitle="reservations-summary">
+      <SectionCard title="Reservation Status Summary" icon={Table} color="text-slate-400" exportReport="guests">
         <table className="w-full text-sm">
           <thead className="border-b border-[#1e2536]">
             <tr>
