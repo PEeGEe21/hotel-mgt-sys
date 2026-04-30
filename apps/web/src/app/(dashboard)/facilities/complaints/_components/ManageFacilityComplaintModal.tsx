@@ -1,6 +1,13 @@
 import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { Dialog, DialogContent, DialogOverlay, DialogTitle } from '@/components/ui/dialog';
+import {
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerOverlay,
+  DrawerTitle,
+} from '@/components/ui/drawer';
 
 type Option = { value: string; label: string };
 
@@ -74,23 +81,22 @@ function ManageFacilityComplaintModal({
   };
 
   const inputCls =
-    'w-full bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 outline-none focus:border-blue-500 transition-colors';
+    'w-full h-12 bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 outline-none focus:border-blue-500 transition-colors';
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogOverlay className="bg-black/70 backdrop-blur-sm" />
-      <DialogContent
-        showCloseButton={false}
-        className="bg-[#161b27] border border-[#1e2536] ring-0 !outline-none rounded-2xl w-full max-w-xl shadow-2xl p-6"
-      >
-        <DialogTitle className="flex items-center justify-between mb-5">
-          <h2 className="text-lg font-bold text-white">Log Complaint</h2>
+    <Drawer open={isOpen} onOpenChange={(open) => !open && onClose()} direction="right">
+      <DrawerOverlay className="bg-black/70 backdrop-blur-sm" />
+      <DrawerContent className="flex h-full w-full max-w-xl flex-col border-l border-[#1e2536] bg-[#161b27] sm:!max-w-xl">
+        <DrawerHeader className="flex flex-row items-center justify-between border-b border-[#1e2536] px-5 py-4">
+          <div>
+            <DrawerTitle className="text-base font-bold text-white">Log Complaint</DrawerTitle>
+          </div>
           <button onClick={onClose} className="text-slate-500 hover:text-slate-300">
             <X size={18} />
           </button>
-        </DialogTitle>
+        </DrawerHeader>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-4 p-5">
           <div className="col-span-2">
             <label className="text-xs text-slate-500 uppercase tracking-wider mb-1.5 block">
               Complaint Title
@@ -207,7 +213,7 @@ function ManageFacilityComplaintModal({
 
         {error && <p className="text-xs text-red-400 mt-3">{error}</p>}
 
-        <div className="flex gap-3 mt-5">
+        <div className="flex gap-3 mt-5 p-5">
           <button
             onClick={onClose}
             className="flex-1 bg-white/5 hover:bg-white/10 text-slate-300 rounded-lg py-2.5 text-sm font-medium transition-colors"
@@ -222,8 +228,8 @@ function ManageFacilityComplaintModal({
             {isSubmitting ? 'Saving...' : 'Submit'}
           </button>
         </div>
-      </DialogContent>
-    </Dialog>
+      </DrawerContent>
+    </Drawer>
   );
 }
 

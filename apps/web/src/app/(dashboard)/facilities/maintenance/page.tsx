@@ -245,7 +245,7 @@ export default function FacilityMaintenancePage() {
             ? selectedMaintenance.resolvedAt ?? now
             : undefined,
         closedAt: nextStatus === 'CLOSED' ? selectedMaintenance.closedAt ?? now : undefined,
-      } as any);
+      });
     } catch (e: any) {
       setError(e?.response?.data?.message ?? e?.message ?? 'Failed to update maintenance');
     }

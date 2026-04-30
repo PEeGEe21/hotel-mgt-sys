@@ -45,7 +45,7 @@ const inspectionTypes: Array<'All' | InspectionType> = [
 ];
 
 const inputCls =
-  'w-full rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 outline-none transition-colors focus:border-blue-500 disabled:cursor-not-allowed disabled:opacity-60';
+  'w-full h-12 rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 outline-none transition-colors focus:border-blue-500 disabled:cursor-not-allowed disabled:opacity-60';
 
 const StatusIcon = ({ status }: { status: string }) => {
   if (status === 'SUBMITTED') return <CheckCircle2 size={14} className="text-emerald-400" />;

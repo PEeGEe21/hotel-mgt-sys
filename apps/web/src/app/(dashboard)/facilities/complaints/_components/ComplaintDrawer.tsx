@@ -119,9 +119,21 @@ export default function ComplaintDrawer({
   };
 
   const handleCreateMaintenance = async () => {
-    if (!canCreateMaintenance) return;
+    if (!canCreateMaintenance || !canManageComplaints) return;
     if (complaint.maintenanceRequest?.id) {
       setError('This complaint is already linked to a maintenance request.');
+      return;
+    }
+    if (!values.title.trim()) {
+      setError('Complaint title is required before opening maintenance.');
+      return;
+    }
+    if (!values.category.trim()) {
+      setError('Complaint category is required before opening maintenance.');
+      return;
+    }
+    if (!values.description.trim()) {
+      setError('Complaint description is required before opening maintenance.');
       return;
     }
 
@@ -353,7 +365,7 @@ export default function ComplaintDrawer({
                   <div>
                     <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
                       Estimated Cost (₦)
-                    </label>
+                    </label>p-5
                     <input
                       type="number"
                       min="0"
@@ -386,7 +398,7 @@ export default function ComplaintDrawer({
                     />
                   </div>
                 </div>
-                {canCreateMaintenance ? (
+                {canCreateMaintenance && canManageComplaints ? (
                   <div className="flex justify-end">
                     <button
                       onClick={handleCreateMaintenance}
@@ -398,8 +410,8 @@ export default function ComplaintDrawer({
                   </div>
                 ) : (
                   <p className="text-sm text-slate-400">
-                    You can review the complaint, but you do not have permission to create
-                    maintenance requests.
+                    You need both complaint-management and maintenance-create permissions to open a
+                    linked maintenance request from this complaint.
                   </p>
                 )}
               </>

@@ -4,8 +4,8 @@ Last updated: 2026-04-30
 
 ## Next Up
 
-- [ ] Facilities module end-to-end verification
-Notes: reports, requisitions, maintenance, and inspections have had recent structural work, but they still need a real end-to-end QA pass before the module can be called complete. Complaint-to-maintenance linking is now wired in the frontend, and maintenance / inspection detail drawers now expose real update flows against the existing PATCH endpoints. The remaining gap is workflow verification and bug-surfacing, not missing core CRUD surfaces.
+- [x] Facilities module end-to-end verification
+Notes: confirmed across browser QA and seeded-data retest, including complaint-to-maintenance linking, maintenance lifecycle updates, inspection detail/update flows, requisitions end-to-end behavior, facilities report validation, and list/filter/status-count checks against the richer facilities QA seed pack.
 
 - [ ] Run end-to-end verification for checkout automation
 Notes: verify hotel settings save/load across tabs, default checkout time behavior on reservation creation, reservation page checkout filters, guest reminder lead-day behavior, staff checkout summary alerts, housekeeping prep task creation, and housekeeping follow-up alerts.
@@ -49,8 +49,17 @@ Done recently:
 - loading, empty, and error state polish completed across widgets
 - review weak v1 widgets and remove or replace them where needed
 
-- [ ] Facilities module
-Notes: facility list/detail flows have recent polish fixes, facilities activity flows now use shared drawers, facilities reporting aggregation has been moved into a backend summary endpoint with a thin React Query hook on the frontend, complaint records can now open linked maintenance requests, and maintenance / inspection records now have in-app detail update drawers. Remaining work is end-to-end verification across reports, requisitions, maintenance, and inspections before calling the module done.
+- [x] Facilities module
+Done recently:
+- facility list/detail polish fixes landed for manager selection, real capacity/location data, safer schedule parsing, and modal validation
+- facilities activity surfaces were standardized onto shared drawers
+- facilities reporting aggregation moved into a backend summary endpoint with a thin React Query hook on the frontend
+- complaint records can now open linked maintenance requests
+- maintenance records now support in-app detail review, assignment, notes, timing, cost, and status updates
+- inspection records now support in-app detail review, findings, score, scheduling, and status updates
+- richer facilities QA seed data added for types, locations, departments, facilities, bookings, complaints, inspections, maintenance, and requisitions
+- browser QA confirmed complaint/maintenance/inspection drawers, requisitions flow, reports validation, and list/filter/status-count behavior against the seeded dataset
+Notes: Facilities is now considered v1 complete. Future additions should be treated as backlog unless they introduce new module scope.
 
 - [x] Reports
 Done recently:

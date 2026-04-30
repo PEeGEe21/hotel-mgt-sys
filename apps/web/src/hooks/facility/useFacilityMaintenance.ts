@@ -42,10 +42,20 @@ export type FacilityMaintenanceInput = {
   category: string;
   priority: string;
   status?: string;
+  reportedBy?: string;
   assignedTo?: string;
+  assignedAt?: string;
+  startedAt?: string;
+  resolvedAt?: string;
+  closedAt?: string;
   estimatedMins?: number;
+  actualMins?: number;
   totalCost?: number;
+  partsUsed?: Record<string, unknown>;
+  images?: string[];
   notes?: string;
+  inspectionId?: string;
+  verificationInspectionId?: string;
 };
 
 export type FacilityMaintenanceResponse = {

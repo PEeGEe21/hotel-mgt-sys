@@ -12,7 +12,13 @@ import {
 import { useFacilities } from '@/hooks/facility/useFacility';
 import Pagination from '@/components/ui/pagination';
 import { usePermissions } from '@/hooks/usePermissions';
-import { Drawer, DrawerContent, DrawerHeader, DrawerOverlay, DrawerTitle } from '@/components/ui/drawer';
+import {
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerOverlay,
+  DrawerTitle,
+} from '@/components/ui/drawer';
 
 const statusStyle: Record<string, string> = {
   PENDING: 'bg-amber-500/15 text-amber-400',
@@ -152,191 +158,197 @@ export default function FacilityBookingsPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-white tracking-tight">Facility Bookings</h1>
-          <p className="text-slate-500 text-sm mt-0.5">
-            Manage facility reservations and guest bookings
-            {isLoading && <span className="ml-2 text-xs text-slate-600">Loading…</span>}
-            {error && <span className="ml-2 text-xs text-red-400">{error}</span>}
-          </p>
+    <>
+      <div className="space-y-6">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-white tracking-tight">Facility Bookings</h1>
+            <p className="text-slate-500 text-sm mt-0.5">
+              Manage facility reservations and guest bookings
+              {isLoading && <span className="ml-2 text-xs text-slate-600">Loading…</span>}
+              {error && <span className="ml-2 text-xs text-red-400">{error}</span>}
+            </p>
+          </div>
+          {canCreateBooking ? (
+            <button
+              onClick={() => setShowAdd(true)}
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
+            >
+              <Plus size={15} /> New Booking
+            </button>
+          ) : null}
         </div>
-        {canCreateBooking ? (
-          <button
-            onClick={() => setShowAdd(true)}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
-          >
-            <Plus size={15} /> New Booking
-          </button>
-        ) : null}
-      </div>
 
-      <div className="flex flex-wrap items-center gap-3 justify-between w-full">
-        <div className="flex flex-wrap gap-3 items-center">
-          <select
-            value={limit}
-            onChange={(e) => {
-              setLimit(Number(e.target.value));
-              resetPage();
-            }}
-            className="bg-[#161b27] border border-[#1e2536] rounded-lg px-3 py-2 text-sm text-slate-300 outline-none focus:border-blue-500 transition-colors"
-          >
-            {[5, 10, 20, 50].map((n) => (
-              <option key={n} value={n}>
-                {n} per page
-              </option>
-            ))}
-          </select>
-          <div className="flex items-center gap-2 bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-2 w-72">
-            <Search size={14} className="text-slate-500 shrink-0" />
+        <div className="flex flex-wrap items-center gap-3 justify-between w-full">
+          <div className="flex flex-wrap gap-3 items-center">
+            <select
+              value={limit}
+              onChange={(e) => {
+                setLimit(Number(e.target.value));
+                resetPage();
+              }}
+              className="bg-[#161b27] border border-[#1e2536] rounded-lg px-3 py-2 text-sm text-slate-300 outline-none focus:border-blue-500 transition-colors"
+            >
+              {[5, 10, 20, 50].map((n) => (
+                <option key={n} value={n}>
+                  {n} per page
+                </option>
+              ))}
+            </select>
+            <div className="flex items-center gap-2 bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-2 w-72">
+              <Search size={14} className="text-slate-500 shrink-0" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search facilities..."
+                className="bg-transparent text-sm text-slate-300 placeholder:text-slate-600 outline-none flex-1"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
             <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search facilities..."
-              className="bg-transparent text-sm text-slate-300 placeholder:text-slate-600 outline-none flex-1"
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-2 text-sm text-slate-200"
             />
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-2 text-sm text-slate-200"
+            />
+            <button
+              onClick={() => refetch()}
+              className="bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold px-3 py-2 rounded-lg"
+            >
+              Apply
+            </button>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <input
-            type="date"
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-            className="bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-2 text-sm text-slate-200"
-          />
-          <input
-            type="date"
-            value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
-            className="bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-2 text-sm text-slate-200"
-          />
-          <button
-            onClick={() => refetch()}
-            className="bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold px-3 py-2 rounded-lg"
-          >
-            Apply
-          </button>
+        <div className="flex gap-2 flex-wrap">
+          {['All', 'PENDING', 'CONFIRMED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'NO_SHOW'].map(
+            (s) => (
+              <button
+                key={s}
+                onClick={() => setStatusFilter(s as any)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${statusFilter === s ? 'bg-blue-600/20 border-blue-500/30 text-blue-400' : 'bg-[#161b27] border-[#1e2536] text-slate-400 hover:text-slate-200'}`}
+              >
+                {s}
+              </button>
+            ),
+          )}
         </div>
-      </div>
 
-      <div className="flex gap-2 flex-wrap">
-        {['All', 'PENDING', 'CONFIRMED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'NO_SHOW'].map(
-          (s) => (
-            <button
-              key={s}
-              onClick={() => setStatusFilter(s as any)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${statusFilter === s ? 'bg-blue-600/20 border-blue-500/30 text-blue-400' : 'bg-[#161b27] border-[#1e2536] text-slate-400 hover:text-slate-200'}`}
-            >
-              {s}
-            </button>
-          ),
+        <div className="bg-[#161b27] border border-[#1e2536] rounded-xl overflow-hidden">
+          <table className="w-full min-w-[900px]">
+            <thead className="border-b border-[#1e2536] bg-[#0f1117]/50">
+              <tr>
+                {[
+                  '#',
+                  'Facility',
+                  'Guest',
+                  'Room',
+                  'Start',
+                  'End',
+                  'Charge',
+                  'Amount',
+                  'Status',
+                  'Paid',
+                  '',
+                ].map((h) => (
+                  <th
+                    key={h}
+                    className="text-xs text-slate-500 uppercase tracking-wider font-medium px-4 py-3 text-left whitespace-nowrap"
+                  >
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {bookings.length === 0 && (
+                <tr className="border-b border-[#1e2536] last:border-0 text-center">
+                  <td colSpan={11} className="px-4 py-3 text-sm text-slate-500">
+                    {isLoading ? 'Loading bookings' : 'No bookings found'}
+                  </td>
+                </tr>
+              )}
+              {bookings.map((b, i) => (
+                <tr
+                  key={b.id}
+                  className="border-b border-[#1e2536] last:border-0 hover:bg-white/[0.02] transition-colors"
+                >
+                  <td className="px-4 py-3 text-sm text-slate-500">{i + 1}</td>
+                  <td className="px-4 py-3 text-sm font-medium text-slate-200 whitespace-nowrap">
+                    {b?.facility?.name}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-slate-400 whitespace-nowrap">
+                    {b.guestName}
+                  </td>
+                  <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">
+                    {b.roomNo ?? '—'}
+                  </td>
+                  <td className="px-4 py-3 text-xs text-slate-400 whitespace-nowrap">
+                    {toDate(b.startTime)} {toTime(b.startTime)}
+                  </td>
+                  <td className="px-4 py-3 text-xs text-slate-400 whitespace-nowrap">
+                    {toDate(b.endTime)} {toTime(b.endTime)}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`text-xs px-2.5 py-1 rounded-full font-medium ${chargeStyle[b.chargeType] ?? 'bg-slate-500/15 text-slate-400'}`}
+                    >
+                      {b.chargeType}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-slate-200 whitespace-nowrap">
+                    ₦{b.amount.toLocaleString()}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`text-xs px-2.5 py-1 rounded-full font-medium ${statusStyle[b.status] ?? 'bg-slate-500/15 text-slate-400'}`}
+                    >
+                      {b.status}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    {b.isPaid ? (
+                      <BadgeCheck size={16} className="text-emerald-400" />
+                    ) : (
+                      <CircleSlash size={16} className="text-slate-500" />
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <button
+                      onClick={() => {
+                        setCancelTarget(b);
+                        setShowCancel(true);
+                      }}
+                      disabled={b.status === 'CANCELLED' || cancelBooking.isPending}
+                      className="text-xs bg-red-500/15 text-red-400 hover:bg-red-500/25 px-2 py-1 rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Cancel
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {data?.meta && bookings.length > 0 && (
+          <Pagination meta={data.meta} currentPage={page} handlePageChange={setPage} />
         )}
       </div>
 
-      <div className="bg-[#161b27] border border-[#1e2536] rounded-xl overflow-hidden">
-        <table className="w-full min-w-[900px]">
-          <thead className="border-b border-[#1e2536] bg-[#0f1117]/50">
-            <tr>
-              {[
-                '#',
-                'Facility',
-                'Guest',
-                'Room',
-                'Start',
-                'End',
-                'Charge',
-                'Amount',
-                'Status',
-                'Paid',
-                '',
-              ].map((h) => (
-                <th
-                  key={h}
-                  className="text-xs text-slate-500 uppercase tracking-wider font-medium px-4 py-3 text-left whitespace-nowrap"
-                >
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {bookings.length === 0 && (
-              <tr className="border-b border-[#1e2536] last:border-0 text-center">
-                <td colSpan={11} className="px-4 py-3 text-sm text-slate-500">
-                  {isLoading ? 'Loading bookings' : 'No bookings found'}
-                </td>
-              </tr>
-            )}
-            {bookings.map((b, i) => (
-              <tr
-                key={b.id}
-                className="border-b border-[#1e2536] last:border-0 hover:bg-white/[0.02] transition-colors"
-              >
-                <td className="px-4 py-3 text-sm text-slate-500">{i + 1}</td>
-                <td className="px-4 py-3 text-sm font-medium text-slate-200 whitespace-nowrap">
-                  {b?.facility?.name}
-                </td>
-                <td className="px-4 py-3 text-sm text-slate-400 whitespace-nowrap">
-                  {b.guestName}
-                </td>
-                <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">
-                  {b.roomNo ?? '—'}
-                </td>
-                <td className="px-4 py-3 text-xs text-slate-400 whitespace-nowrap">
-                  {toDate(b.startTime)} {toTime(b.startTime)}
-                </td>
-                <td className="px-4 py-3 text-xs text-slate-400 whitespace-nowrap">
-                  {toDate(b.endTime)} {toTime(b.endTime)}
-                </td>
-                <td className="px-4 py-3">
-                  <span
-                    className={`text-xs px-2.5 py-1 rounded-full font-medium ${chargeStyle[b.chargeType] ?? 'bg-slate-500/15 text-slate-400'}`}
-                  >
-                    {b.chargeType}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-sm text-slate-200 whitespace-nowrap">
-                  ₦{b.amount.toLocaleString()}
-                </td>
-                <td className="px-4 py-3">
-                  <span
-                    className={`text-xs px-2.5 py-1 rounded-full font-medium ${statusStyle[b.status] ?? 'bg-slate-500/15 text-slate-400'}`}
-                  >
-                    {b.status}
-                  </span>
-                </td>
-                <td className="px-4 py-3">
-                  {b.isPaid ? (
-                    <BadgeCheck size={16} className="text-emerald-400" />
-                  ) : (
-                    <CircleSlash size={16} className="text-slate-500" />
-                  )}
-                </td>
-                <td className="px-4 py-3">
-                  <button
-                    onClick={() => {
-                      setCancelTarget(b);
-                      setShowCancel(true);
-                    }}
-                    disabled={b.status === 'CANCELLED' || cancelBooking.isPending}
-                    className="text-xs bg-red-500/15 text-red-400 hover:bg-red-500/25 px-2 py-1 rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Cancel
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {data?.meta && bookings.length > 0 && (
-        <Pagination meta={data.meta} currentPage={page} handlePageChange={setPage} />
-      )}
-
-      <Drawer open={showAdd && canCreateBooking} onOpenChange={() => setShowAdd(false)} direction="right">
+      <Drawer
+        open={showAdd && canCreateBooking}
+        onOpenChange={() => setShowAdd(false)}
+        direction="right"
+      >
         <DrawerOverlay className="bg-black/50 backdrop-blur-sm data-[state=open]:animate-fadeIn" />
         <DrawerContent className="flex h-full w-full max-w-xl flex-col border-l border-[#1e2536] bg-[#161b27] sm:!max-w-xl">
           <DrawerHeader className="flex flex-row items-center justify-between border-b border-[#1e2536] px-5 py-4">
@@ -511,7 +523,11 @@ export default function FacilityBookingsPage() {
         </DrawerContent>
       </Drawer>
 
-      <Drawer open={showCancel && Boolean(cancelTarget)} onOpenChange={() => setShowCancel(false)} direction="right">
+      <Drawer
+        open={showCancel && Boolean(cancelTarget)}
+        onOpenChange={() => setShowCancel(false)}
+        direction="right"
+      >
         <DrawerOverlay className="bg-black/50 backdrop-blur-sm data-[state=open]:animate-fadeIn" />
         <DrawerContent className="flex h-full w-full max-w-lg flex-col border-l border-[#1e2536] bg-[#161b27] sm:!max-w-lg">
           <DrawerHeader className="flex flex-row items-center justify-between border-b border-[#1e2536] px-5 py-4">
@@ -577,6 +593,6 @@ export default function FacilityBookingsPage() {
           </div>
         </DrawerContent>
       </Drawer>
-    </div>
+    </>
   );
 }
