@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { FileText, Plus, Search, Download, Eye, X, CheckCircle2, Clock, AlertTriangle } from 'lucide-react';
+import TableScroll from '@/components/ui/table-scroll';
 
 type ContractStatus = 'Active' | 'Expired' | 'Expiring Soon' | 'Draft';
 type ContractType = 'Permanent' | 'Contract' | 'Part-time' | 'Probation';
@@ -97,6 +98,7 @@ export default function ContractsPage() {
       </div>
 
       <div className="bg-[#161b27] border border-[#1e2536] rounded-xl overflow-hidden">
+        <TableScroll>
         <table className="w-full">
           <thead className="border-b border-[#1e2536] bg-[#0f1117]/50">
             <tr>
@@ -133,6 +135,7 @@ export default function ContractsPage() {
             ))}
           </tbody>
         </table>
+        </TableScroll>
       </div>
 
       {showAdd && (

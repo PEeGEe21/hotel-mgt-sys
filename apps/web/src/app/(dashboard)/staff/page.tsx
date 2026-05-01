@@ -29,6 +29,7 @@ import {
 import openToast from '@/components/ToastComponent';
 import { useDebounce } from '@/hooks/useDebounce';
 import Pagination from '@/components/ui/pagination';
+import TableScroll from '@/components/ui/table-scroll';
 import { usePresenceRealtime } from '@/hooks/usePresenceRealtime';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -451,6 +452,7 @@ export default function StaffPage() {
               <Loader2 size={24} className="animate-spin text-slate-500" />
             </div>
           ) : (
+            <TableScroll>
             <table className="w-full">
               <thead className="border-b border-[#1e2536] bg-[#0f1117]/50">
                 <tr>
@@ -567,6 +569,7 @@ export default function StaffPage() {
                 )}
               </tbody>
             </table>
+            </TableScroll>
           )}
 
           {data?.meta && staff.length > 0 && (

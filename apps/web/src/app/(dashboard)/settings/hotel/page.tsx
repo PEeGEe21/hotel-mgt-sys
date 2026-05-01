@@ -296,9 +296,9 @@ export default function HotelProfilePage() {
   const [activeTab, setActiveTab] = useState<SettingsTab>('profile');
   const [savedSection, setSavedSection] = useState<SettingsTab | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
-  const [runningJob, setRunningJob] = useState<null | 'checkoutDueScan' | 'housekeepingFollowUpScan'>(
-    null,
-  );
+  const [runningJob, setRunningJob] = useState<
+    null | 'attendanceAbsenceScan' | 'checkoutDueScan' | 'housekeepingFollowUpScan'
+  >(null);
   const [form, setForm] = useState({
     name: '',
     address: '',
@@ -599,7 +599,9 @@ export default function HotelProfilePage() {
     }
   };
 
-  const handleRunCronJob = async (job: 'checkoutDueScan' | 'housekeepingFollowUpScan') => {
+  const handleRunCronJob = async (
+    job: 'attendanceAbsenceScan' | 'checkoutDueScan' | 'housekeepingFollowUpScan',
+  ) => {
     setRunningJob(job);
     try {
       await runCronJob.mutateAsync(job);
@@ -895,6 +897,18 @@ export default function HotelProfilePage() {
                   lastFailure={attendanceStatus.lastFailure}
                   lastError={attendanceStatus.lastError}
                 />
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => handleRunCronJob('attendanceAbsenceScan')}
+                    disabled={runCronJob.isPending}
+                    className="rounded-lg border border-[#1e2536] bg-white/5 px-3 py-2 text-sm font-medium text-slate-200 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {runningJob === 'attendanceAbsenceScan'
+                      ? 'Running absence scan...'
+                      : 'Run attendance scan now'}
+                  </button>
+                </div>
 
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div>

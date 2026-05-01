@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Receipt, Download, CheckCircle2, Clock, DollarSign, Users, TrendingUp, Calendar } from 'lucide-react';
+import TableScroll from '@/components/ui/table-scroll';
 
 type PayrollStatus = 'Paid' | 'Pending' | 'Processing';
 
@@ -87,6 +88,7 @@ export default function PayrollPage() {
       </div>
 
       <div className="bg-[#161b27] border border-[#1e2536] rounded-xl overflow-hidden">
+        <TableScroll>
         <table className="w-full">
           <thead className="border-b border-[#1e2536] bg-[#0f1117]/50">
             <tr>
@@ -123,6 +125,7 @@ export default function PayrollPage() {
             ))}
           </tbody>
         </table>
+        </TableScroll>
         <div className="px-5 py-3 bg-[#0f1117]/40 border-t border-[#1e2536] flex items-center justify-between">
           <span className="text-xs text-slate-500">{selectedMonth} · {filtered.length} staff</span>
           <span className="text-sm font-bold text-white">Total: ${totalNet.toLocaleString()}</span>

@@ -106,7 +106,7 @@ export default function NotificationInboxBell() {
       <DropdownMenuContent
         align="end"
         sideOffset={10}
-        className="w-[380px] min-w-[380px] rounded-2xl border border-[#1e2536] bg-[#161b27] p-0 text-white shadow-2xl"
+        className="w-[calc(100vw-1.5rem)] min-w-0 max-w-[380px] rounded-2xl border border-[#1e2536] bg-[#161b27] p-0 text-white shadow-2xl sm:w-[380px] sm:min-w-[380px]"
       >
         <div className="flex items-center justify-between px-4 pt-3">
           <div>

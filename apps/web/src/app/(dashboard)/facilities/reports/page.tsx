@@ -10,6 +10,7 @@ import {
   Wrench,
 } from 'lucide-react';
 import { useFacilityReports } from '@/hooks/facility/useFacilityReports';
+import TableScroll from '@/components/ui/table-scroll';
 
 const cardIcons = {
   facilities: FileBarChart,
@@ -143,6 +144,7 @@ export default function FacilityReportsPage() {
                 SLA, and open critical issues).
               </p>
             </div>
+            <TableScroll>
             <table className="w-full">
               <thead className="border-b border-[#1e2536] bg-[#0f1117]/50">
                 <tr>
@@ -219,6 +221,7 @@ export default function FacilityReportsPage() {
                 ) : null}
               </tbody>
             </table>
+            </TableScroll>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -228,6 +231,7 @@ export default function FacilityReportsPage() {
                   <h2 className="text-sm font-semibold text-white">{title}</h2>
                   <p className="text-xs text-slate-500 mt-0.5">Facility distribution</p>
                 </div>
+                <TableScroll>
                 <table className="w-full">
                   <thead className="border-b border-[#1e2536] bg-[#0f1117]/50">
                     <tr>
@@ -257,6 +261,7 @@ export default function FacilityReportsPage() {
                     ))}
                   </tbody>
                 </table>
+                </TableScroll>
               </div>
             ))}
           </div>

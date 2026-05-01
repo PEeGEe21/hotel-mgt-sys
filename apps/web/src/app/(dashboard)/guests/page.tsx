@@ -15,6 +15,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import Pagination from '@/components/ui/pagination';
+import TableScroll from '@/components/ui/table-scroll';
 import { useGuests} from '@/hooks/useGuests';
 import { useDebounce } from '@/hooks/useDebounce';
 import { addDays } from 'date-fns';
@@ -264,6 +265,7 @@ export default function GuestsPage() {
               <p className="text-slate-500 text-sm">No guests found</p>
             </div>
           ) : (
+            <TableScroll>
             <table className="w-full">
               <thead className="border-b border-[#1e2536] bg-[#0f1117]/50">
                 <tr>
@@ -357,6 +359,7 @@ export default function GuestsPage() {
                 })}
               </tbody>
             </table>
+            </TableScroll>
           )}
 
           {data?.meta && guests.length > 0 && (

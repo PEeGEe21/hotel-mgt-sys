@@ -2,6 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { IsIn } from 'class-validator';
 
 export const RUNNABLE_HOTEL_CRON_JOBS = [
+  'attendanceAbsenceScan',
   'checkoutDueScan',
   'housekeepingFollowUpScan',
 ] as const;

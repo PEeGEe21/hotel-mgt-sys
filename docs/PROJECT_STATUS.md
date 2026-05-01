@@ -1,17 +1,17 @@
 # Project Status
 
-Last updated: 2026-04-30
+Last updated: 2026-05-01
 
 ## Next Up
 
-- [x] Facilities module end-to-end verification
-Notes: confirmed across browser QA and seeded-data retest, including complaint-to-maintenance linking, maintenance lifecycle updates, inspection detail/update flows, requisitions end-to-end behavior, facilities report validation, and list/filter/status-count checks against the richer facilities QA seed pack.
+- [ ] Mobile responsiveness
+Notes: active focus. Prioritize mobile and tablet usability across the dashboard shell, starting with sidebar toggle/slide-in behavior and broader layout QA on key operational pages.
 
-- [ ] Run end-to-end verification for checkout automation
-Notes: verify hotel settings save/load across tabs, default checkout time behavior on reservation creation, reservation page checkout filters, guest reminder lead-day behavior, staff checkout summary alerts, housekeeping prep task creation, and housekeeping follow-up alerts.
+- [ ] Web app features
+Notes: active focus. Define and implement the next round of web-app capabilities beyond core CRUD flows, including installability/app-shell polish and other product-level enhancements that improve the in-browser app experience.
 
 - [ ] Background jobs / scheduler
-Notes: scheduler foundation is in place and the Redis/Bull attendance loop has been verified. Current focus is no longer the foundation layer, but growing scheduler coverage and operational polish across timed workflows.
+Notes: pending. Scheduler foundation is in place and current cron-backed workflows are running, but there is still follow-on work around expanding job coverage, observability, and production hardening.
 
 ## Settings
 
@@ -115,6 +115,11 @@ Still pending:
 - housekeeping/facilities live task board updates
 - broader cross-module realtime event strategy and admin observability
 
+- [ ] Mobile Responsiveness
+Note:  Make sidebar show/Slide in on toggle on mobile and tablet. Add toggle button
+
+- [ ] Make Frontend into Web App
+
 ## Backlogged
 
 - [ ] Inventory Purchase Orders tab
@@ -185,15 +190,14 @@ Done recently:
 - guest checkout reminders now support configurable lead days instead of only day-before / same-day timing
 - housekeeping follow-up scheduler added with its own hotel cron settings, grace window, and housekeeping-targeted alerts
 - checkout scheduler metadata now links reminder timing and follow-up task context more clearly across notifications/email logs
-- hotel settings now support manual run-now triggers for checkout and housekeeping follow-up schedulers to speed up QA
+- hotel settings now support manual run-now triggers for attendance, checkout, and housekeeping follow-up schedulers to speed up QA
 - shared Redis service added for app-level pub/sub and presence state
 - realtime presence tracking added so staff and HR account views can show who is currently online
 - websocket presence sync now invalidates staff/account views in near real time across Redis-backed events
 - logout and logout-all now clear Redis presence directly so online status drops reliably when a user signs out
 
 Still pending:
-- run end-to-end verification for checkout automation
-- add more timed workflows beyond attendance and checkout
+- add more timed workflows beyond attendance, checkout, and housekeeping follow-up
 - improve scheduler observability further across future jobs
 - add Redis-backed production hardening for broader caching, session, and distributed job support
 
@@ -215,7 +219,7 @@ Notes: client-side image pickers now enforce allowed types and size limits consi
 
 ## Newly Added
 
-- [ ] Expand DB-backed cron settings beyond attendance absence scanning
+- [ ] Expand DB-backed cron settings beyond the current attendance / checkout / housekeeping job set
 - [~] Add scheduler observability/admin visibility for last run status and failures
 Notes: last run, next run, timezone, enabled state, last success/failure timestamps, and last error are now visible for attendance, checkout, and housekeeping follow-up scheduling. Remaining work is extending the same model to more job types and deeper operational visibility.
 - [x] Add housekeeping follow-up job for cleaning tasks still in progress or not done

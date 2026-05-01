@@ -555,9 +555,14 @@ export class AttendanceService {
     });
   }
 
-  async runAbsenceDetectionForDate(referenceDate = new Date()) {
+  async runAbsenceDetectionForDate(
+    referenceDate = new Date(),
+    hotelIdFilter?: string,
+    force = false,
+  ) {
     const reference = new Date(referenceDate);
     const hotels = await this.prisma.hotel.findMany({
+      where: hotelIdFilter ? { id: hotelIdFilter } : undefined,
       include: {
         cronSettings: {
           where: { jobType: HotelCronJobType.ATTENDANCE_ABSENCE_SCAN },
@@ -578,15 +583,16 @@ export class AttendanceService {
       const runAtMinute = cronSetting?.runAtMinute ?? 15;
       const timezone = hotel.timezone || 'Africa/Lagos';
 
-      if (!enabled) continue;
+      if (!enabled && !force) continue;
 
       const localNow = getZonedDateParts(reference, timezone);
+      const alertDate = localNow.date;
       const localMinutes = localNow.hour * 60 + localNow.minute;
       const scheduledMinutes = runAtHour * 60 + runAtMinute;
-      if (localMinutes < scheduledMinutes) continue;
 
-      const alertDate = localNow.date;
-      if (cronSetting?.lastTriggeredAt) {
+      if (!force && localMinutes < scheduledMinutes) continue;
+
+      if (!force && cronSetting?.lastTriggeredAt) {
         const lastTriggeredDate = getZonedDateParts(cronSetting.lastTriggeredAt, timezone).date;
         if (lastTriggeredDate === alertDate) continue;
       }

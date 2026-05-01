@@ -15,6 +15,7 @@ import Link from 'next/link';
 import Pagination from '@/components/ui/pagination';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
+import TableScroll from '@/components/ui/table-scroll';
 import { AttendanceStatus, StaffRecord } from '@/lib/attendance-data';
 import ClockModal from './_components/ClockModal';
 import HistoryDrawer from './_components/HistoryDrawer';
@@ -307,6 +308,7 @@ export default function AttendancePage() {
 
         {/* Table */}
         <div className="bg-[#161b27] border border-[#1e2536] rounded-xl overflow-hidden">
+          <TableScroll>
           <table className="w-full">
             <thead className="border-b border-[#1e2536] bg-[#0f1117]/50">
               <tr>
@@ -421,6 +423,7 @@ export default function AttendancePage() {
               })}
             </tbody>
           </table>
+          </TableScroll>
           {/* {isLoading && (
             <div className="py-10 text-center text-slate-500 text-sm">Loading attendance…</div>
           )} */}

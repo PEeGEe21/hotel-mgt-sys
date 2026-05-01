@@ -40,6 +40,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
+import TableScroll from '@/components/ui/table-scroll';
 import AddRoomModal from './_components/AddRoomModal';
 
 const amenityIcons: Record<string, any> = { WiFi: Wifi, AC: Wind, TV: Tv, 'Mini Bar': Coffee };
@@ -325,6 +326,7 @@ export default function RoomsPage() {
         {/* List */}
         {view === 'list' && (
           <div className="bg-[#161b27] border border-[#1e2536] rounded-xl overflow-hidden">
+            <TableScroll>
             <table className="w-full">
               <thead className="border-b border-[#1e2536] bg-[#0f1117]/50">
                 <tr>
@@ -358,6 +360,7 @@ export default function RoomsPage() {
                 ))}
               </tbody>
             </table>
+            </TableScroll>
             {rooms.length === 0 && (
               <div className="py-16 text-center">
                 <BedDouble size={32} className="text-slate-700 mx-auto mb-3" />

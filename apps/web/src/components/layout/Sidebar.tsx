@@ -35,6 +35,7 @@ import {
   Shield,
   MessageCircleCode,
   AlarmClock,
+  X,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/auth.store';
 import { useAppStore } from '@/store/app.store';
@@ -43,6 +44,7 @@ import { useHydration } from '@/hooks/useHydration';
 import { Lock } from '@solar-icons/react';
 import { chevronVariants, dropdownVariants, itemVariants } from '@/utils/animations';
 import { motion, AnimatePresence } from 'framer-motion';
+import { cn } from '@/lib/utils';
 
 type NavItem = { label: string; href: string; icon: any };
 type NavGroup = { label: string; href: string; icon: any; permission: string; children: NavItem[] };
@@ -113,56 +115,68 @@ const nav: NavEntry[] = [
   },
 ];
 
-export default function Sidebar() {
-  const pathname = usePathname();
-  const hotel = useAppStore((s) => s.hotel);
-  const logout = useAuthStore((s) => s.logout);
-  const hydrated = useHydration();
-  const { canNav, can, ready } = usePermissions();
+type SidebarProps = {
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
+};
 
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
-    const init: Record<string, boolean> = {};
-    nav.forEach((item) => {
-      if (isGroup(item)) {
-        const active = item.children.some(
-          (c) => pathname === c.href || pathname.startsWith(c.href + '/'),
-        );
-        if (active) init[item.href] = true;
-      }
-    });
-    return init;
-  });
-
-  const toggleGroup = (href: string) => setOpenGroups((o) => ({ ...o, [href]: !o[href] }));
-  const isActive = (href: string) =>
-    pathname === href || (href !== '/dashboard' && pathname.startsWith(href + '/'));
-
+function SidebarContent({
+  mobile = false,
+  pathname,
+  hydrated,
+  hotel,
+  ready,
+  canNav,
+  can,
+  openGroups,
+  toggleGroup,
+  isActive,
+  logout,
+  onNavigate,
+}: {
+  mobile?: boolean;
+  pathname: string;
+  hydrated: boolean;
+  hotel: ReturnType<typeof useAppStore.getState>['hotel'];
+  ready: boolean;
+  canNav: ReturnType<typeof usePermissions>['canNav'];
+  can: ReturnType<typeof usePermissions>['can'];
+  openGroups: Record<string, boolean>;
+  toggleGroup: (href: string) => void;
+  isActive: (href: string) => boolean;
+  logout: () => void;
+  onNavigate?: () => void;
+}) {
   return (
-    <aside className="w-64 bg-[#161b27] border-r border-[#1e2536] flex flex-col h-full shrink-0">
-      {/* Logo */}
-      <div className="flex items-center gap-3 px-6 py-5 border-b border-[#1e2536]">
+    <aside
+      className={cn(
+        'flex h-full flex-col border-r border-[#1e2536] bg-[#161b27] shrink-0',
+        mobile ? 'w-[min(86vw,18rem)]' : 'hidden w-64 lg:flex',
+      )}
+    >
+      <div className="flex items-center gap-3 border-b border-[#1e2536] px-5 py-5 lg:px-6">
         {!hydrated ? (
           <>
-            <div className="w-9 h-9 rounded-xl bg-[#1e2536] animate-pulse shrink-0" />
+            <div className="h-9 w-9 shrink-0 animate-pulse rounded-xl bg-[#1e2536]" />
             <div className="space-y-1.5">
-              <div className="w-28 h-3.5 rounded bg-[#1e2536] animate-pulse" />
-              <div className="w-16 h-2.5 rounded bg-[#1e2536] animate-pulse" />
+              <div className="h-3.5 w-28 animate-pulse rounded bg-[#1e2536]" />
+              <div className="h-2.5 w-16 animate-pulse rounded bg-[#1e2536]" />
             </div>
           </>
         ) : (
           <>
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center shrink-0 overflow-hidden">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-blue-500 to-violet-600">
               {hotel?.logo ? (
-                <img src={hotel.logo} alt={hotel.name} className="w-full h-full object-cover" />
+                <img src={hotel.logo} alt={hotel.name} className="h-full w-full object-cover" />
               ) : (
                 <Hotel size={18} className="text-white" />
               )}
             </div>
             <div className="min-w-0">
-              <span className="text-white font-bold text-base tracking-tight truncate block">
+              <span className="block truncate text-base font-bold tracking-tight text-white">
                 {hotel?.name ?? 'HotelOS'}
               </span>
-              <p className="text-[10px] text-slate-500 uppercase tracking-widest">
+              <p className="text-[10px] uppercase tracking-widest text-slate-500">
                 {hotel?.city ?? 'Management'}
               </p>
             </div>
@@ -170,18 +184,15 @@ export default function Sidebar() {
         )}
       </div>
 
-      {/* Nav */}
-      <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
+      <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-4">
         {!ready && (
           <div className="space-y-2">
             {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="h-9 rounded-lg bg-[#1e2536] animate-pulse" />
+              <div key={i} className="h-9 animate-pulse rounded-lg bg-[#1e2536]" />
             ))}
           </div>
         )}
 
-        {/* search */}
-        {ready && <></>}
         {ready &&
           nav.map((item) => {
             if (isGroup(item)) {
@@ -227,7 +238,7 @@ export default function Sidebar() {
                             ease: [0.4, 0, 0.2, 1],
                           },
                         }}
-                        className="overflow-hidden mt-0.5 ml-3 pl-3 border-l border-[#1e2536] space-y-0.5"
+                        className="mt-0.5 ml-3 space-y-0.5 overflow-hidden border-l border-[#1e2536] pl-3"
                       >
                         {item.children.map((child, index) => {
                           const CIcon = child.icon;
@@ -244,6 +255,7 @@ export default function Sidebar() {
                               <Link
                                 key={child.href}
                                 href={child.href}
+                                onClick={onNavigate}
                                 className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-150 ${
                                   active
                                     ? 'bg-blue-600/20 text-blue-400 font-medium'
@@ -270,6 +282,7 @@ export default function Sidebar() {
               <Link
                 key={item.href}
                 href={item.href}
+                onClick={onNavigate}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 border ${
                   active
                     ? 'bg-blue-600/20 text-blue-400 border-blue-500/20'
@@ -283,11 +296,11 @@ export default function Sidebar() {
           })}
       </nav>
 
-      {/* Settings + Logout */}
-      <div className="p-3 border-t border-[#1e2536] space-y-1">
+      <div className="space-y-1 border-t border-[#1e2536] p-3">
         {can('view:settings') && (
           <Link
             href="/settings"
+            onClick={onNavigate}
             className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
               pathname.startsWith('/settings')
                 ? 'bg-blue-600/20 text-blue-400 border border-blue-500/20'
@@ -300,12 +313,102 @@ export default function Sidebar() {
         )}
         <button
           onClick={logout}
-          className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-all w-full"
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-400 transition-all hover:bg-red-500/10 hover:text-red-400"
         >
           <LogOut size={16} />
           Sign out
         </button>
       </div>
     </aside>
+  );
+}
+
+export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
+  const pathname = usePathname();
+  const hotel = useAppStore((s) => s.hotel);
+  const logout = useAuthStore((s) => s.logout);
+  const hydrated = useHydration();
+  const { canNav, can, ready } = usePermissions();
+
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
+    const init: Record<string, boolean> = {};
+    nav.forEach((item) => {
+      if (isGroup(item)) {
+        const active = item.children.some(
+          (c) => pathname === c.href || pathname.startsWith(c.href + '/'),
+        );
+        if (active) init[item.href] = true;
+      }
+    });
+    return init;
+  });
+
+  const toggleGroup = (href: string) => setOpenGroups((o) => ({ ...o, [href]: !o[href] }));
+  const isActive = (href: string) =>
+    pathname === href || (href !== '/dashboard' && pathname.startsWith(href + '/'));
+
+  return (
+    <>
+      <SidebarContent
+        pathname={pathname}
+        hydrated={hydrated}
+        hotel={hotel}
+        ready={ready}
+        canNav={canNav}
+        can={can}
+        openGroups={openGroups}
+        toggleGroup={toggleGroup}
+        isActive={isActive}
+        logout={logout}
+      />
+
+      <AnimatePresence>
+        {mobileOpen && (
+          <>
+            <motion.button
+              type="button"
+              aria-label="Close navigation"
+              onClick={onMobileClose}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden"
+            />
+            <motion.div
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ duration: 0.24, ease: [0.4, 0, 0.2, 1] }}
+              className="fixed inset-y-0 left-0 z-50 lg:hidden"
+            >
+              <div className="flex h-full">
+                <SidebarContent
+                  mobile
+                  pathname={pathname}
+                  hydrated={hydrated}
+                  hotel={hotel}
+                  ready={ready}
+                  canNav={canNav}
+                  can={can}
+                  openGroups={openGroups}
+                  toggleGroup={toggleGroup}
+                  isActive={isActive}
+                  logout={logout}
+                  onNavigate={onMobileClose}
+                />
+                <button
+                  type="button"
+                  onClick={onMobileClose}
+                  className="mt-4 ml-3 flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-[#161b27]/95 text-slate-200 shadow-lg"
+                  aria-label="Close navigation"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </>
   );
 }

@@ -30,6 +30,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAppStore } from '@/store/app.store';
 import { useRouter } from 'next/navigation';
 import { usePresenceRealtime } from '@/hooks/usePresenceRealtime';
+import TableScroll from '@/components/ui/table-scroll';
 
 type Role =
   | 'SUPER_ADMIN'
@@ -324,6 +325,7 @@ export default function UserAccountsPage() {
       </div>
 
       <div className="bg-[#161b27] border border-[#1e2536] rounded-xl overflow-hidden">
+        <TableScroll>
         <table className="w-full">
           <thead className="border-b border-[#1e2536] bg-[#0f1117]/50">
             <tr>
@@ -475,6 +477,7 @@ export default function UserAccountsPage() {
             )}
           </tbody>
         </table>
+        </TableScroll>
         {data?.meta && accounts.length > 0 && (
           <Pagination meta={data.meta} currentPage={page} handlePageChange={setPage} />
         )}

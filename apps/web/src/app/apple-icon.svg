@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180">
+  <defs>
+    <linearGradient id="hotelos-apple-gradient" x1="0%" x2="100%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#3b82f6" />
+      <stop offset="100%" stop-color="#7c3aed" />
+    </linearGradient>
+  </defs>
+  <rect width="180" height="180" rx="42" fill="#0f1117" />
+  <rect x="24" y="24" width="132" height="132" rx="34" fill="url(#hotelos-apple-gradient)" />
+  <path
+    d="M62 50h16v28h24V50h16v80h-16V98H78v32H62V50z"
+    fill="#ffffff"
+  />
+</svg>

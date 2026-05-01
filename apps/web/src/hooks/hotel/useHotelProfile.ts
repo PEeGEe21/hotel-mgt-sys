@@ -60,7 +60,10 @@ export type HotelProfile = {
   };
 };
 
-export type RunnableHotelCronJob = 'checkoutDueScan' | 'housekeepingFollowUpScan';
+export type RunnableHotelCronJob =
+  | 'attendanceAbsenceScan'
+  | 'checkoutDueScan'
+  | 'housekeepingFollowUpScan';
 
 export type RunHotelCronJobResponse = {
   job: RunnableHotelCronJob;

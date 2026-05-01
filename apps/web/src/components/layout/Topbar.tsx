@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { Search, User, LogOut, ChevronDown } from 'lucide-react';
+import { Search, User, LogOut, ChevronDown, Menu } from 'lucide-react';
 import { useAuthStore } from '@/store/auth.store';
 import { useHydration } from '@/hooks/useHydration';
 import NotificationInboxBell from '@/components/layout/NotificationInboxBell';
@@ -12,7 +12,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-export default function Topbar() {
+export default function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const hydrated = useHydration();
@@ -26,16 +26,26 @@ export default function Topbar() {
     : 'U';
 
   return (
-    <header className="h-16 bg-[#161b27] border-b border-[#1e2536] flex items-center justify-between px-6 shrink-0">
-      <div className="flex items-center gap-3 bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-2 w-72">
-        <Search size={14} className="text-slate-500" />
-        <input
-          type="text"
-          placeholder="Search rooms, guests, bookings..."
-          className="bg-transparent text-sm text-slate-300 placeholder:text-slate-600 outline-none flex-1"
-        />
+    <header className="flex h-16 shrink-0 items-center justify-between border-b border-[#1e2536] bg-[#161b27] px-4 sm:px-6">
+      <div className="flex min-w-0 flex-1 items-center gap-3">
+        <button
+          type="button"
+          onClick={onMenuClick}
+          className="flex h-9 w-9 items-center justify-center rounded-lg border border-[#1e2536] bg-[#0f1117] text-slate-300 lg:hidden"
+          aria-label="Open navigation"
+        >
+          <Menu size={18} />
+        </button>
+        <div className="hidden w-72 items-center gap-3 rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-2 md:flex">
+          <Search size={14} className="text-slate-500" />
+          <input
+            type="text"
+            placeholder="Search rooms, guests, bookings..."
+            className="flex-1 bg-transparent text-sm text-slate-300 outline-none placeholder:text-slate-600"
+          />
+        </div>
       </div>
-      <div className="flex items-center gap-4">
+      <div className="ml-3 flex items-center gap-2 sm:gap-4">
         <NotificationInboxBell />
         {/* User avatar + info */}
         {!hydrated ? (
@@ -49,7 +59,7 @@ export default function Topbar() {
         ) : (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="flex items-center gap-2.5 hover:bg-white/5 px-2.5 py-1.5 rounded-lg transition-colors min-w-28 outline-none focus-visible:outline-none">
+              <button className="flex min-w-0 items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors hover:bg-white/5 outline-none focus-visible:outline-none sm:min-w-28 sm:px-2.5">
                 {user?.avatar ? (
                   <img
                     src={user.avatar}
@@ -68,7 +78,7 @@ export default function Topbar() {
                     {user?.role?.toLowerCase()}
                   </p>
                 </div>
-                <ChevronDown size={14} className="text-slate-500" />
+                <ChevronDown size={14} className="hidden text-slate-500 sm:block" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="min-w-44 !bg-[#161b27] border border-[#1e2536] ring-0 text-white">

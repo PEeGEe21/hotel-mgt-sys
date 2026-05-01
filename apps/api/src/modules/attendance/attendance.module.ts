@@ -15,5 +15,6 @@ import { AttendanceSchedulerService } from './services/attendance-scheduler.serv
   ],
   providers: [AttendanceService, AttendanceProcessor, AttendanceSchedulerService],
   controllers: [AttendanceController],
+  exports: [AttendanceService],
 })
 export class AttendanceModule {}

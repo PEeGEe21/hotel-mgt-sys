@@ -4,6 +4,7 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { UpdateHotelDto } from '../dtos/update-hotel.dto';
 import { RunnableHotelCronJob, RunHotelCronJobDto } from '../dtos/run-hotel-cron-job.dto';
 import { ReservationsService } from '../../reservations/services/reservations.service';
+import { AttendanceService } from '../../attendance/services/attendance.service';
 
 const HOUSEKEEPING_FOLLOW_UP_SCAN_JOB_TYPE =
   'HOUSEKEEPING_FOLLOW_UP_SCAN' as HotelCronJobType;
@@ -13,6 +14,7 @@ export class HotelsService {
   constructor(
     private prisma: PrismaService,
     private reservationsService: ReservationsService,
+    private attendanceService: AttendanceService,
   ) {}
 
   private buildDefaultCronSettings() {
@@ -226,10 +228,14 @@ export class HotelsService {
   }
 
   private runRequestedCronJob(hotelId: string, job: RunnableHotelCronJob) {
-    if (job === 'checkoutDueScan') {
-      return this.reservationsService.runCheckoutDueScanForDate(new Date(), hotelId);
+    if (job === 'attendanceAbsenceScan') {
+      return this.attendanceService.runAbsenceDetectionForDate(new Date(), hotelId, true);
     }
 
-    return this.reservationsService.runHousekeepingFollowUpScanForDate(new Date(), hotelId);
+    if (job === 'checkoutDueScan') {
+      return this.reservationsService.runCheckoutDueScanForDate(new Date(), hotelId, true);
+    }
+
+    return this.reservationsService.runHousekeepingFollowUpScanForDate(new Date(), hotelId, true);
   }
 }

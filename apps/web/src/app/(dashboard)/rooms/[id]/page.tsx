@@ -36,6 +36,7 @@ import { STATUS_CONFIG, TYPE_CONFIG, ALL_ROOM_STATUSES, type RoomStatus } from '
 import { useRoom, useUpdateRoomStatus } from '@/hooks/room/useRooms';
 import { useRoomReservations } from '@/hooks/room/useRoomReservations';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import TableScroll from '@/components/ui/table-scroll';
 import {
   Dialog,
   DialogContent,
@@ -701,6 +702,7 @@ export default function RoomDetailPage() {
 
                   {folioItems.length > 0 ? (
                     <div className="bg-[#161b27] border border-[#1e2536] rounded-xl overflow-hidden">
+                      <TableScroll>
                       <table className="w-full">
                         <thead className="border-b border-[#1e2536] bg-[#0f1117]/50">
                           <tr>
@@ -740,6 +742,7 @@ export default function RoomDetailPage() {
                           ))}
                         </tbody>
                       </table>
+                      </TableScroll>
                       <div className="px-5 py-3 bg-[#0f1117]/40 border-t border-[#1e2536] flex items-center justify-between">
                         <div>
                           <span className="text-sm text-slate-500">Outstanding Balance</span>
@@ -782,6 +785,7 @@ export default function RoomDetailPage() {
               </div>
               {cleaning.length > 0 ? (
                 <div className="bg-[#161b27] border border-[#1e2536] rounded-xl overflow-hidden">
+                  <TableScroll>
                   <table className="w-full">
                     <thead className="border-b border-[#1e2536] bg-[#0f1117]/50">
                       <tr>
@@ -845,6 +849,7 @@ export default function RoomDetailPage() {
                       ))}
                     </tbody>
                   </table>
+                  </TableScroll>
                 </div>
               ) : (
                 <div className="py-16 text-center bg-[#161b27] border border-[#1e2536] rounded-xl">
@@ -866,6 +871,7 @@ export default function RoomDetailPage() {
               </div>
               {maintenance.length > 0 ? (
                 <div className="bg-[#161b27] border border-[#1e2536] rounded-xl overflow-hidden">
+                  <TableScroll>
                   <table className="w-full">
                     <thead className="border-b border-[#1e2536] bg-[#0f1117]/50">
                       <tr>
@@ -912,6 +918,7 @@ export default function RoomDetailPage() {
                       ))}
                     </tbody>
                   </table>
+                  </TableScroll>
                 </div>
               ) : (
                 <div className="py-16 text-center bg-[#161b27] border border-[#1e2536] rounded-xl">

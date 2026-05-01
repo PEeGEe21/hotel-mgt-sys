@@ -40,6 +40,7 @@ import {
   type ApiReservation,
 } from '@/hooks/useReservations';
 import { useReservationFolioItems } from '@/hooks/useFolioItems';
+import TableScroll from '@/components/ui/table-scroll';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmtMoney(n: number) {
@@ -895,6 +896,7 @@ export default function ReservationDetailPage() {
             </div>
           ) : folioItems.length > 0 ? (
             <div className="bg-[#161b27] border border-[#1e2536] rounded-xl overflow-hidden">
+              <TableScroll>
               <table className="w-full">
                 <thead className="border-b border-[#1e2536] bg-[#0f1117]/50">
                   <tr>
@@ -941,6 +943,7 @@ export default function ReservationDetailPage() {
                   ))}
                 </tbody>
               </table>
+              </TableScroll>
               <div className="px-5 py-3 bg-[#0f1117]/40 border-t border-[#1e2536] flex items-center justify-between">
                 <div>
                   <span className="text-sm text-slate-500">Outstanding Balance</span>
