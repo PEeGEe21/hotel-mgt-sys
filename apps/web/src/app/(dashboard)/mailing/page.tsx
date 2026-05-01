@@ -25,13 +25,18 @@ import {
 
 const EVENT_OPTIONS = [
   'newReservation',
+  'upcomingArrival',
+  'paymentOverdue',
   'paymentReceived',
   'lowInventory',
   'housekeepingAlert',
+  'noShowFollowUp',
   'checkIn',
   'checkOut',
   'maintenanceAlert',
+  'maintenanceEscalation',
   'attendanceAlert',
+  'dailyDigest',
 ];
 
 function statusClasses(status: string) {

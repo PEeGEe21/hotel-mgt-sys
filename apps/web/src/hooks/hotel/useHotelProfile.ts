@@ -50,6 +50,20 @@ export type HotelProfile = {
     checkoutDueScanLastSucceededAt?: string | null;
     checkoutDueScanLastFailedAt?: string | null;
     checkoutDueScanLastError?: string | null;
+    upcomingArrivalScanEnabled: boolean;
+    upcomingArrivalScanHour: number;
+    upcomingArrivalScanMinute: number;
+    upcomingArrivalScanLastTriggeredAt?: string | null;
+    upcomingArrivalScanLastSucceededAt?: string | null;
+    upcomingArrivalScanLastFailedAt?: string | null;
+    upcomingArrivalScanLastError?: string | null;
+    overduePaymentScanEnabled: boolean;
+    overduePaymentScanHour: number;
+    overduePaymentScanMinute: number;
+    overduePaymentScanLastTriggeredAt?: string | null;
+    overduePaymentScanLastSucceededAt?: string | null;
+    overduePaymentScanLastFailedAt?: string | null;
+    overduePaymentScanLastError?: string | null;
     housekeepingFollowUpScanEnabled: boolean;
     housekeepingFollowUpScanHour: number;
     housekeepingFollowUpScanMinute: number;
@@ -57,13 +71,39 @@ export type HotelProfile = {
     housekeepingFollowUpScanLastSucceededAt?: string | null;
     housekeepingFollowUpScanLastFailedAt?: string | null;
     housekeepingFollowUpScanLastError?: string | null;
+    noShowFollowUpScanEnabled: boolean;
+    noShowFollowUpScanHour: number;
+    noShowFollowUpScanMinute: number;
+    noShowFollowUpScanLastTriggeredAt?: string | null;
+    noShowFollowUpScanLastSucceededAt?: string | null;
+    noShowFollowUpScanLastFailedAt?: string | null;
+    noShowFollowUpScanLastError?: string | null;
+    maintenanceEscalationScanEnabled: boolean;
+    maintenanceEscalationScanHour: number;
+    maintenanceEscalationScanMinute: number;
+    maintenanceEscalationScanLastTriggeredAt?: string | null;
+    maintenanceEscalationScanLastSucceededAt?: string | null;
+    maintenanceEscalationScanLastFailedAt?: string | null;
+    maintenanceEscalationScanLastError?: string | null;
+    dailyDigestScanEnabled: boolean;
+    dailyDigestScanHour: number;
+    dailyDigestScanMinute: number;
+    dailyDigestScanLastTriggeredAt?: string | null;
+    dailyDigestScanLastSucceededAt?: string | null;
+    dailyDigestScanLastFailedAt?: string | null;
+    dailyDigestScanLastError?: string | null;
   };
 };
 
 export type RunnableHotelCronJob =
   | 'attendanceAbsenceScan'
+  | 'upcomingArrivalScan'
   | 'checkoutDueScan'
-  | 'housekeepingFollowUpScan';
+  | 'overduePaymentScan'
+  | 'housekeepingFollowUpScan'
+  | 'noShowFollowUpScan'
+  | 'maintenanceEscalationScan'
+  | 'dailyDigestScan';
 
 export type RunHotelCronJobResponse = {
   job: RunnableHotelCronJob;

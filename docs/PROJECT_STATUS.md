@@ -1,17 +1,24 @@
 # Project Status
 
-Last updated: 2026-05-01
+Last updated: 2026-05-02
 
 ## Next Up
 
-- [x] Mobile responsiveness
-Notes: dashboard shell mobile/tablet responsiveness is now in place, including sidebar toggle/slide-in behavior and broader layout QA across key operational pages.
+- [~] Realtime WebSocket/SSE
+Notes: next implementation focus is expanding the existing websocket foundation beyond notifications/presence into kitchen display, POS/order propagation, and housekeeping/facilities live task boards. Start by standardizing event names/payloads before wiring module-specific live updates.
 
-- [x] Web app features
-Notes: installability/app-shell foundations are now in place, including manifest support and standalone web-app behavior for the browser experience.
+## Confirmed Still Pending (Priority Order)
 
-- [ ] Background jobs / scheduler
-Notes: pending. Scheduler foundation is in place and current cron-backed workflows are running, but there is still follow-on work around expanding job coverage, observability, and production hardening.
+1. Realtime expansion beyond notifications/presence
+   kitchen display updates, live POS/order propagation, housekeeping/facilities live task boards, and cross-module realtime event conventions/observability
+2. Production monitoring and operational safety
+   external alert routing, deploy-platform image rollout wiring, and migration-specific recovery scripts
+3. Scheduler and Redis production hardening
+   retry/recovery for scheduler-driven notifications, broader Redis-backed caching/session/distributed support, and deeper rollout hardening
+4. Notification and reminder polish
+   richer event copy/urgency/metadata consistency, guest reminder content polish, and per-device push management/unsubscribe visibility
+5. Broader workflow and module backlog
+   deeper finance collections, room blocks, connection pooling, E2E coverage, invoices/payments/HR backlog, and duplicate/legacy page cleanup
 
 ## Settings
 
@@ -79,7 +86,7 @@ Done recently:
 - export output cleaned up to avoid leaking internal IDs and nested item JSON blobs
 Notes: Reports are considered v1 complete. Remaining deeper polish like bespoke PDF layouts or true per-card export should be treated as backlog, not active feature work.
 
-- [ ] Email + notifications
+- [~] Email + notifications
 Done recently:
 - Resend-backed transactional email sending
 - notification preference enforcement by role and user overrides
@@ -107,17 +114,19 @@ Done recently:
 - push delivery test tooling is permission-gated behind `manage:settings`
 
 Still pending:
-- richer email templates and branding consistency
-- expand scheduler / jobs coverage for additional timed notification workflows
-- guest-facing reminder content polish
-- push delivery observability and admin-facing troubleshooting visibility
 - delivery retry/failure recovery flows for important transactional emails
+- better notification content across event titles/messages, urgency levels, and metadata summaries across all event types
+- guest-facing reminder content polish
 - deeper push delivery controls such as per-device management or explicit unsubscribe visibility
+- optional notification center UX improvements like bulk actions beyond read-all, pin/high-priority styling, and archive/dismiss behavior
+- additional timed notification workflows such as deeper finance collections, room blocks, and manager digest variants
 
-- [ ] Realtime WebSocket/SSE
+- [~] Realtime WebSocket/SSE
 Done recently:
 - shared authenticated WebSocket gateway foundation
 - live in-app notification delivery via WebSocket-driven inbox refresh
+- Redis-backed presence tracking and logout-driven presence cleanup
+- websocket presence sync now invalidates staff/account views in near real time
 
 Still pending:
 - kitchen display realtime updates
@@ -143,7 +152,7 @@ Note: manifest-driven standalone web-app support is in place.
 
 ## Production Readiness
 
-- [x] Rate limiting
+- [~] Rate limiting
 Notes: configurable API rate limiting added with `RATE_LIMIT_WINDOW_MS` and `RATE_LIMIT_MAX`. Current version is in-memory; Redis-backed or distributed limiting can come later.
 
 - [x] CORS policy
@@ -161,8 +170,10 @@ Notes: JWT auth, role and permission guards, and hotel-scoped controller/service
 - [x] Global exception filter
 - [x] Error boundaries
 - [x] Structured logging
-- [ ] Error monitoring
-- [ ] Uptime + alert monitoring
+- [~] Error monitoring
+Notes: webhook-based alert hooks now exist for startup failures, degraded readiness, unhandled promise rejections, uncaught exceptions, and HTTP 500-class unhandled errors. Remaining work is wiring the webhook into a real incident destination and tuning escalation policy.
+- [~] Uptime + alert monitoring
+Notes: `/api/v1/health/live` and `/api/v1/health/ready` are in place, readiness now checks both PostgreSQL and Redis, and release metadata is exposed for deploy verification. Remaining work is external uptime monitor wiring and actual alert routing.
 
 - [x] Health check endpoints
 Notes: added `/api/v1/health`, `/api/v1/health/live`, `/api/v1/health/ready`.
@@ -170,16 +181,18 @@ Notes: added `/api/v1/health`, `/api/v1/health/live`, `/api/v1/health/ready`.
 - [x] Environment validation
 Notes: added fail-fast production env validation, including production hardening for `RESEND_API_KEY` and `EMAIL_FROM`.
 
-- [ ] Docker image tagging + rollback strategy
-- [ ] Database migration rollback scripts
+- [~] Docker image tagging + rollback strategy
+Notes: release metadata tooling, immutable GHCR image tags, Dockerfiles for API/web, and rollback runbook documentation are now in place. Remaining work is platform-specific rollout wiring and rollback automation.
+- [~] Database migration rollback scripts
+Notes: migration recovery runbook guidance is now documented. Remaining work is creating migration-specific recovery SQL/scripts for high-risk schema changes.
 
 ## Infrastructure
 
-- [ ] Redis
+- [~] Redis
 Notes: Redis foundation is now wired into Bull plus a shared app-level Redis service for realtime presence/pub-sub. Remaining work is broader caching/session use, distributed rate limiting, and production rollout hardening.
 
-- [ ] Background jobs / scheduler
-Notes: needed for timed workflows like attendance absence detection, notification digests, retries, and other non-request-triggered tasks. This is the next infrastructure priority.
+- [~] Background jobs / scheduler
+Notes: timed workflows are now running for attendance, arrivals, checkout, overdue payments, housekeeping follow-up, no-show follow-up, maintenance escalation, and daily digests. Remaining infrastructure work is retries/recovery, production hardening, and deeper distributed support.
 
 Done recently:
 - attendance queue scaffolded in the API
@@ -208,9 +221,9 @@ Done recently:
 - logout and logout-all now clear Redis presence directly so online status drops reliably when a user signs out
 
 Still pending:
-- add more timed workflows beyond attendance, checkout, and housekeeping follow-up
-- improve scheduler observability further across future jobs
+- delivery retry/failure recovery for scheduler-driven notifications and important transactional mail
 - add Redis-backed production hardening for broader caching, session, and distributed job support
+- expand timed workflows further into deeper finance collections, room blocks, and manager digest variants
 
 - [ ] Connection pooling
 
@@ -228,15 +241,25 @@ Notes: client-side image pickers now enforce allowed types and size limits consi
 
 - [ ] Sessions.
 
+- [ ] fiance Invoices.
+Notes: creating, filtering
+
+- [ ] Finance Payments.
+
+- [ ] HR 
+Notes: Contracts, Payroll
+
 ## Newly Added
 
-- [ ] Expand DB-backed cron settings beyond the current attendance / checkout / housekeeping job set
-- [~] Add scheduler observability/admin visibility for last run status and failures
-Notes: last run, next run, timezone, enabled state, last success/failure timestamps, and last error are now visible for attendance, checkout, and housekeeping follow-up scheduling. Remaining work is extending the same model to more job types and deeper operational visibility.
+- [x] Expand DB-backed cron settings beyond the current attendance / checkout / housekeeping job set
+- [x] Add scheduler observability/admin visibility for last run status and failures
+Notes: last run, next run, timezone, enabled state, last success/failure timestamps, and last error are now visible across attendance, arrivals, checkout, overdue payments, housekeeping follow-up, no-show follow-up, maintenance escalation, and daily digest scheduling.
 - [x] Add housekeeping follow-up job for cleaning tasks still in progress or not done
 Notes: dedicated housekeeping follow-up scheduler added with grace-hour control plus housekeeping-targeted email and in-app alerts for stale checkout prep tasks.
-- [~] Improve dynamic metadata across notifications and email delivery logs
-Notes: checkout reminder timing and housekeeping follow-up context are now linked more clearly in metadata. Remaining work is broadening the same depth of linkage across more scheduler-driven workflows.
+- [x] Add no-show follow-up, maintenance escalation, and daily digest scheduler workflows
+Notes: hotel-level cron controls, run-now actions, notification preferences, and delivery/status tracking now cover front-desk no-show review, urgent maintenance escalation, and daily operational digest summaries.
+- [x] Improve dynamic metadata across notifications and email delivery logs
+Notes: correlation IDs, mail-log drill-ins, and richer workflow metadata now span checkout reminders, housekeeping follow-up, no-show follow-up, maintenance escalation, daily digest summaries, and related notification deep links.
 - [ ] Realtime event naming/payload conventions across modules
 - [~] Realtime presence / online state
 Notes: Redis-backed presence is now live for staff and HR account views, including websocket sync and logout-driven cleanup. Remaining work is expanding presence beyond these views and deciding whether to expose richer states than online/offline.

@@ -74,7 +74,12 @@ enum AttendanceType {
 enum HotelCronJobType {
   ATTENDANCE_ABSENCE_SCAN
   CHECKOUT_DUE_SCAN
+  UPCOMING_ARRIVAL_SCAN
+  OVERDUE_PAYMENT_SCAN
   HOUSEKEEPING_FOLLOW_UP_SCAN
+  NO_SHOW_FOLLOW_UP_SCAN
+  MAINTENANCE_ESCALATION_SCAN
+  DAILY_DIGEST_SCAN
 }
 
 enum OrderStatus {
@@ -201,6 +206,7 @@ model Hotel {
   notifications           Notification[]
   emailDeliveryLogs       EmailDeliveryLog[]
   pushSubscriptions       PushSubscription[]
+  pushDeliveryLogs        PushDeliveryLog[]
   cronSettings            HotelCronSetting[]
   roleDashboardConfigs    RoleDashboardConfig[]
 }
@@ -300,6 +306,7 @@ model User {
   notificationPreferences NotificationPreference[]
   notifications           Notification[]
   pushSubscriptions       PushSubscription[]
+  pushDeliveryLogs        PushDeliveryLog[]
 }
 
 model PasswordResetToken {
@@ -412,21 +419,55 @@ model EmailDeliveryLog {
 }
 
 model PushSubscription {
-  id        String   @id @default(uuid())
-  userId    String
-  hotelId   String?
-  endpoint  String   @unique
-  p256dh    String
-  auth      String
-  userAgent String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                  String            @id @default(uuid())
+  userId              String
+  hotelId             String?
+  endpoint            String            @unique
+  p256dh              String
+  auth                String
+  userAgent           String?
+  lastAttemptAt       DateTime?
+  lastSuccessAt       DateTime?
+  lastFailureAt       DateTime?
+  lastFailureReason   String?
+  lastFailureStatusCode Int?
+  lastDeliveredEvent  String?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
 
-  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  hotel Hotel? @relation(fields: [hotelId], references: [id], onDelete: SetNull)
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hotel            Hotel?            @relation(fields: [hotelId], references: [id], onDelete: SetNull)
+  pushDeliveryLogs PushDeliveryLog[]
 
   @@index([userId])
   @@index([hotelId])
+}
+
+model PushDeliveryLog {
+  id                    String             @id @default(uuid())
+  pushSubscriptionId    String?
+  userId                String
+  hotelId               String?
+  event                 String
+  title                 String
+  status                String
+  failureReason         String?
+  failureStatusCode     Int?
+  endpoint              String
+  correlationId         String?
+  isTest                Boolean            @default(false)
+  metadata              Json?
+  deliveredAt           DateTime?
+  createdAt             DateTime           @default(now())
+
+  pushSubscription PushSubscription? @relation(fields: [pushSubscriptionId], references: [id], onDelete: SetNull)
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hotel            Hotel?            @relation(fields: [hotelId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([hotelId, createdAt])
+  @@index([status, createdAt])
+  @@index([pushSubscriptionId])
 }
 
 model RolePermission {

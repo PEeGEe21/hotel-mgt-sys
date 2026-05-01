@@ -48,17 +48,37 @@ export class InventoryService {
         (args.supplier ? `\nSupplier: ${args.supplier}` : '') +
         (args.location ? `\nLocation: ${args.location}` : ''),
       html: `
-        <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.6;">
+        <div>
           <p style="margin: 0 0 12px;">Inventory is low for <strong>${hotelName}</strong>.</p>
-          <table style="border-collapse: collapse;">
-            <tr><td style="padding: 4px 12px 4px 0;"><strong>Item</strong></td><td style="padding: 4px 0;">${itemName}</td></tr>
-            <tr><td style="padding: 4px 12px 4px 0;"><strong>SKU</strong></td><td style="padding: 4px 0;">${sku}</td></tr>
-            <tr><td style="padding: 4px 12px 4px 0;"><strong>Category</strong></td><td style="padding: 4px 0;">${category}</td></tr>
-            <tr><td style="padding: 4px 12px 4px 0;"><strong>Quantity</strong></td><td style="padding: 4px 0;">${args.quantity} ${unit}</td></tr>
-            <tr><td style="padding: 4px 12px 4px 0;"><strong>Minimum stock</strong></td><td style="padding: 4px 0;">${args.minStock} ${unit}</td></tr>
-            ${supplier ? `<tr><td style="padding: 4px 12px 4px 0;"><strong>Supplier</strong></td><td style="padding: 4px 0;">${supplier}</td></tr>` : ''}
-            ${location ? `<tr><td style="padding: 4px 12px 4px 0;"><strong>Location</strong></td><td style="padding: 4px 0;">${location}</td></tr>` : ''}
+          <p style="margin: 0 0 18px; color: #475569;">
+            Reorder planning may be needed soon to avoid stock disruption for this item.
+          </p>
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse; margin: 0 0 8px;">
+            <tr>
+              <td style="width: 50%; padding: 0 6px 12px 0; vertical-align: top;">
+                <div style="background: #fff7ed; border: 1px solid #fed7aa; border-radius: 14px; padding: 14px 16px;">
+                  <div style="margin-bottom: 6px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #9a3412;">Current Qty</div>
+                  <div style="font-size: 20px; font-weight: 700; color: #7c2d12;">${args.quantity} ${unit}</div>
+                </div>
+              </td>
+              <td style="width: 50%; padding: 0 0 12px 6px; vertical-align: top;">
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 14px; padding: 14px 16px;">
+                  <div style="margin-bottom: 6px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #64748b;">Minimum Stock</div>
+                  <div style="font-size: 20px; font-weight: 700; color: #0f172a;">${args.minStock} ${unit}</div>
+                </div>
+              </td>
+            </tr>
           </table>
+          <div style="margin-top: 16px; overflow: hidden; border: 1px solid #e2e8f0; border-radius: 16px;">
+            <div style="padding: 14px 16px; background: #f8fafc; font-weight: 700; color: #0f172a;">Item details</div>
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
+              <tr><td style="padding: 10px 16px 10px 0; color: #64748b; font-weight: 600;">Item</td><td style="padding: 10px 0; color: #0f172a;">${itemName}</td></tr>
+              <tr><td style="padding: 10px 16px 10px 0; color: #64748b; font-weight: 600;">SKU</td><td style="padding: 10px 0; color: #0f172a;">${sku}</td></tr>
+              <tr><td style="padding: 10px 16px 10px 0; color: #64748b; font-weight: 600;">Category</td><td style="padding: 10px 0; color: #0f172a;">${category}</td></tr>
+              ${supplier ? `<tr><td style="padding: 10px 16px 10px 0; color: #64748b; font-weight: 600;">Supplier</td><td style="padding: 10px 0; color: #0f172a;">${supplier}</td></tr>` : ''}
+              ${location ? `<tr><td style="padding: 10px 16px 10px 0; color: #64748b; font-weight: 600;">Location</td><td style="padding: 10px 0; color: #0f172a;">${location}</td></tr>` : ''}
+            </table>
+          </div>
         </div>
       `,
     };

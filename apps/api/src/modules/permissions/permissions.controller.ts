@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Patch, Query, Request, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Patch, Post, Query, Request, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Permissions, PermissionsGuard } from '../auth/guards';
@@ -22,6 +22,12 @@ export class PermissionsController {
   @Permissions('manage:permissions')
   updateRolePermissions(@Request() req: any, @Body() dto: UpdateRolePermissionsDto) {
     return this.permissionsService.updateRolePermissions(req.user.hotelId, req.user.sub, dto);
+  }
+
+  @Post('roles/backfill')
+  @Permissions('manage:permissions')
+  backfillRolePermissions(@Request() req: any) {
+    return this.permissionsService.backfillRolePermissions(req.user.hotelId, req.user.sub);
   }
 
   @Get('audit')

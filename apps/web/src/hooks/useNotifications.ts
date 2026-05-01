@@ -10,12 +10,17 @@ export type AppNotificationEvent =
   | 'newReservation'
   | 'checkIn'
   | 'checkOut'
+  | 'upcomingArrival'
   | 'checkOutDue'
+  | 'paymentOverdue'
   | 'paymentReceived'
   | 'lowInventory'
   | 'housekeepingAlert'
+  | 'noShowFollowUp'
   | 'maintenanceAlert'
+  | 'maintenanceEscalation'
   | 'attendanceAlert'
+  | 'dailyDigest'
   | 'systemAlerts';
 
 export type AppNotification = {
@@ -36,16 +41,22 @@ export type NotificationsInboxResponse = {
   meta: PaginationMeta;
 };
 
-export function useNotifications(options: { limit?: number; page?: number; unreadOnly?: boolean } = {}) {
+export function useNotifications(options: {
+  limit?: number;
+  page?: number;
+  unreadOnly?: boolean;
+  event?: AppNotificationEvent;
+} = {}) {
   const limit = options.limit ?? 12;
   const page = options.page ?? 1;
   const unreadOnly = options.unreadOnly ?? false;
+  const event = options.event;
 
   return useQuery<NotificationsInboxResponse>({
-    queryKey: ['notifications', 'inbox', { limit, page, unreadOnly }],
+    queryKey: ['notifications', 'inbox', { limit, page, unreadOnly, event }],
     queryFn: async () => {
       const { data } = await api.get('/notifications', {
-        params: { limit, page, unreadOnly },
+        params: { limit, page, unreadOnly, event },
       });
       return data;
     },

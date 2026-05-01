@@ -33,6 +33,13 @@ export default () => ({
     privateKey: process.env.WEB_PUSH_PRIVATE_KEY,
     subject: process.env.WEB_PUSH_SUBJECT || process.env.EMAIL_FROM || 'mailto:noreply@hotelos.com',
   },
+  monitoring: {
+    alertWebhookUrl: process.env.MONITORING_ALERT_WEBHOOK_URL,
+    alertDedupMs: parseInt(process.env.MONITORING_ALERT_DEDUP_MS || '300000', 10),
+    deploymentEnvironment: process.env.DEPLOYMENT_ENVIRONMENT || process.env.NODE_ENV || 'development',
+    releaseVersion: process.env.RELEASE_VERSION || null,
+    releaseCommitSha: process.env.RELEASE_COMMIT_SHA || null,
+  },
   stripe: {
     secretKey: process.env.STRIPE_SECRET_KEY,
     webhookSecret: process.env.STRIPE_WEBHOOK_SECRET,

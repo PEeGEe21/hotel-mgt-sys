@@ -18,6 +18,7 @@ import {
 import dynamic from 'next/dynamic';
 import openToast from '@/components/ToastComponent';
 import {
+  type RunnableHotelCronJob,
   useHotelProfile,
   useRunHotelCronJob,
   useUpdateHotelProfile,
@@ -296,9 +297,7 @@ export default function HotelProfilePage() {
   const [activeTab, setActiveTab] = useState<SettingsTab>('profile');
   const [savedSection, setSavedSection] = useState<SettingsTab | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
-  const [runningJob, setRunningJob] = useState<
-    null | 'attendanceAbsenceScan' | 'checkoutDueScan' | 'housekeepingFollowUpScan'
-  >(null);
+  const [runningJob, setRunningJob] = useState<RunnableHotelCronJob | null>(null);
   const [form, setForm] = useState({
     name: '',
     address: '',
@@ -323,6 +322,9 @@ export default function HotelProfilePage() {
     attendanceAbsenceScanEnabled: true,
     attendanceAbsenceScanHour: '9',
     attendanceAbsenceScanMinute: '15',
+    upcomingArrivalScanEnabled: true,
+    upcomingArrivalScanHour: '18',
+    upcomingArrivalScanMinute: '0',
     defaultCheckoutHour: '12',
     defaultCheckoutMinute: '0',
     guestCheckoutReminderEnabled: false,
@@ -330,12 +332,24 @@ export default function HotelProfilePage() {
     checkoutDueScanEnabled: true,
     checkoutDueScanHour: '11',
     checkoutDueScanMinute: '0',
+    overduePaymentScanEnabled: true,
+    overduePaymentScanHour: '13',
+    overduePaymentScanMinute: '0',
     autoCreateCheckoutHousekeepingTasks: true,
     housekeepingFollowUpEnabled: false,
     housekeepingFollowUpGraceHours: '2',
     housekeepingFollowUpScanEnabled: false,
     housekeepingFollowUpScanHour: '15',
     housekeepingFollowUpScanMinute: '0',
+    noShowFollowUpScanEnabled: true,
+    noShowFollowUpScanHour: '20',
+    noShowFollowUpScanMinute: '0',
+    maintenanceEscalationScanEnabled: true,
+    maintenanceEscalationScanHour: '16',
+    maintenanceEscalationScanMinute: '0',
+    dailyDigestScanEnabled: true,
+    dailyDigestScanHour: '19',
+    dailyDigestScanMinute: '0',
   });
 
   const set = (k: string, v: string | boolean | null) => {
@@ -371,6 +385,9 @@ export default function HotelProfilePage() {
       attendanceAbsenceScanEnabled: Boolean(data.cronSettings?.attendanceAbsenceScanEnabled ?? true),
       attendanceAbsenceScanHour: String(data.cronSettings?.attendanceAbsenceScanHour ?? 9),
       attendanceAbsenceScanMinute: String(data.cronSettings?.attendanceAbsenceScanMinute ?? 15),
+      upcomingArrivalScanEnabled: Boolean(data.cronSettings?.upcomingArrivalScanEnabled ?? true),
+      upcomingArrivalScanHour: String(data.cronSettings?.upcomingArrivalScanHour ?? 18),
+      upcomingArrivalScanMinute: String(data.cronSettings?.upcomingArrivalScanMinute ?? 0),
       defaultCheckoutHour: String(data.defaultCheckoutHour ?? 12),
       defaultCheckoutMinute: String(data.defaultCheckoutMinute ?? 0),
       guestCheckoutReminderEnabled: Boolean(data.guestCheckoutReminderEnabled ?? false),
@@ -378,6 +395,9 @@ export default function HotelProfilePage() {
       checkoutDueScanEnabled: Boolean(data.cronSettings?.checkoutDueScanEnabled ?? true),
       checkoutDueScanHour: String(data.cronSettings?.checkoutDueScanHour ?? 11),
       checkoutDueScanMinute: String(data.cronSettings?.checkoutDueScanMinute ?? 0),
+      overduePaymentScanEnabled: Boolean(data.cronSettings?.overduePaymentScanEnabled ?? true),
+      overduePaymentScanHour: String(data.cronSettings?.overduePaymentScanHour ?? 13),
+      overduePaymentScanMinute: String(data.cronSettings?.overduePaymentScanMinute ?? 0),
       autoCreateCheckoutHousekeepingTasks: Boolean(
         data.autoCreateCheckoutHousekeepingTasks ?? true,
       ),
@@ -390,6 +410,21 @@ export default function HotelProfilePage() {
       housekeepingFollowUpScanMinute: String(
         data.cronSettings?.housekeepingFollowUpScanMinute ?? 0,
       ),
+      noShowFollowUpScanEnabled: Boolean(data.cronSettings?.noShowFollowUpScanEnabled ?? true),
+      noShowFollowUpScanHour: String(data.cronSettings?.noShowFollowUpScanHour ?? 20),
+      noShowFollowUpScanMinute: String(data.cronSettings?.noShowFollowUpScanMinute ?? 0),
+      maintenanceEscalationScanEnabled: Boolean(
+        data.cronSettings?.maintenanceEscalationScanEnabled ?? true,
+      ),
+      maintenanceEscalationScanHour: String(
+        data.cronSettings?.maintenanceEscalationScanHour ?? 16,
+      ),
+      maintenanceEscalationScanMinute: String(
+        data.cronSettings?.maintenanceEscalationScanMinute ?? 0,
+      ),
+      dailyDigestScanEnabled: Boolean(data.cronSettings?.dailyDigestScanEnabled ?? true),
+      dailyDigestScanHour: String(data.cronSettings?.dailyDigestScanHour ?? 19),
+      dailyDigestScanMinute: String(data.cronSettings?.dailyDigestScanMinute ?? 0),
     }));
     setLogoPreview(data.logo ?? null);
   }, [data]);
@@ -449,6 +484,32 @@ export default function HotelProfilePage() {
     ),
     lastError: data?.cronSettings?.checkoutDueScanLastError?.trim() || 'None',
   };
+  const upcomingArrivalHealth = getSchedulerHealth({
+    enabled: form.upcomingArrivalScanEnabled,
+    lastSucceededAt: data?.cronSettings?.upcomingArrivalScanLastSucceededAt,
+    lastFailedAt: data?.cronSettings?.upcomingArrivalScanLastFailedAt,
+  });
+  const upcomingArrivalStatus = {
+    lastRun: formatSchedulerDate(
+      data?.cronSettings?.upcomingArrivalScanLastTriggeredAt,
+      schedulerTimezone,
+    ),
+    lastSuccess: formatSchedulerDate(
+      data?.cronSettings?.upcomingArrivalScanLastSucceededAt,
+      schedulerTimezone,
+    ),
+    lastFailure: formatSchedulerDate(
+      data?.cronSettings?.upcomingArrivalScanLastFailedAt,
+      schedulerTimezone,
+    ),
+    nextRun: getNextSchedulerRun(
+      schedulerTimezone,
+      Number(form.upcomingArrivalScanHour || 18),
+      Number(form.upcomingArrivalScanMinute || 0),
+      form.upcomingArrivalScanEnabled,
+    ),
+    lastError: data?.cronSettings?.upcomingArrivalScanLastError?.trim() || 'None',
+  };
   const housekeepingFollowUpHealth = getSchedulerHealth({
     enabled: form.housekeepingFollowUpScanEnabled,
     lastSucceededAt: data?.cronSettings?.housekeepingFollowUpScanLastSucceededAt,
@@ -474,6 +535,110 @@ export default function HotelProfilePage() {
       form.housekeepingFollowUpScanEnabled,
     ),
     lastError: data?.cronSettings?.housekeepingFollowUpScanLastError?.trim() || 'None',
+  };
+  const overduePaymentHealth = getSchedulerHealth({
+    enabled: form.overduePaymentScanEnabled,
+    lastSucceededAt: data?.cronSettings?.overduePaymentScanLastSucceededAt,
+    lastFailedAt: data?.cronSettings?.overduePaymentScanLastFailedAt,
+  });
+  const overduePaymentStatus = {
+    lastRun: formatSchedulerDate(
+      data?.cronSettings?.overduePaymentScanLastTriggeredAt,
+      schedulerTimezone,
+    ),
+    lastSuccess: formatSchedulerDate(
+      data?.cronSettings?.overduePaymentScanLastSucceededAt,
+      schedulerTimezone,
+    ),
+    lastFailure: formatSchedulerDate(
+      data?.cronSettings?.overduePaymentScanLastFailedAt,
+      schedulerTimezone,
+    ),
+    nextRun: getNextSchedulerRun(
+      schedulerTimezone,
+      Number(form.overduePaymentScanHour || 13),
+      Number(form.overduePaymentScanMinute || 0),
+      form.overduePaymentScanEnabled,
+    ),
+    lastError: data?.cronSettings?.overduePaymentScanLastError?.trim() || 'None',
+  };
+  const noShowFollowUpHealth = getSchedulerHealth({
+    enabled: form.noShowFollowUpScanEnabled,
+    lastSucceededAt: data?.cronSettings?.noShowFollowUpScanLastSucceededAt,
+    lastFailedAt: data?.cronSettings?.noShowFollowUpScanLastFailedAt,
+  });
+  const noShowFollowUpStatus = {
+    lastRun: formatSchedulerDate(
+      data?.cronSettings?.noShowFollowUpScanLastTriggeredAt,
+      schedulerTimezone,
+    ),
+    lastSuccess: formatSchedulerDate(
+      data?.cronSettings?.noShowFollowUpScanLastSucceededAt,
+      schedulerTimezone,
+    ),
+    lastFailure: formatSchedulerDate(
+      data?.cronSettings?.noShowFollowUpScanLastFailedAt,
+      schedulerTimezone,
+    ),
+    nextRun: getNextSchedulerRun(
+      schedulerTimezone,
+      Number(form.noShowFollowUpScanHour || 20),
+      Number(form.noShowFollowUpScanMinute || 0),
+      form.noShowFollowUpScanEnabled,
+    ),
+    lastError: data?.cronSettings?.noShowFollowUpScanLastError?.trim() || 'None',
+  };
+  const maintenanceEscalationHealth = getSchedulerHealth({
+    enabled: form.maintenanceEscalationScanEnabled,
+    lastSucceededAt: data?.cronSettings?.maintenanceEscalationScanLastSucceededAt,
+    lastFailedAt: data?.cronSettings?.maintenanceEscalationScanLastFailedAt,
+  });
+  const maintenanceEscalationStatus = {
+    lastRun: formatSchedulerDate(
+      data?.cronSettings?.maintenanceEscalationScanLastTriggeredAt,
+      schedulerTimezone,
+    ),
+    lastSuccess: formatSchedulerDate(
+      data?.cronSettings?.maintenanceEscalationScanLastSucceededAt,
+      schedulerTimezone,
+    ),
+    lastFailure: formatSchedulerDate(
+      data?.cronSettings?.maintenanceEscalationScanLastFailedAt,
+      schedulerTimezone,
+    ),
+    nextRun: getNextSchedulerRun(
+      schedulerTimezone,
+      Number(form.maintenanceEscalationScanHour || 16),
+      Number(form.maintenanceEscalationScanMinute || 0),
+      form.maintenanceEscalationScanEnabled,
+    ),
+    lastError: data?.cronSettings?.maintenanceEscalationScanLastError?.trim() || 'None',
+  };
+  const dailyDigestHealth = getSchedulerHealth({
+    enabled: form.dailyDigestScanEnabled,
+    lastSucceededAt: data?.cronSettings?.dailyDigestScanLastSucceededAt,
+    lastFailedAt: data?.cronSettings?.dailyDigestScanLastFailedAt,
+  });
+  const dailyDigestStatus = {
+    lastRun: formatSchedulerDate(
+      data?.cronSettings?.dailyDigestScanLastTriggeredAt,
+      schedulerTimezone,
+    ),
+    lastSuccess: formatSchedulerDate(
+      data?.cronSettings?.dailyDigestScanLastSucceededAt,
+      schedulerTimezone,
+    ),
+    lastFailure: formatSchedulerDate(
+      data?.cronSettings?.dailyDigestScanLastFailedAt,
+      schedulerTimezone,
+    ),
+    nextRun: getNextSchedulerRun(
+      schedulerTimezone,
+      Number(form.dailyDigestScanHour || 19),
+      Number(form.dailyDigestScanMinute || 0),
+      form.dailyDigestScanEnabled,
+    ),
+    lastError: data?.cronSettings?.dailyDigestScanLastError?.trim() || 'None',
   };
 
   const hotelInitials = form.name
@@ -581,9 +746,24 @@ export default function HotelProfilePage() {
           checkoutDueScanEnabled: form.checkoutDueScanEnabled,
           checkoutDueScanHour: Number(form.checkoutDueScanHour || 11),
           checkoutDueScanMinute: Number(form.checkoutDueScanMinute || 0),
+          upcomingArrivalScanEnabled: form.upcomingArrivalScanEnabled,
+          upcomingArrivalScanHour: Number(form.upcomingArrivalScanHour || 18),
+          upcomingArrivalScanMinute: Number(form.upcomingArrivalScanMinute || 0),
+          overduePaymentScanEnabled: form.overduePaymentScanEnabled,
+          overduePaymentScanHour: Number(form.overduePaymentScanHour || 13),
+          overduePaymentScanMinute: Number(form.overduePaymentScanMinute || 0),
           housekeepingFollowUpScanEnabled: form.housekeepingFollowUpScanEnabled,
           housekeepingFollowUpScanHour: Number(form.housekeepingFollowUpScanHour || 15),
           housekeepingFollowUpScanMinute: Number(form.housekeepingFollowUpScanMinute || 0),
+          noShowFollowUpScanEnabled: form.noShowFollowUpScanEnabled,
+          noShowFollowUpScanHour: Number(form.noShowFollowUpScanHour || 20),
+          noShowFollowUpScanMinute: Number(form.noShowFollowUpScanMinute || 0),
+          maintenanceEscalationScanEnabled: form.maintenanceEscalationScanEnabled,
+          maintenanceEscalationScanHour: Number(form.maintenanceEscalationScanHour || 16),
+          maintenanceEscalationScanMinute: Number(form.maintenanceEscalationScanMinute || 0),
+          dailyDigestScanEnabled: form.dailyDigestScanEnabled,
+          dailyDigestScanHour: Number(form.dailyDigestScanHour || 19),
+          dailyDigestScanMinute: Number(form.dailyDigestScanMinute || 0),
         },
       };
     }
@@ -599,9 +779,7 @@ export default function HotelProfilePage() {
     }
   };
 
-  const handleRunCronJob = async (
-    job: 'attendanceAbsenceScan' | 'checkoutDueScan' | 'housekeepingFollowUpScan',
-  ) => {
+  const handleRunCronJob = async (job: RunnableHotelCronJob) => {
     setRunningJob(job);
     try {
       await runCronJob.mutateAsync(job);
@@ -676,7 +854,7 @@ export default function HotelProfilePage() {
               />
 
               <div className="rounded-2xl border border-[#1e2536] bg-[#161b27] p-5">
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
                   <div className="md:col-span-2 flex items-center gap-4">
                     <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl border border-[#1e2536] bg-[#0f1117]">
                       {logoPreview ? (
@@ -1058,6 +1236,12 @@ export default function HotelProfilePage() {
 
               <div className="space-y-5 rounded-2xl border border-[#1e2536] bg-[#161b27] p-5">
                 <ToggleRow
+                  title="Enable upcoming arrival scheduler"
+                  description="Send a prep summary for reservations arriving on the next hotel-local day."
+                  enabled={form.upcomingArrivalScanEnabled}
+                  onToggle={() => set('upcomingArrivalScanEnabled', !form.upcomingArrivalScanEnabled)}
+                />
+                <ToggleRow
                   title="Enable checkout-due scheduler"
                   description="Alert staff when checked-in reservations are due out today or overdue."
                   enabled={form.checkoutDueScanEnabled}
@@ -1075,12 +1259,41 @@ export default function HotelProfilePage() {
                   }
                 />
                 <ToggleRow
+                  title="Enable overdue payment scheduler"
+                  description="Alert finance-capable staff when checked-out or overdue stays still have an outstanding balance."
+                  enabled={form.overduePaymentScanEnabled}
+                  onToggle={() => set('overduePaymentScanEnabled', !form.overduePaymentScanEnabled)}
+                />
+                <ToggleRow
                   title="Enable housekeeping follow-up scheduler"
                   description="Escalate checkout prep tasks that remain open past the grace window."
                   enabled={form.housekeepingFollowUpScanEnabled}
                   onToggle={() =>
                     set('housekeepingFollowUpScanEnabled', !form.housekeepingFollowUpScanEnabled)
                   }
+                />
+                <ToggleRow
+                  title="Enable no-show follow-up scheduler"
+                  description="Highlight arrivals that should be checked in, cancelled, or marked as no-show."
+                  enabled={form.noShowFollowUpScanEnabled}
+                  onToggle={() => set('noShowFollowUpScanEnabled', !form.noShowFollowUpScanEnabled)}
+                />
+                <ToggleRow
+                  title="Enable maintenance escalation scheduler"
+                  description="Escalate urgent or high-priority maintenance requests that stay unresolved."
+                  enabled={form.maintenanceEscalationScanEnabled}
+                  onToggle={() =>
+                    set(
+                      'maintenanceEscalationScanEnabled',
+                      !form.maintenanceEscalationScanEnabled,
+                    )
+                  }
+                />
+                <ToggleRow
+                  title="Enable daily digest scheduler"
+                  description="Send a daily operational summary covering arrivals, departures, payments, and open issues."
+                  enabled={form.dailyDigestScanEnabled}
+                  onToggle={() => set('dailyDigestScanEnabled', !form.dailyDigestScanEnabled)}
                 />
                 <ToggleRow
                   title="Send housekeeping follow-up alerts"
@@ -1090,6 +1303,30 @@ export default function HotelProfilePage() {
                     set('housekeepingFollowUpEnabled', !form.housekeepingFollowUpEnabled)
                   }
                 />
+
+                <SchedulerStatusCard
+                  title="Upcoming arrival status"
+                  description="Daily prep alerts for the next day’s confirmed and pending arrivals."
+                  health={upcomingArrivalHealth}
+                  lastRun={upcomingArrivalStatus.lastRun}
+                  nextRun={upcomingArrivalStatus.nextRun}
+                  timezone={schedulerTimezone}
+                  lastSuccess={upcomingArrivalStatus.lastSuccess}
+                  lastFailure={upcomingArrivalStatus.lastFailure}
+                  lastError={upcomingArrivalStatus.lastError}
+                />
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => handleRunCronJob('upcomingArrivalScan')}
+                    disabled={runCronJob.isPending}
+                    className="rounded-lg border border-[#1e2536] bg-white/5 px-3 py-2 text-sm font-medium text-slate-200 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {runningJob === 'upcomingArrivalScan'
+                      ? 'Running upcoming arrival scan...'
+                      : 'Run upcoming arrival scan now'}
+                  </button>
+                </div>
 
                 <SchedulerStatusCard
                   title="Checkout scheduler status"
@@ -1110,6 +1347,30 @@ export default function HotelProfilePage() {
                     className="rounded-lg border border-[#1e2536] bg-white/5 px-3 py-2 text-sm font-medium text-slate-200 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {runningJob === 'checkoutDueScan' ? 'Running checkout scan...' : 'Run checkout scan now'}
+                  </button>
+                </div>
+
+                <SchedulerStatusCard
+                  title="Overdue payment status"
+                  description="Daily follow-up alerts for reservations whose checkout date has passed while a balance is still outstanding."
+                  health={overduePaymentHealth}
+                  lastRun={overduePaymentStatus.lastRun}
+                  nextRun={overduePaymentStatus.nextRun}
+                  timezone={schedulerTimezone}
+                  lastSuccess={overduePaymentStatus.lastSuccess}
+                  lastFailure={overduePaymentStatus.lastFailure}
+                  lastError={overduePaymentStatus.lastError}
+                />
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => handleRunCronJob('overduePaymentScan')}
+                    disabled={runCronJob.isPending}
+                    className="rounded-lg border border-[#1e2536] bg-white/5 px-3 py-2 text-sm font-medium text-slate-200 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {runningJob === 'overduePaymentScan'
+                      ? 'Running overdue payment scan...'
+                      : 'Run overdue payment scan now'}
                   </button>
                 </div>
 
@@ -1137,7 +1398,99 @@ export default function HotelProfilePage() {
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <SchedulerStatusCard
+                  title="No-show follow-up status"
+                  description="Daily front-desk follow-up for arrivals that are still pending after their check-in date."
+                  health={noShowFollowUpHealth}
+                  lastRun={noShowFollowUpStatus.lastRun}
+                  nextRun={noShowFollowUpStatus.nextRun}
+                  timezone={schedulerTimezone}
+                  lastSuccess={noShowFollowUpStatus.lastSuccess}
+                  lastFailure={noShowFollowUpStatus.lastFailure}
+                  lastError={noShowFollowUpStatus.lastError}
+                />
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => handleRunCronJob('noShowFollowUpScan')}
+                    disabled={runCronJob.isPending}
+                    className="rounded-lg border border-[#1e2536] bg-white/5 px-3 py-2 text-sm font-medium text-slate-200 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {runningJob === 'noShowFollowUpScan'
+                      ? 'Running no-show follow-up...'
+                      : 'Run no-show follow-up now'}
+                  </button>
+                </div>
+
+                <SchedulerStatusCard
+                  title="Maintenance escalation status"
+                  description="Daily escalation alerts for urgent or high-priority maintenance requests that remain unresolved."
+                  health={maintenanceEscalationHealth}
+                  lastRun={maintenanceEscalationStatus.lastRun}
+                  nextRun={maintenanceEscalationStatus.nextRun}
+                  timezone={schedulerTimezone}
+                  lastSuccess={maintenanceEscalationStatus.lastSuccess}
+                  lastFailure={maintenanceEscalationStatus.lastFailure}
+                  lastError={maintenanceEscalationStatus.lastError}
+                />
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => handleRunCronJob('maintenanceEscalationScan')}
+                    disabled={runCronJob.isPending}
+                    className="rounded-lg border border-[#1e2536] bg-white/5 px-3 py-2 text-sm font-medium text-slate-200 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {runningJob === 'maintenanceEscalationScan'
+                      ? 'Running maintenance escalation...'
+                      : 'Run maintenance escalation now'}
+                  </button>
+                </div>
+
+                <SchedulerStatusCard
+                  title="Daily digest status"
+                  description="Daily summary alerts for key arrivals, departures, finances, housekeeping, and maintenance signals."
+                  health={dailyDigestHealth}
+                  lastRun={dailyDigestStatus.lastRun}
+                  nextRun={dailyDigestStatus.nextRun}
+                  timezone={schedulerTimezone}
+                  lastSuccess={dailyDigestStatus.lastSuccess}
+                  lastFailure={dailyDigestStatus.lastFailure}
+                  lastError={dailyDigestStatus.lastError}
+                />
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => handleRunCronJob('dailyDigestScan')}
+                    disabled={runCronJob.isPending}
+                    className="rounded-lg border border-[#1e2536] bg-white/5 px-3 py-2 text-sm font-medium text-slate-200 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {runningJob === 'dailyDigestScan'
+                      ? 'Running daily digest...'
+                      : 'Run daily digest now'}
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-6">
+                  <div>
+                    <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
+                      Arrival Scan Hour
+                    </label>
+                    <input
+                      value={form.upcomingArrivalScanHour}
+                      onChange={(e) => set('upcomingArrivalScanHour', e.target.value)}
+                      className="w-full rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-2.5 text-sm text-slate-200 outline-none transition-colors focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
+                      Arrival Scan Minute
+                    </label>
+                    <input
+                      value={form.upcomingArrivalScanMinute}
+                      onChange={(e) => set('upcomingArrivalScanMinute', e.target.value)}
+                      className="w-full rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-2.5 text-sm text-slate-200 outline-none transition-colors focus:border-blue-500"
+                    />
+                  </div>
                   <div>
                     <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
                       Checkout Scan Hour
@@ -1145,6 +1498,26 @@ export default function HotelProfilePage() {
                     <input
                       value={form.checkoutDueScanHour}
                       onChange={(e) => set('checkoutDueScanHour', e.target.value)}
+                      className="w-full rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-2.5 text-sm text-slate-200 outline-none transition-colors focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
+                      Overdue Payment Scan Hour
+                    </label>
+                    <input
+                      value={form.overduePaymentScanHour}
+                      onChange={(e) => set('overduePaymentScanHour', e.target.value)}
+                      className="w-full rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-2.5 text-sm text-slate-200 outline-none transition-colors focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
+                      Overdue Payment Scan Minute
+                    </label>
+                    <input
+                      value={form.overduePaymentScanMinute}
+                      onChange={(e) => set('overduePaymentScanMinute', e.target.value)}
                       className="w-full rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-2.5 text-sm text-slate-200 outline-none transition-colors focus:border-blue-500"
                     />
                   </div>
@@ -1188,6 +1561,69 @@ export default function HotelProfilePage() {
                     <input
                       value={form.housekeepingFollowUpScanMinute}
                       onChange={(e) => set('housekeepingFollowUpScanMinute', e.target.value)}
+                      className="w-full rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-2.5 text-sm text-slate-200 outline-none transition-colors focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-6">
+                  <div>
+                    <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
+                      No-show Scan Hour
+                    </label>
+                    <input
+                      value={form.noShowFollowUpScanHour}
+                      onChange={(e) => set('noShowFollowUpScanHour', e.target.value)}
+                      className="w-full rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-2.5 text-sm text-slate-200 outline-none transition-colors focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
+                      No-show Scan Minute
+                    </label>
+                    <input
+                      value={form.noShowFollowUpScanMinute}
+                      onChange={(e) => set('noShowFollowUpScanMinute', e.target.value)}
+                      className="w-full rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-2.5 text-sm text-slate-200 outline-none transition-colors focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
+                      Maintenance Escalation Hour
+                    </label>
+                    <input
+                      value={form.maintenanceEscalationScanHour}
+                      onChange={(e) => set('maintenanceEscalationScanHour', e.target.value)}
+                      className="w-full rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-2.5 text-sm text-slate-200 outline-none transition-colors focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
+                      Maintenance Escalation Minute
+                    </label>
+                    <input
+                      value={form.maintenanceEscalationScanMinute}
+                      onChange={(e) => set('maintenanceEscalationScanMinute', e.target.value)}
+                      className="w-full rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-2.5 text-sm text-slate-200 outline-none transition-colors focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
+                      Daily Digest Hour
+                    </label>
+                    <input
+                      value={form.dailyDigestScanHour}
+                      onChange={(e) => set('dailyDigestScanHour', e.target.value)}
+                      className="w-full rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-2.5 text-sm text-slate-200 outline-none transition-colors focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
+                      Daily Digest Minute
+                    </label>
+                    <input
+                      value={form.dailyDigestScanMinute}
+                      onChange={(e) => set('dailyDigestScanMinute', e.target.value)}
                       className="w-full rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-2.5 text-sm text-slate-200 outline-none transition-colors focus:border-blue-500"
                     />
                   </div>

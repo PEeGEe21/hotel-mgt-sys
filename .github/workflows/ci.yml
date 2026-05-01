@@ -7,8 +7,35 @@ on:
     branches: [main]
 
 jobs:
-  lint-and-build:
+  release-metadata:
     runs-on: ubuntu-latest
+    outputs:
+      release_version: ${{ steps.meta.outputs.release_version }}
+      release_commit_sha: ${{ steps.meta.outputs.release_commit_sha }}
+      deployment_environment: ${{ steps.meta.outputs.deployment_environment }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: meta
+        shell: bash
+        run: |
+          RELEASE_VERSION="ci-${GITHUB_RUN_NUMBER}"
+          RELEASE_COMMIT_SHA="${GITHUB_SHA::7}"
+          if [[ "${GITHUB_REF_NAME}" == "main" ]]; then
+            DEPLOYMENT_ENVIRONMENT="production"
+          else
+            DEPLOYMENT_ENVIRONMENT="staging"
+          fi
+          echo "release_version=$RELEASE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "release_commit_sha=$RELEASE_COMMIT_SHA" >> "$GITHUB_OUTPUT"
+          echo "deployment_environment=$DEPLOYMENT_ENVIRONMENT" >> "$GITHUB_OUTPUT"
+
+  lint-and-build:
+    needs: release-metadata
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_VERSION: ${{ needs.release-metadata.outputs.release_version }}
+      RELEASE_COMMIT_SHA: ${{ needs.release-metadata.outputs.release_commit_sha }}
+      DEPLOYMENT_ENVIRONMENT: ${{ needs.release-metadata.outputs.deployment_environment }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v3
@@ -23,6 +50,7 @@ jobs:
       - run: pnpm build
 
   test:
+    needs: release-metadata
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -39,6 +67,9 @@ jobs:
       DATABASE_URL: postgresql://test:test@localhost:5432/hotel_os_test
       REDIS_URL: redis://localhost:6379
       JWT_SECRET: test-secret
+      RELEASE_VERSION: ${{ needs.release-metadata.outputs.release_version }}
+      RELEASE_COMMIT_SHA: ${{ needs.release-metadata.outputs.release_commit_sha }}
+      DEPLOYMENT_ENVIRONMENT: ${{ needs.release-metadata.outputs.deployment_environment }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v3
@@ -51,3 +82,5 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: cd apps/api && npx prisma migrate deploy
       - run: pnpm test
+      - name: Release metadata summary
+        run: pnpm release:metadata

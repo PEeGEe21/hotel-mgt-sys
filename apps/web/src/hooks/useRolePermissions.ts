@@ -32,3 +32,29 @@ export function useUpdateRolePermissions() {
     onError: (e: any) => openToast('error', e?.response?.data?.message ?? 'Update failed'),
   });
 }
+
+export function useBackfillRolePermissions() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { data } = await api.post('/permissions/roles/backfill');
+      return data as {
+        success: true;
+        updatedCount: number;
+        updatedRoles: { role: Role; addedPermissions: Permission[] }[];
+      };
+    },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ['role-permissions'] });
+      if (data.updatedCount > 0) {
+        openToast(
+          'success',
+          `Backfilled missing defaults for ${data.updatedCount} role${data.updatedCount === 1 ? '' : 's'}`,
+        );
+        return;
+      }
+      openToast('success', 'All role defaults are already up to date');
+    },
+    onError: (e: any) => openToast('error', e?.response?.data?.message ?? 'Backfill failed'),
+  });
+}

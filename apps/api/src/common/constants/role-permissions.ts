@@ -144,7 +144,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, string[]> = {
     'view:settings',
     'view:hr',
     'manage:hr',
-    'manage:pos'
+    'manage:pos',
+    'view:mailing',
   ],
 
   RECEPTIONIST: [

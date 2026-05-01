@@ -122,16 +122,36 @@ export class AttendanceService {
         (args.department ? `\nDepartment: ${args.department}` : '') +
         (args.position ? `\nPosition: ${args.position}` : ''),
       html: `
-        <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.6;">
+        <div>
           <p style="margin: 0 0 12px;">A late staff clock-in was recorded at <strong>${hotelName}</strong>.</p>
-          <table style="border-collapse: collapse;">
-            <tr><td style="padding: 4px 12px 4px 0;"><strong>Staff</strong></td><td style="padding: 4px 0;">${staffName}</td></tr>
-            <tr><td style="padding: 4px 12px 4px 0;"><strong>Employee code</strong></td><td style="padding: 4px 0;">${employeeCode}</td></tr>
-            <tr><td style="padding: 4px 12px 4px 0;"><strong>Clocked in at</strong></td><td style="padding: 4px 0;">${clockedInAt}</td></tr>
-            <tr><td style="padding: 4px 12px 4px 0;"><strong>Method</strong></td><td style="padding: 4px 0;">${method}</td></tr>
-            ${department ? `<tr><td style="padding: 4px 12px 4px 0;"><strong>Department</strong></td><td style="padding: 4px 0;">${department}</td></tr>` : ''}
-            ${position ? `<tr><td style="padding: 4px 12px 4px 0;"><strong>Position</strong></td><td style="padding: 4px 0;">${position}</td></tr>` : ''}
+          <p style="margin: 0 0 18px; color: #475569;">
+            Review the shift record and confirm whether any manager follow-up is needed.
+          </p>
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse; margin: 0 0 8px;">
+            <tr>
+              <td style="width: 50%; padding: 0 6px 12px 0; vertical-align: top;">
+                <div style="background: #fff7ed; border: 1px solid #fed7aa; border-radius: 14px; padding: 14px 16px;">
+                  <div style="margin-bottom: 6px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #9a3412;">Clocked In</div>
+                  <div style="font-size: 20px; font-weight: 700; color: #7c2d12;">${clockedInAt}</div>
+                </div>
+              </td>
+              <td style="width: 50%; padding: 0 0 12px 6px; vertical-align: top;">
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 14px; padding: 14px 16px;">
+                  <div style="margin-bottom: 6px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #64748b;">Method</div>
+                  <div style="font-size: 20px; font-weight: 700; color: #0f172a;">${method}</div>
+                </div>
+              </td>
+            </tr>
           </table>
+          <div style="margin-top: 16px; overflow: hidden; border: 1px solid #e2e8f0; border-radius: 16px;">
+            <div style="padding: 14px 16px; background: #f8fafc; font-weight: 700; color: #0f172a;">Staff details</div>
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
+              <tr><td style="padding: 10px 16px 10px 0; color: #64748b; font-weight: 600;">Staff</td><td style="padding: 10px 0; color: #0f172a;">${staffName}</td></tr>
+              <tr><td style="padding: 10px 16px 10px 0; color: #64748b; font-weight: 600;">Employee code</td><td style="padding: 10px 0; color: #0f172a;">${employeeCode}</td></tr>
+              ${department ? `<tr><td style="padding: 10px 16px 10px 0; color: #64748b; font-weight: 600;">Department</td><td style="padding: 10px 0; color: #0f172a;">${department}</td></tr>` : ''}
+              ${position ? `<tr><td style="padding: 10px 16px 10px 0; color: #64748b; font-weight: 600;">Position</td><td style="padding: 10px 0; color: #0f172a;">${position}</td></tr>` : ''}
+            </table>
+          </div>
         </div>
       `,
     };
@@ -145,14 +165,17 @@ export class AttendanceService {
     method: string;
   }) {
     return {
-      title: 'Attendance alert',
-      message: `${args.staffName} clocked in late at ${fmtTime(args.clockedInAt)} via ${args.method}.`,
+      title: 'Late clock-in recorded',
+      message: `${args.staffName} clocked in late at ${fmtTime(args.clockedInAt)} via ${args.method}. Review the shift record if follow-up is needed.`,
       metadata: {
         targetStaffId: args.staffId ?? null,
         staffName: args.staffName,
         employeeCode: args.employeeCode,
         clockedInAt: args.clockedInAt.toISOString(),
         method: args.method,
+        alertKind: 'late',
+        severity: 'warning',
+        summary: `${args.employeeCode} clocked in after the expected start time`,
         href: args.staffId ? `/staff/${args.staffId}` : '/attendance',
       },
     };
@@ -311,8 +334,8 @@ export class AttendanceService {
         event: 'attendanceAlert',
         excludeUserIds: args.staff.userId ? [args.staff.userId] : undefined,
         inApp: {
-          title: 'Attendance alert',
-          message: `${staffName} has not clocked in for ${args.alertDate}.`,
+          title: 'Absence follow-up needed',
+          message: `${staffName} has not clocked in for ${args.alertDate}. Review the attendance record and confirm whether this is an absence or a missed punch.`,
           metadata: {
             targetStaffId: args.staff.id,
             staffName,
@@ -320,6 +343,8 @@ export class AttendanceService {
             alertKind: 'absence',
             alertDate: args.alertDate,
             expectedBy: cutoffTime,
+            severity: 'warning',
+            summary: `${employeeCode} has no clock-in recorded for ${args.alertDate}`,
             href: `/staff/${args.staff.id}`,
           },
         },
@@ -382,20 +407,28 @@ export class AttendanceService {
         `Absent staff count: ${rows.length}\n` +
         `${rowsText}`,
       html: `
-        <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.6;">
+        <div>
           <p style="margin: 0 0 12px;">Attendance absence summary for <strong>${escapeHtml(args.hotelName)}</strong> on <strong>${escapeHtml(args.alertDate)}</strong>.</p>
-          <p style="margin: 0 0 12px;">Absent staff count: <strong>${rows.length}</strong></p>
-          <table style="border-collapse: collapse; width: 100%;">
-            <thead>
-              <tr>
-                <th style="text-align: left; padding: 6px 12px 6px 0;">Staff</th>
-                <th style="text-align: left; padding: 6px 12px 6px 0;">Employee code</th>
-                <th style="text-align: left; padding: 6px 12px 6px 0;">Department</th>
-                <th style="text-align: left; padding: 6px 0;">Position</th>
-              </tr>
-            </thead>
-            <tbody>${rowsHtml}</tbody>
-          </table>
+          <p style="margin: 0 0 18px; color: #475569;">
+            ${rows.length} staff member${rows.length === 1 ? '' : 's'} still do not have a clock-in recorded for this day.
+          </p>
+          <div style="margin: 0 0 16px; display: inline-block; padding: 12px 14px; border-radius: 14px; background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412; font-weight: 700;">
+            Absent staff count: ${rows.length}
+          </div>
+          <div style="overflow: hidden; border: 1px solid #e2e8f0; border-radius: 16px;">
+            <div style="padding: 14px 16px; background: #f8fafc; font-weight: 700; color: #0f172a;">Staff needing follow-up</div>
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse; width: 100%;">
+              <thead>
+                <tr>
+                  <th style="text-align: left; padding: 12px 16px 10px 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;">Staff</th>
+                  <th style="text-align: left; padding: 12px 16px 10px 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;">Employee code</th>
+                  <th style="text-align: left; padding: 12px 16px 10px 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;">Department</th>
+                  <th style="text-align: left; padding: 12px 0 10px; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;">Position</th>
+                </tr>
+              </thead>
+              <tbody>${rowsHtml}</tbody>
+            </table>
+          </div>
         </div>
       `,
     };

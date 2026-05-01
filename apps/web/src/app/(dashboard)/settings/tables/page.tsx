@@ -16,6 +16,7 @@ import {
   ArrowDown,
   Layers,
   Sparkles,
+  ArrowLeft,
 } from 'lucide-react';
 import {
   usePosTables,
@@ -28,6 +29,7 @@ import {
   type PosTable,
   type CreateTableInput,
 } from '@/hooks/pos/usePosTables';
+import { useRouter } from 'next/navigation';
 
 // ─── Table Modal ──────────────────────────────────────────────────────────────
 function TableModal({
@@ -183,6 +185,7 @@ function TableModal({
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function TablesSettingsPage() {
+  const router = useRouter();
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<PosTable | null>(null);
   const [showInactive, setShowInactive] = useState(false);
@@ -215,11 +218,19 @@ export default function TablesSettingsPage() {
       <div className="space-y-6 max-w-3xl">
         {/* Header */}
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-white tracking-tight">Tables & Sections</h1>
-            <p className="text-slate-500 text-sm mt-0.5">
-              Configure tables for the POS terminal — {data?.total ?? '—'} total
-            </p>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => router.back()}
+              className="w-9 h-9 rounded-lg bg-[#161b27] border border-[#1e2536] flex items-center justify-center text-slate-400 hover:text-slate-200 transition-colors"
+            >
+              <ArrowLeft size={16} />
+            </button>
+            <div>
+              <h1 className="text-2xl font-bold text-white tracking-tight">Tables & Sections</h1>
+              <p className="text-slate-500 text-sm mt-0.5">
+                Configure tables for the POS terminal — {data?.total ?? '—'} total
+              </p>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             {allTables.length === 0 && !isLoading && (

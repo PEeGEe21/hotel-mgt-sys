@@ -3,20 +3,113 @@ name: Deploy
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
-  deploy-api:
+  release-metadata:
     runs-on: ubuntu-latest
+    outputs:
+      release_version: ${{ steps.meta.outputs.release_version }}
+      release_commit_sha: ${{ steps.meta.outputs.release_commit_sha }}
+      deployment_environment: ${{ steps.meta.outputs.deployment_environment }}
+      release_tag: ${{ steps.meta.outputs.release_tag }}
     steps:
       - uses: actions/checkout@v4
-      - name: Deploy API to Railway
-        run: echo "Add Railway deploy action here"
-        # Use: https://github.com/bervProject/railway-deploy
+      - id: meta
+        shell: bash
+        run: |
+          RELEASE_VERSION="release-${GITHUB_RUN_NUMBER}"
+          RELEASE_COMMIT_SHA="${GITHUB_SHA::7}"
+          DEPLOYMENT_ENVIRONMENT="production"
+          RELEASE_TAG="${RELEASE_VERSION}-${RELEASE_COMMIT_SHA}"
+          echo "release_version=$RELEASE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "release_commit_sha=$RELEASE_COMMIT_SHA" >> "$GITHUB_OUTPUT"
+          echo "deployment_environment=$DEPLOYMENT_ENVIRONMENT" >> "$GITHUB_OUTPUT"
+          echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
 
-  deploy-web:
+  build-and-push-images:
+    needs: release-metadata
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      REGISTRY: ghcr.io
+      IMAGE_NAMESPACE: ${{ github.repository_owner }}
+      RELEASE_VERSION: ${{ needs.release-metadata.outputs.release_version }}
+      RELEASE_COMMIT_SHA: ${{ needs.release-metadata.outputs.release_commit_sha }}
+      DEPLOYMENT_ENVIRONMENT: ${{ needs.release-metadata.outputs.deployment_environment }}
     steps:
       - uses: actions/checkout@v4
-      - name: Deploy Web to Vercel
-        run: echo "Vercel auto-deploys from GitHub"
-        # Vercel connects directly to GitHub repo
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Extract API image metadata
+        id: api-meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/hotelos-api
+          tags: |
+            type=raw,value=${{ needs.release-metadata.outputs.release_tag }}
+            type=raw,value=${{ needs.release-metadata.outputs.release_commit_sha }}
+            type=raw,value=production-current
+      - name: Extract web image metadata
+        id: web-meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/hotelos-web
+          tags: |
+            type=raw,value=${{ needs.release-metadata.outputs.release_tag }}
+            type=raw,value=${{ needs.release-metadata.outputs.release_commit_sha }}
+            type=raw,value=production-current
+      - name: Build and push API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./apps/api/Dockerfile
+          push: true
+          tags: ${{ steps.api-meta.outputs.tags }}
+          labels: ${{ steps.api-meta.outputs.labels }}
+          build-args: |
+            RELEASE_VERSION=${{ env.RELEASE_VERSION }}
+            RELEASE_COMMIT_SHA=${{ env.RELEASE_COMMIT_SHA }}
+            DEPLOYMENT_ENVIRONMENT=${{ env.DEPLOYMENT_ENVIRONMENT }}
+      - name: Build and push web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./apps/web/Dockerfile
+          push: true
+          tags: ${{ steps.web-meta.outputs.tags }}
+          labels: ${{ steps.web-meta.outputs.labels }}
+          build-args: |
+            RELEASE_VERSION=${{ env.RELEASE_VERSION }}
+            RELEASE_COMMIT_SHA=${{ env.RELEASE_COMMIT_SHA }}
+            DEPLOYMENT_ENVIRONMENT=${{ env.DEPLOYMENT_ENVIRONMENT }}
+
+  deploy-summary:
+    needs: [release-metadata, build-and-push-images]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deployment summary
+        run: |
+          {
+            echo "## Release ready"
+            echo ""
+            echo "- Release version: ${{ needs.release-metadata.outputs.release_version }}"
+            echo "- Release commit: ${{ needs.release-metadata.outputs.release_commit_sha }}"
+            echo "- Environment: ${{ needs.release-metadata.outputs.deployment_environment }}"
+            echo "- API image tag: ghcr.io/${{ github.repository_owner }}/hotelos-api:${{ needs.release-metadata.outputs.release_tag }}"
+            echo "- Web image tag: ghcr.io/${{ github.repository_owner }}/hotelos-web:${{ needs.release-metadata.outputs.release_tag }}"
+            echo ""
+            echo "Set these runtime env vars on the deployment platform:"
+            echo "- RELEASE_VERSION=${{ needs.release-metadata.outputs.release_version }}"
+            echo "- RELEASE_COMMIT_SHA=${{ needs.release-metadata.outputs.release_commit_sha }}"
+            echo "- DEPLOYMENT_ENVIRONMENT=${{ needs.release-metadata.outputs.deployment_environment }}"
+            echo "- MONITORING_ALERT_WEBHOOK_URL=\${{ secrets.MONITORING_ALERT_WEBHOOK_URL }}"
+          } >> "$GITHUB_STEP_SUMMARY"

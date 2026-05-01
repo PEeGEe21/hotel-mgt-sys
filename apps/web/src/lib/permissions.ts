@@ -368,7 +368,8 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'view:settings',
     'view:hr',
     'manage:hr',
-    'manage:pos'
+    'manage:pos',
+    'view:mailing',
   ],
 
   RECEPTIONIST: [

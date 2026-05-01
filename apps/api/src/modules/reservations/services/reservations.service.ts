@@ -26,6 +26,13 @@ import { EmailService } from '../../../common/email/email.service';
 
 const HOUSEKEEPING_FOLLOW_UP_SCAN_JOB_TYPE =
   'HOUSEKEEPING_FOLLOW_UP_SCAN' as HotelCronJobType;
+const UPCOMING_ARRIVAL_SCAN_JOB_TYPE =
+  'UPCOMING_ARRIVAL_SCAN' as HotelCronJobType;
+const OVERDUE_PAYMENT_SCAN_JOB_TYPE =
+  'OVERDUE_PAYMENT_SCAN' as HotelCronJobType;
+const NO_SHOW_FOLLOW_UP_SCAN_JOB_TYPE =
+  'NO_SHOW_FOLLOW_UP_SCAN' as HotelCronJobType;
+const DAILY_DIGEST_SCAN_JOB_TYPE = 'DAILY_DIGEST_SCAN' as HotelCronJobType;
 
 const RESERVATION_INCLUDE = {
   guest: true,
@@ -130,6 +137,38 @@ export class ReservationsService {
     });
   }
 
+  private buildEmailMetricCard(args: { label: string; value: string; tone?: 'default' | 'success' }) {
+    const toneStyles =
+      args.tone === 'success'
+        ? 'background: #ecfdf5; border: 1px solid #a7f3d0;'
+        : 'background: #f8fafc; border: 1px solid #e2e8f0;';
+
+    return `
+      <td style="width: 50%; padding: 0 6px 12px 0; vertical-align: top;">
+        <div style="${toneStyles} border-radius: 14px; padding: 14px 16px;">
+          <div style="margin-bottom: 6px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #64748b;">
+            ${escapeHtml(args.label)}
+          </div>
+          <div style="font-size: 20px; font-weight: 700; color: #0f172a;">${escapeHtml(args.value)}</div>
+        </div>
+      </td>
+    `;
+  }
+
+  private buildEmailDetailRows(rows: Array<{ label: string; value: string | null | undefined }>) {
+    return rows
+      .filter((row) => row.value)
+      .map(
+        (row) => `
+          <tr>
+            <td style="padding: 10px 16px 10px 0; color: #64748b; font-weight: 600; white-space: nowrap;">${escapeHtml(row.label)}</td>
+            <td style="padding: 10px 0; color: #0f172a;">${escapeHtml(row.value ?? '')}</td>
+          </tr>
+        `,
+      )
+      .join('');
+  }
+
   private buildNewReservationNotificationEmail(args: {
     hotelName: string;
     reservationNo: string;
@@ -158,16 +197,31 @@ export class ReservationsService {
         `Check-out: ${checkOut}\n` +
         `Total: ${totalAmount}`,
       html: `
-        <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.6;">
-          <p style="margin: 0 0 12px;">A new reservation has been created for <strong>${hotelName}</strong>.</p>
-          <table style="border-collapse: collapse;">
-            <tr><td style="padding: 4px 12px 4px 0;"><strong>Reservation</strong></td><td style="padding: 4px 0;">${reservationNo}</td></tr>
-            <tr><td style="padding: 4px 12px 4px 0;"><strong>Guest</strong></td><td style="padding: 4px 0;">${guestName}</td></tr>
-            <tr><td style="padding: 4px 12px 4px 0;"><strong>Room</strong></td><td style="padding: 4px 0;">${roomNumber}</td></tr>
-            <tr><td style="padding: 4px 12px 4px 0;"><strong>Check-in</strong></td><td style="padding: 4px 0;">${checkIn}</td></tr>
-            <tr><td style="padding: 4px 12px 4px 0;"><strong>Check-out</strong></td><td style="padding: 4px 0;">${checkOut}</td></tr>
-            <tr><td style="padding: 4px 12px 4px 0;"><strong>Total</strong></td><td style="padding: 4px 0;">${totalAmount}</td></tr>
+        <div>
+          <p style="margin: 0 0 12px;">A new reservation has just been created for <strong>${hotelName}</strong>.</p>
+          <p style="margin: 0 0 18px; color: #475569;">
+            Review the stay details below and confirm any operational follow-up needed before arrival.
+          </p>
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse; margin: 0 0 8px;">
+            <tr>
+              ${this.buildEmailMetricCard({ label: 'Reservation', value: reservationNo })}
+              ${this.buildEmailMetricCard({ label: 'Stay Total', value: totalAmount })}
+            </tr>
+            <tr>
+              ${this.buildEmailMetricCard({ label: 'Check-in', value: checkIn })}
+              ${this.buildEmailMetricCard({ label: 'Check-out', value: checkOut })}
+            </tr>
           </table>
+          <div style="margin-top: 16px; overflow: hidden; border: 1px solid #e2e8f0; border-radius: 16px;">
+            <div style="padding: 14px 16px; background: #f8fafc; font-weight: 700; color: #0f172a;">Stay details</div>
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
+              ${this.buildEmailDetailRows([
+                { label: 'Guest', value: guestName },
+                { label: 'Room', value: roomNumber },
+                { label: 'Hotel', value: hotelName },
+              ])}
+            </table>
+          </div>
         </div>
       `,
     };
@@ -235,19 +289,42 @@ export class ReservationsService {
         `Balance: ${balance}` +
         (args.reference ? `\nReference: ${args.reference}` : ''),
       html: `
-        <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.6;">
-          <p style="margin: 0 0 12px;">A payment has been recorded for <strong>${hotelName}</strong>.</p>
-          <table style="border-collapse: collapse;">
-            <tr><td style="padding: 4px 12px 4px 0;"><strong>Reservation</strong></td><td style="padding: 4px 0;">${reservationNo}</td></tr>
-            <tr><td style="padding: 4px 12px 4px 0;"><strong>Guest</strong></td><td style="padding: 4px 0;">${guestName}</td></tr>
-            <tr><td style="padding: 4px 12px 4px 0;"><strong>Room</strong></td><td style="padding: 4px 0;">${roomNumber}</td></tr>
-            <tr><td style="padding: 4px 12px 4px 0;"><strong>Amount</strong></td><td style="padding: 4px 0;">${amount}</td></tr>
-            <tr><td style="padding: 4px 12px 4px 0;"><strong>Method</strong></td><td style="padding: 4px 0;">${method}</td></tr>
-            <tr><td style="padding: 4px 12px 4px 0;"><strong>Paid at</strong></td><td style="padding: 4px 0;">${paidAt}</td></tr>
-            <tr><td style="padding: 4px 12px 4px 0;"><strong>Total paid</strong></td><td style="padding: 4px 0;">${paidAmount}</td></tr>
-            <tr><td style="padding: 4px 12px 4px 0;"><strong>Balance</strong></td><td style="padding: 4px 0;">${balance}</td></tr>
-            ${reference ? `<tr><td style="padding: 4px 12px 4px 0;"><strong>Reference</strong></td><td style="padding: 4px 0;">${reference}</td></tr>` : ''}
+        <div>
+          <p style="margin: 0 0 12px;">A payment has been posted for <strong>${hotelName}</strong>.</p>
+          <p style="margin: 0 0 18px; color: #475569;">
+            The folio has been updated. Review the payment summary and outstanding balance below.
+          </p>
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse; margin: 0 0 8px;">
+            <tr>
+              ${this.buildEmailMetricCard({ label: 'Payment Received', value: amount, tone: 'success' })}
+              ${this.buildEmailMetricCard({ label: 'Outstanding Balance', value: balance })}
+            </tr>
+            <tr>
+              ${this.buildEmailMetricCard({ label: 'Reservation', value: reservationNo })}
+              ${this.buildEmailMetricCard({ label: 'Total Paid', value: paidAmount })}
+            </tr>
           </table>
+          <div style="margin-top: 16px; overflow: hidden; border: 1px solid #e2e8f0; border-radius: 16px;">
+            <div style="padding: 14px 16px; background: #f8fafc; font-weight: 700; color: #0f172a;">Payment details</div>
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
+              ${this.buildEmailDetailRows([
+                { label: 'Guest', value: guestName },
+                { label: 'Room', value: roomNumber },
+                { label: 'Method', value: method },
+                { label: 'Paid at', value: paidAt },
+                { label: 'Reference', value: reference },
+              ])}
+            </table>
+          </div>
+          ${
+            args.balance > 0
+              ? `<p style="margin: 16px 0 0; padding: 12px 14px; border-radius: 14px; background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412;">
+                  Remaining balance is <strong>${balance}</strong>. Keep the folio under review until the stay is fully settled.
+                </p>`
+              : `<p style="margin: 16px 0 0; padding: 12px 14px; border-radius: 14px; background: #ecfdf5; border: 1px solid #a7f3d0; color: #166534;">
+                  This reservation is now fully paid.
+                </p>`
+          }
         </div>
       `,
     };
@@ -262,11 +339,10 @@ export class ReservationsService {
     balance: number;
   }) {
     return {
-      title: 'Payment received',
+      title: 'Payment posted',
       message:
-        `${fmtMoney(args.amount)} was received for ${args.guestName} ` +
-        `on reservation ${args.reservationNo} via ${args.method}. ` +
-        `Balance remaining: ${fmtMoney(args.balance)}.`,
+        `${fmtMoney(args.amount)} was posted to reservation ${args.reservationNo} for ${args.guestName} via ${args.method}. ` +
+        `Outstanding balance: ${fmtMoney(args.balance)}.`,
       metadata: {
         reservationId: args.reservationId,
         reservationNo: args.reservationNo,
@@ -274,7 +350,125 @@ export class ReservationsService {
         amount: args.amount,
         method: args.method,
         balance: args.balance,
+        severity: args.balance > 0 ? 'info' : 'success',
+        summary:
+          args.balance > 0
+            ? `Balance outstanding after payment: ${fmtMoney(args.balance)}`
+            : 'Reservation is now fully paid',
         href: `/reservations/${args.reservationId}`,
+      },
+    };
+  }
+
+  private buildOverduePaymentSummaryEmail(args: {
+    hotelName: string;
+    alertDate: string;
+    overdueCount: number;
+    totalOutstanding: number;
+    reservations: Array<{
+      reservationNo: string;
+      guestName: string;
+      roomNumber: string;
+      localCheckoutDate: string;
+      paidAmount: number;
+      totalAmount: number;
+      balance: number;
+      daysOverdue: number;
+    }>;
+  }) {
+    const rows = args.reservations
+      .map(
+        (reservation) => `
+          <tr>
+            <td style="padding: 10px 16px 10px 0; color: #0f172a;">${escapeHtml(reservation.reservationNo)}</td>
+            <td style="padding: 10px 16px 10px 0; color: #0f172a;">${escapeHtml(reservation.guestName)}</td>
+            <td style="padding: 10px 16px 10px 0; color: #0f172a;">${escapeHtml(reservation.roomNumber)}</td>
+            <td style="padding: 10px 16px 10px 0; color: #0f172a;">${escapeHtml(reservation.localCheckoutDate)}</td>
+            <td style="padding: 10px 16px 10px 0; color: #0f172a;">${fmtMoney(reservation.balance)}</td>
+            <td style="padding: 10px 0; color: #0f172a;">${reservation.daysOverdue}d</td>
+          </tr>
+        `,
+      )
+      .join('');
+
+    return {
+      subject: `Overdue payment summary for ${args.alertDate}`,
+      text:
+        `${args.hotelName}: ${args.overdueCount} reservation${args.overdueCount === 1 ? '' : 's'} have overdue balances as of ${args.alertDate}.\n` +
+        `Total outstanding: ${fmtMoney(args.totalOutstanding)}\n` +
+        args.reservations
+          .map(
+            (reservation) =>
+              `- ${reservation.reservationNo}: ${reservation.guestName} in room ${reservation.roomNumber} owes ${fmtMoney(reservation.balance)} (${reservation.daysOverdue} day${reservation.daysOverdue === 1 ? '' : 's'} overdue)`,
+          )
+          .join('\n'),
+      html: `
+        <div>
+          <p style="margin: 0 0 12px;">Overdue payment follow-up for <strong>${escapeHtml(args.hotelName)}</strong> on <strong>${escapeHtml(args.alertDate)}</strong>.</p>
+          <p style="margin: 0 0 18px; color: #475569;">
+            These reservations have passed checkout with an unpaid balance still remaining.
+          </p>
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse; margin: 0 0 8px;">
+            <tr>
+              ${this.buildEmailMetricCard({ label: 'Overdue Folios', value: String(args.overdueCount) })}
+              ${this.buildEmailMetricCard({ label: 'Total Outstanding', value: fmtMoney(args.totalOutstanding) })}
+            </tr>
+          </table>
+          <div style="margin-top: 16px; overflow: hidden; border: 1px solid #e2e8f0; border-radius: 16px;">
+            <div style="padding: 14px 16px; background: #f8fafc; font-weight: 700; color: #0f172a;">Reservations needing collection</div>
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
+              <thead>
+                <tr>
+                  <th align="left" style="padding: 12px 16px 10px 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;">Reservation</th>
+                  <th align="left" style="padding: 12px 16px 10px 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;">Guest</th>
+                  <th align="left" style="padding: 12px 16px 10px 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;">Room</th>
+                  <th align="left" style="padding: 12px 16px 10px 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;">Checkout</th>
+                  <th align="left" style="padding: 12px 16px 10px 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;">Balance</th>
+                  <th align="left" style="padding: 12px 0 10px; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;">Age</th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+        </div>
+      `,
+    };
+  }
+
+  private buildOverduePaymentInAppNotification(args: {
+    alertDate: string;
+    overdueCount: number;
+    totalOutstanding: number;
+    reservations: Array<{
+      reservationId: string;
+      reservationNo: string;
+      guestName: string;
+      roomNumber: string;
+      localCheckoutDate: string;
+      balance: number;
+      daysOverdue: number;
+    }>;
+  }) {
+    return {
+      title: args.overdueCount === 1 ? 'Overdue folio needs follow-up' : 'Overdue folios need follow-up',
+      message:
+        `${args.overdueCount} reservation${args.overdueCount === 1 ? '' : 's'} still have outstanding balances after checkout. Total outstanding: ${fmtMoney(args.totalOutstanding)}.`,
+      metadata: {
+        alertDate: args.alertDate,
+        overdueCount: args.overdueCount,
+        totalOutstanding: args.totalOutstanding,
+        severity: args.totalOutstanding > 0 ? 'warning' : 'info',
+        summary: `${fmtMoney(args.totalOutstanding)} outstanding across ${args.overdueCount} overdue folio${args.overdueCount === 1 ? '' : 's'}`,
+        href: '/reservations',
+        reservations: args.reservations.map((reservation) => ({
+          reservationId: reservation.reservationId,
+          reservationNo: reservation.reservationNo,
+          guestName: reservation.guestName,
+          roomNumber: reservation.roomNumber,
+          localCheckoutDate: reservation.localCheckoutDate,
+          balance: reservation.balance,
+          daysOverdue: reservation.daysOverdue,
+        })),
       },
     };
   }
@@ -370,6 +564,113 @@ export class ReservationsService {
     };
   }
 
+  private buildUpcomingArrivalSummaryEmail(args: {
+    hotelName: string;
+    alertDate: string;
+    arrivalDate: string;
+    arrivalCount: number;
+    reservations: Array<{
+      reservationNo: string;
+      guestName: string;
+      roomNumber: string;
+      checkIn: Date;
+      totalAmount: number;
+      adults: number;
+      children: number;
+    }>;
+  }) {
+    const rows = args.reservations
+      .map(
+        (reservation) => `
+          <tr>
+            <td style="padding: 10px 16px 10px 0; color: #0f172a;">${escapeHtml(reservation.reservationNo)}</td>
+            <td style="padding: 10px 16px 10px 0; color: #0f172a;">${escapeHtml(reservation.guestName)}</td>
+            <td style="padding: 10px 16px 10px 0; color: #0f172a;">${escapeHtml(reservation.roomNumber)}</td>
+            <td style="padding: 10px 16px 10px 0; color: #0f172a;">${fmtDateTime(reservation.checkIn)}</td>
+            <td style="padding: 10px 16px 10px 0; color: #0f172a;">${reservation.adults + reservation.children}</td>
+            <td style="padding: 10px 0; color: #0f172a;">${fmtMoney(reservation.totalAmount)}</td>
+          </tr>
+        `,
+      )
+      .join('');
+
+    return {
+      subject: `Upcoming arrivals for ${args.arrivalDate}`,
+      text:
+        `${args.hotelName}: ${args.arrivalCount} reservation${args.arrivalCount === 1 ? '' : 's'} are due to arrive on ${args.arrivalDate}.\n` +
+        args.reservations
+          .map(
+            (reservation) =>
+              `- ${reservation.reservationNo}: ${reservation.guestName} to room ${reservation.roomNumber} at ${fmtDateTime(reservation.checkIn)}`,
+          )
+          .join('\n'),
+      html: `
+        <div>
+          <p style="margin: 0 0 12px;">Arrival prep summary for <strong>${escapeHtml(args.hotelName)}</strong>.</p>
+          <p style="margin: 0 0 18px; color: #475569;">
+            ${args.arrivalCount} reservation${args.arrivalCount === 1 ? '' : 's'} are scheduled to arrive on <strong>${escapeHtml(args.arrivalDate)}</strong>. Use this list to prepare rooms, welcome flow, and staffing coverage.
+          </p>
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse; margin: 0 0 8px;">
+            <tr>
+              ${this.buildEmailMetricCard({ label: 'Arrivals', value: String(args.arrivalCount) })}
+              ${this.buildEmailMetricCard({ label: 'Arrival Date', value: args.arrivalDate })}
+            </tr>
+          </table>
+          <div style="margin-top: 16px; overflow: hidden; border: 1px solid #e2e8f0; border-radius: 16px;">
+            <div style="padding: 14px 16px; background: #f8fafc; font-weight: 700; color: #0f172a;">Reservations arriving next</div>
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
+              <thead>
+                <tr>
+                  <th align="left" style="padding: 12px 16px 10px 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;">Reservation</th>
+                  <th align="left" style="padding: 12px 16px 10px 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;">Guest</th>
+                  <th align="left" style="padding: 12px 16px 10px 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;">Room</th>
+                  <th align="left" style="padding: 12px 16px 10px 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;">Arrival</th>
+                  <th align="left" style="padding: 12px 16px 10px 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;">Guests</th>
+                  <th align="left" style="padding: 12px 0 10px; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;">Value</th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+        </div>
+      `,
+    };
+  }
+
+  private buildUpcomingArrivalInAppNotification(args: {
+    alertDate: string;
+    arrivalDate: string;
+    arrivalCount: number;
+    reservations: Array<{
+      reservationId: string;
+      reservationNo: string;
+      guestName: string;
+      roomNumber: string;
+      checkIn: Date;
+    }>;
+  }) {
+    return {
+      title: args.arrivalCount === 1 ? 'Upcoming arrival tomorrow' : 'Upcoming arrivals tomorrow',
+      message:
+        `${args.arrivalCount} reservation${args.arrivalCount === 1 ? '' : 's'} are due to arrive on ${args.arrivalDate}. Review room readiness and front-desk coverage.`,
+      metadata: {
+        alertDate: args.alertDate,
+        arrivalDate: args.arrivalDate,
+        arrivalCount: args.arrivalCount,
+        severity: 'info',
+        summary: `${args.arrivalCount} upcoming arrival${args.arrivalCount === 1 ? '' : 's'} scheduled for ${args.arrivalDate}`,
+        href: '/reservations',
+        reservations: args.reservations.map((reservation) => ({
+          reservationId: reservation.reservationId,
+          reservationNo: reservation.reservationNo,
+          guestName: reservation.guestName,
+          roomNumber: reservation.roomNumber,
+          checkIn: reservation.checkIn.toISOString(),
+        })),
+      },
+    };
+  }
+
   private buildCheckOutInAppNotification(args: {
     reservationId: string;
     reservationNo: string;
@@ -378,14 +679,16 @@ export class ReservationsService {
     checkedOutAt: Date;
   }) {
     return {
-      title: 'Guest checked out',
-      message: `${args.guestName} checked out of room ${args.roomNumber} from reservation ${args.reservationNo}.`,
+      title: 'Checkout completed',
+      message: `${args.guestName} checked out of room ${args.roomNumber} under reservation ${args.reservationNo}. Room status should be reviewed for turnover.`,
       metadata: {
         reservationId: args.reservationId,
         reservationNo: args.reservationNo,
         guestName: args.guestName,
         roomNumber: args.roomNumber,
         checkedOutAt: args.checkedOutAt.toISOString(),
+        severity: 'info',
+        summary: `Room ${args.roomNumber} is now ready for post-checkout follow-up`,
         href: `/reservations/${args.reservationId}`,
       },
     };
@@ -430,29 +733,41 @@ export class ReservationsService {
           )
           .join('\n'),
       html: `
-        <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.6;">
+        <div>
           <p style="margin: 0 0 12px;">
-            Checkout summary for <strong>${escapeHtml(args.hotelName)}</strong> on
+            Checkout review for <strong>${escapeHtml(args.hotelName)}</strong> on
             <strong>${escapeHtml(args.alertDate)}</strong> at <strong>${escapeHtml(args.scheduledAt)}</strong>.
           </p>
-          <p style="margin: 0 0 12px;">
-            <strong>${args.reservations.length}</strong> checked-in reservations are due out or overdue.
+          <p style="margin: 0 0 18px; color: #475569;">
+            ${args.reservations.length} active stay${args.reservations.length === 1 ? ' is' : 's are'} currently due out or already overdue and may need front-desk follow-up.
           </p>
-          <ul style="margin: 0 0 12px; padding-left: 18px;">
-            <li>Due today: ${args.dueTodayCount}</li>
-            <li>Overdue: ${args.overdueCount}</li>
-          </ul>
-          <table style="border-collapse: collapse;">
-            <thead>
-              <tr>
-                <th align="left" style="padding: 6px 12px 6px 0;">Reservation</th>
-                <th align="left" style="padding: 6px 12px 6px 0;">Guest</th>
-                <th align="left" style="padding: 6px 12px 6px 0;">Room</th>
-                <th align="left" style="padding: 6px 0;">Checkout</th>
-              </tr>
-            </thead>
-            <tbody>${rows}</tbody>
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse; margin: 0 0 8px;">
+            <tr>
+              ${this.buildEmailMetricCard({ label: 'Due Today', value: String(args.dueTodayCount) })}
+              ${this.buildEmailMetricCard({ label: 'Overdue', value: String(args.overdueCount), tone: args.overdueCount > 0 ? 'success' : 'default' })}
+            </tr>
           </table>
+          <div style="margin-top: 16px; overflow: hidden; border: 1px solid #e2e8f0; border-radius: 16px;">
+            <div style="padding: 14px 16px; background: #f8fafc; font-weight: 700; color: #0f172a;">Reservations needing action</div>
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
+              <thead>
+                <tr>
+                  <th align="left" style="padding: 12px 16px 10px 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;">Reservation</th>
+                  <th align="left" style="padding: 12px 16px 10px 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;">Guest</th>
+                  <th align="left" style="padding: 12px 16px 10px 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;">Room</th>
+                  <th align="left" style="padding: 12px 0 10px; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;">Checkout</th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+          ${
+            args.overdueCount > 0
+              ? `<p style="margin: 16px 0 0; padding: 12px 14px; border-radius: 14px; background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412;">
+                  ${args.overdueCount} reservation${args.overdueCount === 1 ? '' : 's'} are already overdue and should be prioritised.
+                </p>`
+              : ''
+          }
         </div>
       `,
     };
@@ -470,15 +785,23 @@ export class ReservationsService {
       checkOut: Date;
     }>;
   }) {
+    const severity = args.overdueCount > 0 ? 'warning' : 'info';
+    const summary =
+      args.overdueCount > 0
+        ? `${args.overdueCount} overdue checkout${args.overdueCount === 1 ? '' : 's'} need attention`
+        : `${args.dueTodayCount} checkout${args.dueTodayCount === 1 ? '' : 's'} due today`;
+
     return {
-      title: 'Checkout attention needed',
+      title: args.overdueCount > 0 ? 'Overdue checkouts need attention' : 'Checkouts due today',
       message:
-        `${args.reservations.length} checked-in reservations are due out or overdue for ${args.alertDate}. ` +
+        `${args.reservations.length} active stay${args.reservations.length === 1 ? ' is' : 's are'} scheduled for follow-up on ${args.alertDate}. ` +
         `Due today: ${args.dueTodayCount}. Overdue: ${args.overdueCount}.`,
       metadata: {
         alertDate: args.alertDate,
         dueTodayCount: args.dueTodayCount,
         overdueCount: args.overdueCount,
+        severity,
+        summary,
         href:
           args.overdueCount > 0
             ? '/reservations?checkoutTiming=overdue'
@@ -616,21 +939,33 @@ export class ReservationsService {
           )
           .join('\n'),
       html: `
-        <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.6;">
+        <div>
           <p style="margin: 0 0 12px;">
-            <strong>${escapeHtml(args.hotelName)}</strong> has ${args.tasks.length} checkout prep tasks still open beyond the ${args.graceHours}-hour follow-up window on ${escapeHtml(args.alertDate)}.
+            <strong>${escapeHtml(args.hotelName)}</strong> still has checkout-prep tasks open beyond the ${args.graceHours}-hour follow-up window on ${escapeHtml(args.alertDate)}.
           </p>
-          <table style="border-collapse: collapse;">
-            <thead>
-              <tr>
-                <th style="padding: 0 12px 6px 0; text-align: left;">Room</th>
-                <th style="padding: 0 12px 6px 0; text-align: left;">Status</th>
-                <th style="padding: 0 12px 6px 0; text-align: left;">Due By</th>
-                <th style="padding: 0; text-align: left;">Assigned</th>
-              </tr>
-            </thead>
-            <tbody>${rows}</tbody>
+          <p style="margin: 0 0 18px; color: #475569;">
+            Review the task list below so rooms can be turned over quickly and escalations can be handled early.
+          </p>
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse; margin: 0 0 8px;">
+            <tr>
+              ${this.buildEmailMetricCard({ label: 'Open Follow-ups', value: String(args.tasks.length) })}
+              ${this.buildEmailMetricCard({ label: 'Grace Window', value: `${args.graceHours} hour${args.graceHours === 1 ? '' : 's'}` })}
+            </tr>
           </table>
+          <div style="margin-top: 16px; overflow: hidden; border: 1px solid #e2e8f0; border-radius: 16px;">
+            <div style="padding: 14px 16px; background: #f8fafc; font-weight: 700; color: #0f172a;">Tasks still open</div>
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
+              <thead>
+                <tr>
+                  <th style="padding: 12px 16px 10px 0; text-align: left; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;">Room</th>
+                  <th style="padding: 12px 16px 10px 0; text-align: left; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;">Status</th>
+                  <th style="padding: 12px 16px 10px 0; text-align: left; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;">Due By</th>
+                  <th style="padding: 12px 0 10px; text-align: left; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;">Assigned</th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
         </div>
       `,
     };
@@ -650,13 +985,20 @@ export class ReservationsService {
       notes: string | null;
     }>;
   }) {
+    const overdueInProgress = args.tasks.filter((task) => task.status === TaskStatus.IN_PROGRESS).length;
+
     return {
-      title: 'Checkout housekeeping follow-up',
-      message: `${args.tasks.length} checkout prep tasks are still open beyond ${args.graceHours} hours as of ${args.alertDate}.`,
+      title: 'Checkout prep tasks need follow-up',
+      message: `${args.tasks.length} checkout prep task${args.tasks.length === 1 ? ' is' : 's are'} still open beyond the ${args.graceHours}-hour window as of ${args.alertDate}.`,
       metadata: {
         alertDate: args.alertDate,
         graceHours: args.graceHours,
         jobType: HOUSEKEEPING_FOLLOW_UP_SCAN_JOB_TYPE,
+        severity: 'warning',
+        summary:
+          overdueInProgress > 0
+            ? `${overdueInProgress} task${overdueInProgress === 1 ? '' : 's'} already in progress still need closure`
+            : 'Pending checkout prep tasks need assignment or completion',
         href: args.tasks[0] ? `/housekeeping/tasks?taskId=${args.tasks[0].taskId}` : '/housekeeping/tasks',
         tasks: args.tasks.map((task) => ({
           taskId: task.taskId,
@@ -668,6 +1010,208 @@ export class ReservationsService {
           assignedToName: task.assignedToName,
           notes: task.notes,
         })),
+      },
+    };
+  }
+
+  private buildNoShowFollowUpEmail(args: {
+    hotelName: string;
+    alertDate: string;
+    reservations: Array<{
+      reservationId: string;
+      reservationNo: string;
+      guestName: string;
+      roomNumber: string;
+      localCheckInDate: string;
+      status: ReservationStatus;
+      nightsSinceArrival: number;
+    }>;
+  }) {
+    const rows = args.reservations
+      .map(
+        (reservation) => `
+          <tr>
+            <td style="padding: 6px 12px 6px 0;">${escapeHtml(reservation.reservationNo)}</td>
+            <td style="padding: 6px 12px 6px 0;">${escapeHtml(reservation.guestName)}</td>
+            <td style="padding: 6px 12px 6px 0;">${escapeHtml(reservation.roomNumber)}</td>
+            <td style="padding: 6px 12px 6px 0;">${escapeHtml(reservation.localCheckInDate)}</td>
+            <td style="padding: 6px 0;">${reservation.nightsSinceArrival}</td>
+          </tr>
+        `,
+      )
+      .join('');
+
+    return {
+      subject: `No-show follow-up for ${args.hotelName}`,
+      text:
+        `${args.reservations.length} reservation${args.reservations.length === 1 ? '' : 's'} still need no-show review as of ${args.alertDate}.\n` +
+        args.reservations
+          .map(
+            (reservation) =>
+              `- ${reservation.reservationNo}: ${reservation.guestName}, room ${reservation.roomNumber}, arrival ${reservation.localCheckInDate}`,
+          )
+          .join('\n'),
+      html: `
+        <div>
+          <p style="margin: 0 0 12px;">
+            <strong>${escapeHtml(args.hotelName)}</strong> has reservations that were due to arrive on or before ${escapeHtml(args.alertDate)} but are still pending front-desk review.
+          </p>
+          <p style="margin: 0 0 18px; color: #475569;">
+            Confirm whether each stay should be checked in, cancelled, or marked as no-show so room availability and guest history stay accurate.
+          </p>
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse; margin: 0 0 8px;">
+            <tr>
+              ${this.buildEmailMetricCard({ label: 'Needs Review', value: String(args.reservations.length) })}
+              ${this.buildEmailMetricCard({ label: 'Alert Date', value: args.alertDate })}
+            </tr>
+          </table>
+          <div style="margin-top: 16px; overflow: hidden; border: 1px solid #e2e8f0; border-radius: 16px;">
+            <div style="padding: 14px 16px; background: #f8fafc; font-weight: 700; color: #0f172a;">Reservations awaiting action</div>
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
+              <thead>
+                <tr>
+                  <th style="padding: 12px 16px 10px 0; text-align: left; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;">Reservation</th>
+                  <th style="padding: 12px 16px 10px 0; text-align: left; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;">Guest</th>
+                  <th style="padding: 12px 16px 10px 0; text-align: left; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;">Room</th>
+                  <th style="padding: 12px 16px 10px 0; text-align: left; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;">Arrival Date</th>
+                  <th style="padding: 12px 0 10px; text-align: left; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;">Days Open</th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+        </div>
+      `,
+    };
+  }
+
+  private buildNoShowFollowUpInAppNotification(args: {
+    alertDate: string;
+    reservations: Array<{
+      reservationId: string;
+      reservationNo: string;
+      guestName: string;
+      roomNumber: string;
+      localCheckInDate: string;
+      status: ReservationStatus;
+      nightsSinceArrival: number;
+    }>;
+  }) {
+    const longestWaiting = args.reservations.reduce(
+      (max, reservation) => Math.max(max, reservation.nightsSinceArrival),
+      0,
+    );
+
+    return {
+      title: 'Reservations need no-show review',
+      message: `${args.reservations.length} arrival${args.reservations.length === 1 ? '' : 's'} scheduled on or before ${args.alertDate} still need front-desk follow-up.`,
+      metadata: {
+        alertDate: args.alertDate,
+        jobType: NO_SHOW_FOLLOW_UP_SCAN_JOB_TYPE,
+        severity: 'warning',
+        candidateCount: args.reservations.length,
+        summary:
+          longestWaiting > 0
+            ? `Oldest pending arrival has been waiting ${longestWaiting} day${longestWaiting === 1 ? '' : 's'}`
+            : 'Same-day arrivals still need check-in or no-show action',
+        href: args.reservations[0]
+          ? `/reservations/${args.reservations[0].reservationId}`
+          : '/reservations',
+        reservations: args.reservations,
+      },
+    };
+  }
+
+  private buildDailyDigestEmail(args: {
+    hotelName: string;
+    alertDate: string;
+    nextArrivalDate: string;
+    arrivalsTomorrow: number;
+    departuresToday: number;
+    overdueCheckouts: number;
+    overduePayments: number;
+    openCheckoutPrepTasks: number;
+    urgentMaintenanceOpen: number;
+  }) {
+    return {
+      subject: `Daily digest for ${args.hotelName} on ${args.alertDate}`,
+      text:
+        `${args.hotelName}: daily operations digest for ${args.alertDate}.\n` +
+        `Tomorrow arrivals (${args.nextArrivalDate}): ${args.arrivalsTomorrow}\n` +
+        `Due out today: ${args.departuresToday}\n` +
+        `Overdue checkouts: ${args.overdueCheckouts}\n` +
+        `Overdue payments: ${args.overduePayments}\n` +
+        `Open checkout prep tasks: ${args.openCheckoutPrepTasks}\n` +
+        `Open urgent maintenance requests: ${args.urgentMaintenanceOpen}`,
+      html: `
+        <div>
+          <p style="margin: 0 0 12px;">Daily digest for <strong>${escapeHtml(args.hotelName)}</strong> on <strong>${escapeHtml(args.alertDate)}</strong>.</p>
+          <p style="margin: 0 0 18px; color: #475569;">
+            This summary highlights the next wave of guest movement plus the most important unresolved operational follow-ups.
+          </p>
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse; margin: 0 0 12px;">
+            <tr>
+              ${this.buildEmailMetricCard({ label: 'Tomorrow Arrivals', value: String(args.arrivalsTomorrow) })}
+              ${this.buildEmailMetricCard({ label: 'Due Out Today', value: String(args.departuresToday) })}
+            </tr>
+            <tr>
+              ${this.buildEmailMetricCard({ label: 'Overdue Checkouts', value: String(args.overdueCheckouts) })}
+              ${this.buildEmailMetricCard({ label: 'Overdue Payments', value: String(args.overduePayments) })}
+            </tr>
+            <tr>
+              ${this.buildEmailMetricCard({ label: 'Open Checkout Prep', value: String(args.openCheckoutPrepTasks) })}
+              ${this.buildEmailMetricCard({ label: 'Urgent Maintenance', value: String(args.urgentMaintenanceOpen) })}
+            </tr>
+          </table>
+          <div style="margin-top: 12px; overflow: hidden; border: 1px solid #e2e8f0; border-radius: 16px;">
+            <div style="padding: 14px 16px; background: #f8fafc; font-weight: 700; color: #0f172a;">Operational outlook</div>
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
+              ${this.buildEmailDetailRows([
+                { label: 'Digest Date', value: args.alertDate },
+                { label: 'Next Arrival Date', value: args.nextArrivalDate },
+                { label: 'Tomorrow Arrivals', value: String(args.arrivalsTomorrow) },
+                { label: 'Departures Due Today', value: String(args.departuresToday) },
+                { label: 'Overdue Checkouts', value: String(args.overdueCheckouts) },
+                { label: 'Overdue Payments', value: String(args.overduePayments) },
+                { label: 'Checkout Prep Still Open', value: String(args.openCheckoutPrepTasks) },
+                { label: 'Urgent Maintenance Still Open', value: String(args.urgentMaintenanceOpen) },
+              ])}
+            </table>
+          </div>
+        </div>
+      `,
+    };
+  }
+
+  private buildDailyDigestInAppNotification(args: {
+    alertDate: string;
+    nextArrivalDate: string;
+    arrivalsTomorrow: number;
+    departuresToday: number;
+    overdueCheckouts: number;
+    overduePayments: number;
+    openCheckoutPrepTasks: number;
+    urgentMaintenanceOpen: number;
+  }) {
+    return {
+      title: 'Daily operations digest ready',
+      message: `${args.arrivalsTomorrow} arrival${args.arrivalsTomorrow === 1 ? '' : 's'} are due on ${args.nextArrivalDate}, with ${args.overdueCheckouts} overdue checkout${args.overdueCheckouts === 1 ? '' : 's'} and ${args.overduePayments} overdue payment${args.overduePayments === 1 ? '' : 's'} to review.`,
+      metadata: {
+        alertDate: args.alertDate,
+        nextArrivalDate: args.nextArrivalDate,
+        jobType: DAILY_DIGEST_SCAN_JOB_TYPE,
+        severity:
+          args.overdueCheckouts > 0 || args.overduePayments > 0 || args.urgentMaintenanceOpen > 0
+            ? 'warning'
+            : 'info',
+        summary: `${args.departuresToday} departures due today · ${args.openCheckoutPrepTasks} checkout prep task${args.openCheckoutPrepTasks === 1 ? '' : 's'} still open`,
+        href: '/reports',
+        arrivalsTomorrow: args.arrivalsTomorrow,
+        departuresToday: args.departuresToday,
+        overdueCheckouts: args.overdueCheckouts,
+        overduePayments: args.overduePayments,
+        openCheckoutPrepTasks: args.openCheckoutPrepTasks,
+        urgentMaintenanceOpen: args.urgentMaintenanceOpen,
       },
     };
   }
@@ -1730,6 +2274,672 @@ export class ReservationsService {
       hotelsProcessed,
       hotelsFailed,
       tasksFlagged,
+    };
+  }
+
+  async runNoShowFollowUpScanForDate(
+    referenceDate = new Date(),
+    hotelIdFilter?: string,
+    force = false,
+  ) {
+    const reference = new Date(referenceDate);
+    const hotels = (await this.prisma.hotel.findMany({
+      where: hotelIdFilter ? { id: hotelIdFilter } : undefined,
+      select: {
+        id: true,
+        name: true,
+        timezone: true,
+        cronSettings: {
+          where: { jobType: NO_SHOW_FOLLOW_UP_SCAN_JOB_TYPE },
+          take: 1,
+        },
+      } as any,
+      orderBy: { createdAt: 'asc' },
+    })) as unknown as Array<{
+      id: string;
+      name: string;
+      timezone: string | null;
+      cronSettings: Array<{
+        enabled: boolean;
+        runAtHour: number;
+        runAtMinute: number;
+        lastTriggeredAt?: Date | null;
+      }>;
+    }>;
+
+    let reservationsFlagged = 0;
+    let hotelsProcessed = 0;
+    let hotelsFailed = 0;
+
+    for (const hotel of hotels) {
+      const cronSetting = hotel.cronSettings[0];
+      const enabled = cronSetting?.enabled ?? true;
+      const runAtHour = cronSetting?.runAtHour ?? 20;
+      const runAtMinute = cronSetting?.runAtMinute ?? 0;
+      const timezone = hotel.timezone || 'Africa/Lagos';
+
+      if (!enabled && !force) continue;
+
+      const localNow = getZonedDateParts(reference, timezone);
+      const alertDate = localNow.date;
+      const localMinutes = localNow.hour * 60 + localNow.minute;
+      const scheduledMinutes = runAtHour * 60 + runAtMinute;
+
+      if (!force && localMinutes < scheduledMinutes) continue;
+
+      if (!force && cronSetting?.lastTriggeredAt) {
+        const lastTriggeredDate = getZonedDateParts(cronSetting.lastTriggeredAt, timezone).date;
+        if (lastTriggeredDate === alertDate) continue;
+      }
+
+      try {
+        const candidates = await this.prisma.reservation.findMany({
+          where: {
+            hotelId: hotel.id,
+            status: { in: [ReservationStatus.PENDING, ReservationStatus.CONFIRMED] },
+          },
+          select: {
+            id: true,
+            reservationNo: true,
+            checkIn: true,
+            status: true,
+            guest: { select: { firstName: true, lastName: true } },
+            room: { select: { number: true } },
+          },
+          orderBy: [{ checkIn: 'asc' }, { createdAt: 'asc' }],
+        });
+
+        const reservations = candidates
+          .map((reservation) => {
+            const localCheckInDate = getZonedDateParts(reservation.checkIn, timezone).date;
+            const guestName =
+              `${reservation.guest?.firstName ?? ''} ${reservation.guest?.lastName ?? ''}`.trim() ||
+              'Guest';
+
+            return {
+              reservationId: reservation.id,
+              reservationNo: reservation.reservationNo,
+              guestName,
+              roomNumber: reservation.room?.number ?? 'Unassigned',
+              localCheckInDate,
+              status: reservation.status,
+              nightsSinceArrival: diffDaysBetweenLocalDates(localCheckInDate, alertDate),
+            };
+          })
+          .filter(
+            (reservation) =>
+              reservation.localCheckInDate <= alertDate && reservation.nightsSinceArrival >= 0,
+          );
+
+        if (!reservations.length) {
+          await this.recordCronJobSuccess({
+            hotelId: hotel.id,
+            jobType: NO_SHOW_FOLLOW_UP_SCAN_JOB_TYPE,
+            enabled,
+            runAtHour,
+            runAtMinute,
+            triggeredAt: reference,
+          });
+          hotelsProcessed += 1;
+          continue;
+        }
+
+        await this.notifications.dispatch({
+          hotelId: hotel.id,
+          event: 'noShowFollowUp',
+          email: this.buildNoShowFollowUpEmail({
+            hotelName: hotel.name,
+            alertDate,
+            reservations,
+          }),
+          inApp: this.buildNoShowFollowUpInAppNotification({
+            alertDate,
+            reservations,
+          }),
+        });
+
+        await this.recordCronJobSuccess({
+          hotelId: hotel.id,
+          jobType: NO_SHOW_FOLLOW_UP_SCAN_JOB_TYPE,
+          enabled,
+          runAtHour,
+          runAtMinute,
+          triggeredAt: reference,
+        });
+
+        reservationsFlagged += reservations.length;
+        hotelsProcessed += 1;
+      } catch (error) {
+        hotelsFailed += 1;
+        this.logger.error(`No-show follow-up scan failed for hotel ${hotel.id}: ${String(error)}`);
+
+        await this.recordCronJobFailure({
+          hotelId: hotel.id,
+          jobType: NO_SHOW_FOLLOW_UP_SCAN_JOB_TYPE,
+          enabled,
+          runAtHour,
+          runAtMinute,
+          triggeredAt: reference,
+          error,
+        });
+      }
+    }
+
+    return {
+      date: reference.toISOString(),
+      hotelsProcessed,
+      hotelsFailed,
+      reservationsFlagged,
+    };
+  }
+
+  async runOverduePaymentScanForDate(
+    referenceDate = new Date(),
+    hotelIdFilter?: string,
+    force = false,
+  ) {
+    const reference = new Date(referenceDate);
+    const hotels = (await this.prisma.hotel.findMany({
+      where: hotelIdFilter ? { id: hotelIdFilter } : undefined,
+      select: {
+        id: true,
+        name: true,
+        timezone: true,
+        cronSettings: {
+          where: { jobType: OVERDUE_PAYMENT_SCAN_JOB_TYPE },
+          take: 1,
+        },
+      } as any,
+      orderBy: { createdAt: 'asc' },
+    })) as unknown as Array<{
+      id: string;
+      name: string;
+      timezone: string | null;
+      cronSettings: Array<{
+        enabled: boolean;
+        runAtHour: number;
+        runAtMinute: number;
+        lastTriggeredAt?: Date | null;
+      }>;
+    }>;
+
+    let reservationsFlagged = 0;
+    let hotelsProcessed = 0;
+    let hotelsFailed = 0;
+
+    for (const hotel of hotels) {
+      const cronSetting = hotel.cronSettings[0];
+      const enabled = cronSetting?.enabled ?? true;
+      const runAtHour = cronSetting?.runAtHour ?? 13;
+      const runAtMinute = cronSetting?.runAtMinute ?? 0;
+      const timezone = hotel.timezone || 'Africa/Lagos';
+
+      if (!enabled && !force) continue;
+
+      const localNow = getZonedDateParts(reference, timezone);
+      const alertDate = localNow.date;
+      const localMinutes = localNow.hour * 60 + localNow.minute;
+      const scheduledMinutes = runAtHour * 60 + runAtMinute;
+
+      if (!force && localMinutes < scheduledMinutes) continue;
+
+      if (!force && cronSetting?.lastTriggeredAt) {
+        const lastTriggeredDate = getZonedDateParts(cronSetting.lastTriggeredAt, timezone).date;
+        if (lastTriggeredDate === alertDate) continue;
+      }
+
+      try {
+        const candidates = await this.prisma.reservation.findMany({
+          where: {
+            hotelId: hotel.id,
+            status: { in: [ReservationStatus.CHECKED_IN, ReservationStatus.CHECKED_OUT] },
+            paymentStatus: { in: [PaymentStatus.UNPAID, PaymentStatus.PARTIAL] },
+          },
+          select: {
+            id: true,
+            reservationNo: true,
+            checkOut: true,
+            totalAmount: true,
+            paidAmount: true,
+            guest: { select: { firstName: true, lastName: true } },
+            room: { select: { number: true } },
+          },
+          orderBy: [{ checkOut: 'asc' }, { createdAt: 'asc' }],
+        });
+
+        const reservations = candidates
+          .map((reservation) => {
+            const localCheckoutDate = getZonedDateParts(reservation.checkOut, timezone).date;
+            const balance = Math.max(
+              0,
+              Number(reservation.totalAmount) - Number(reservation.paidAmount),
+            );
+            const guestName =
+              `${reservation.guest?.firstName ?? ''} ${reservation.guest?.lastName ?? ''}`.trim() ||
+              'Guest';
+
+            return {
+              reservationId: reservation.id,
+              reservationNo: reservation.reservationNo,
+              guestName,
+              roomNumber: reservation.room?.number ?? 'Unassigned',
+              localCheckoutDate,
+              paidAmount: Number(reservation.paidAmount),
+              totalAmount: Number(reservation.totalAmount),
+              balance,
+              daysOverdue: diffDaysBetweenLocalDates(localCheckoutDate, alertDate),
+            };
+          })
+          .filter((reservation) => reservation.localCheckoutDate < alertDate && reservation.balance > 0);
+
+        if (!reservations.length) {
+          await this.recordCronJobSuccess({
+            hotelId: hotel.id,
+            jobType: OVERDUE_PAYMENT_SCAN_JOB_TYPE,
+            enabled,
+            runAtHour,
+            runAtMinute,
+            triggeredAt: reference,
+          });
+          hotelsProcessed += 1;
+          continue;
+        }
+
+        const totalOutstanding = reservations.reduce((sum, reservation) => sum + reservation.balance, 0);
+
+        await this.notifications.dispatch({
+          hotelId: hotel.id,
+          event: 'paymentOverdue',
+          email: this.buildOverduePaymentSummaryEmail({
+            hotelName: hotel.name,
+            alertDate,
+            overdueCount: reservations.length,
+            totalOutstanding,
+            reservations,
+          }),
+          inApp: this.buildOverduePaymentInAppNotification({
+            alertDate,
+            overdueCount: reservations.length,
+            totalOutstanding,
+            reservations,
+          }),
+        });
+
+        await this.recordCronJobSuccess({
+          hotelId: hotel.id,
+          jobType: OVERDUE_PAYMENT_SCAN_JOB_TYPE,
+          enabled,
+          runAtHour,
+          runAtMinute,
+          triggeredAt: reference,
+        });
+
+        reservationsFlagged += reservations.length;
+        hotelsProcessed += 1;
+      } catch (error) {
+        hotelsFailed += 1;
+        this.logger.error(`Overdue payment scan failed for hotel ${hotel.id}: ${String(error)}`);
+
+        await this.recordCronJobFailure({
+          hotelId: hotel.id,
+          jobType: OVERDUE_PAYMENT_SCAN_JOB_TYPE,
+          enabled,
+          runAtHour,
+          runAtMinute,
+          triggeredAt: reference,
+          error,
+        });
+      }
+    }
+
+    return {
+      date: reference.toISOString(),
+      hotelsProcessed,
+      hotelsFailed,
+      reservationsFlagged,
+    };
+  }
+
+  async runUpcomingArrivalScanForDate(
+    referenceDate = new Date(),
+    hotelIdFilter?: string,
+    force = false,
+  ) {
+    const reference = new Date(referenceDate);
+    const hotels = (await this.prisma.hotel.findMany({
+      where: hotelIdFilter ? { id: hotelIdFilter } : undefined,
+      select: {
+        id: true,
+        name: true,
+        timezone: true,
+        cronSettings: {
+          where: { jobType: UPCOMING_ARRIVAL_SCAN_JOB_TYPE },
+          take: 1,
+        },
+      } as any,
+      orderBy: { createdAt: 'asc' },
+    })) as unknown as Array<{
+      id: string;
+      name: string;
+      timezone: string | null;
+      cronSettings: Array<{
+        enabled: boolean;
+        runAtHour: number;
+        runAtMinute: number;
+        lastTriggeredAt?: Date | null;
+      }>;
+    }>;
+
+    let reservationsFlagged = 0;
+    let hotelsProcessed = 0;
+    let hotelsFailed = 0;
+
+    for (const hotel of hotels) {
+      const cronSetting = hotel.cronSettings[0];
+      const enabled = cronSetting?.enabled ?? true;
+      const runAtHour = cronSetting?.runAtHour ?? 18;
+      const runAtMinute = cronSetting?.runAtMinute ?? 0;
+      const timezone = hotel.timezone || 'Africa/Lagos';
+
+      if (!enabled && !force) continue;
+
+      const localNow = getZonedDateParts(reference, timezone);
+      const alertDate = localNow.date;
+      const localMinutes = localNow.hour * 60 + localNow.minute;
+      const scheduledMinutes = runAtHour * 60 + runAtMinute;
+
+      if (!force && localMinutes < scheduledMinutes) continue;
+
+      if (!force && cronSetting?.lastTriggeredAt) {
+        const lastTriggeredDate = getZonedDateParts(cronSetting.lastTriggeredAt, timezone).date;
+        if (lastTriggeredDate === alertDate) continue;
+      }
+
+      try {
+        const tomorrowRef = new Date(reference);
+        tomorrowRef.setDate(tomorrowRef.getDate() + 1);
+        const arrivalDate = getZonedDateParts(tomorrowRef, timezone).date;
+
+        const candidates = await this.prisma.reservation.findMany({
+          where: {
+            hotelId: hotel.id,
+            status: { in: [ReservationStatus.PENDING, ReservationStatus.CONFIRMED] },
+          },
+          select: {
+            id: true,
+            reservationNo: true,
+            checkIn: true,
+            totalAmount: true,
+            adults: true,
+            children: true,
+            guest: { select: { firstName: true, lastName: true } },
+            room: { select: { number: true } },
+          },
+          orderBy: [{ checkIn: 'asc' }, { createdAt: 'asc' }],
+        });
+
+        const reservations = candidates
+          .map((reservation) => {
+            const localCheckInDate = getZonedDateParts(reservation.checkIn, timezone).date;
+            const guestName =
+              `${reservation.guest?.firstName ?? ''} ${reservation.guest?.lastName ?? ''}`.trim() ||
+              'Guest';
+
+            return {
+              reservationId: reservation.id,
+              reservationNo: reservation.reservationNo,
+              guestName,
+              roomNumber: reservation.room?.number ?? 'Unassigned',
+              checkIn: reservation.checkIn,
+              localCheckInDate,
+              totalAmount: Number(reservation.totalAmount),
+              adults: reservation.adults,
+              children: reservation.children,
+            };
+          })
+          .filter((reservation) => reservation.localCheckInDate === arrivalDate);
+
+        if (!reservations.length) {
+          await this.recordCronJobSuccess({
+            hotelId: hotel.id,
+            jobType: UPCOMING_ARRIVAL_SCAN_JOB_TYPE,
+            enabled,
+            runAtHour,
+            runAtMinute,
+            triggeredAt: reference,
+          });
+          hotelsProcessed += 1;
+          continue;
+        }
+
+        await this.notifications.dispatch({
+          hotelId: hotel.id,
+          event: 'upcomingArrival',
+          email: this.buildUpcomingArrivalSummaryEmail({
+            hotelName: hotel.name,
+            alertDate,
+            arrivalDate,
+            arrivalCount: reservations.length,
+            reservations,
+          }),
+          inApp: this.buildUpcomingArrivalInAppNotification({
+            alertDate,
+            arrivalDate,
+            arrivalCount: reservations.length,
+            reservations,
+          }),
+        });
+
+        await this.recordCronJobSuccess({
+          hotelId: hotel.id,
+          jobType: UPCOMING_ARRIVAL_SCAN_JOB_TYPE,
+          enabled,
+          runAtHour,
+          runAtMinute,
+          triggeredAt: reference,
+        });
+
+        reservationsFlagged += reservations.length;
+        hotelsProcessed += 1;
+      } catch (error) {
+        hotelsFailed += 1;
+        this.logger.error(`Upcoming arrival scan failed for hotel ${hotel.id}: ${String(error)}`);
+
+        await this.recordCronJobFailure({
+          hotelId: hotel.id,
+          jobType: UPCOMING_ARRIVAL_SCAN_JOB_TYPE,
+          enabled,
+          runAtHour,
+          runAtMinute,
+          triggeredAt: reference,
+          error,
+        });
+      }
+    }
+
+    return {
+      date: reference.toISOString(),
+      hotelsProcessed,
+      hotelsFailed,
+      reservationsFlagged,
+    };
+  }
+
+  async runDailyDigestScanForDate(
+    referenceDate = new Date(),
+    hotelIdFilter?: string,
+    force = false,
+  ) {
+    const reference = new Date(referenceDate);
+    const hotels = (await this.prisma.hotel.findMany({
+      where: hotelIdFilter ? { id: hotelIdFilter } : undefined,
+      select: {
+        id: true,
+        name: true,
+        timezone: true,
+        cronSettings: {
+          where: { jobType: DAILY_DIGEST_SCAN_JOB_TYPE },
+          take: 1,
+        },
+      } as any,
+      orderBy: { createdAt: 'asc' },
+    })) as unknown as Array<{
+      id: string;
+      name: string;
+      timezone: string | null;
+      cronSettings: Array<{
+        enabled: boolean;
+        runAtHour: number;
+        runAtMinute: number;
+        lastTriggeredAt?: Date | null;
+      }>;
+    }>;
+
+    let hotelsProcessed = 0;
+    let hotelsFailed = 0;
+
+    for (const hotel of hotels) {
+      const cronSetting = hotel.cronSettings[0];
+      const enabled = cronSetting?.enabled ?? true;
+      const runAtHour = cronSetting?.runAtHour ?? 19;
+      const runAtMinute = cronSetting?.runAtMinute ?? 0;
+      const timezone = hotel.timezone || 'Africa/Lagos';
+
+      if (!enabled && !force) continue;
+
+      const localNow = getZonedDateParts(reference, timezone);
+      const alertDate = localNow.date;
+      const localMinutes = localNow.hour * 60 + localNow.minute;
+      const scheduledMinutes = runAtHour * 60 + runAtMinute;
+
+      if (!force && localMinutes < scheduledMinutes) continue;
+
+      if (!force && cronSetting?.lastTriggeredAt) {
+        const lastTriggeredDate = getZonedDateParts(cronSetting.lastTriggeredAt, timezone).date;
+        if (lastTriggeredDate === alertDate) continue;
+      }
+
+      try {
+        const tomorrowRef = new Date(reference);
+        tomorrowRef.setDate(tomorrowRef.getDate() + 1);
+        const nextArrivalDate = getZonedDateParts(tomorrowRef, timezone).date;
+
+        const [
+          arrivalCandidates,
+          checkedInReservations,
+          overduePaymentCandidates,
+          openCheckoutPrepTasks,
+          urgentMaintenanceOpen,
+        ] = await Promise.all([
+          this.prisma.reservation.findMany({
+            where: {
+              hotelId: hotel.id,
+              status: { in: [ReservationStatus.PENDING, ReservationStatus.CONFIRMED] },
+            },
+            select: { checkIn: true },
+          }),
+          this.prisma.reservation.findMany({
+            where: {
+              hotelId: hotel.id,
+              status: ReservationStatus.CHECKED_IN,
+            },
+            select: { checkOut: true },
+          }),
+          this.prisma.reservation.findMany({
+            where: {
+              hotelId: hotel.id,
+              status: { in: [ReservationStatus.CHECKED_IN, ReservationStatus.CHECKED_OUT] },
+              paymentStatus: { in: [PaymentStatus.UNPAID, PaymentStatus.PARTIAL] },
+            },
+            select: { checkOut: true, totalAmount: true, paidAmount: true },
+          }),
+          this.prisma.housekeepingTask.count({
+            where: {
+              hotelId: hotel.id,
+              type: 'CHECKOUT_PREP',
+              status: { in: [TaskStatus.PENDING, TaskStatus.IN_PROGRESS] },
+            },
+          }),
+          this.prisma.maintenanceRequest.count({
+            where: {
+              hotelId: hotel.id,
+              priority: { in: ['HIGH', 'URGENT'] },
+              status: { in: ['OPEN', 'ASSIGNED', 'IN_PROGRESS', 'PENDING_PARTS'] },
+            },
+          }),
+        ]);
+
+        const arrivalsTomorrow = arrivalCandidates.filter(
+          (reservation) => getZonedDateParts(reservation.checkIn, timezone).date === nextArrivalDate,
+        ).length;
+        const departuresToday = checkedInReservations.filter(
+          (reservation) => getZonedDateParts(reservation.checkOut, timezone).date === alertDate,
+        ).length;
+        const overdueCheckouts = checkedInReservations.filter(
+          (reservation) => getZonedDateParts(reservation.checkOut, timezone).date < alertDate,
+        ).length;
+        const overduePayments = overduePaymentCandidates.filter((reservation) => {
+          const localCheckoutDate = getZonedDateParts(reservation.checkOut, timezone).date;
+          const balance =
+            Math.max(0, Number(reservation.totalAmount) - Number(reservation.paidAmount));
+          return localCheckoutDate < alertDate && balance > 0;
+        }).length;
+
+        await this.notifications.dispatch({
+          hotelId: hotel.id,
+          event: 'dailyDigest',
+          email: this.buildDailyDigestEmail({
+            hotelName: hotel.name,
+            alertDate,
+            nextArrivalDate,
+            arrivalsTomorrow,
+            departuresToday,
+            overdueCheckouts,
+            overduePayments,
+            openCheckoutPrepTasks,
+            urgentMaintenanceOpen,
+          }),
+          inApp: this.buildDailyDigestInAppNotification({
+            alertDate,
+            nextArrivalDate,
+            arrivalsTomorrow,
+            departuresToday,
+            overdueCheckouts,
+            overduePayments,
+            openCheckoutPrepTasks,
+            urgentMaintenanceOpen,
+          }),
+        });
+
+        await this.recordCronJobSuccess({
+          hotelId: hotel.id,
+          jobType: DAILY_DIGEST_SCAN_JOB_TYPE,
+          enabled,
+          runAtHour,
+          runAtMinute,
+          triggeredAt: reference,
+        });
+        hotelsProcessed += 1;
+      } catch (error) {
+        hotelsFailed += 1;
+        this.logger.error(`Daily digest scan failed for hotel ${hotel.id}: ${String(error)}`);
+
+        await this.recordCronJobFailure({
+          hotelId: hotel.id,
+          jobType: DAILY_DIGEST_SCAN_JOB_TYPE,
+          enabled,
+          runAtHour,
+          runAtMinute,
+          triggeredAt: reference,
+          error,
+        });
+      }
+    }
+
+    return {
+      date: reference.toISOString(),
+      hotelsProcessed,
+      hotelsFailed,
     };
   }
 

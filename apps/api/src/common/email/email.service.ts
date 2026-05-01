@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { renderBrandedEmail } from './email-template';
 
 type SendEmailOptions = {
   to: string;
@@ -30,6 +31,56 @@ export class EmailService {
     } catch {
       return null;
     }
+  }
+
+  private async getBranding(hotelId?: string | null) {
+    if (!hotelId) {
+      return {
+        hotelName: 'HotelOS',
+        hotelEmail: null,
+        hotelPhone: null,
+        hotelWebsite: null,
+        hotelAddress: null,
+        hotelLogo: null,
+      };
+    }
+
+    const hotel = await this.prisma.hotel.findUnique({
+      where: { id: hotelId },
+      select: {
+        name: true,
+        email: true,
+        phone: true,
+        website: true,
+        logo: true,
+        address: true,
+        city: true,
+        state: true,
+        country: true,
+      },
+    });
+
+    if (!hotel) {
+      return {
+        hotelName: 'HotelOS',
+        hotelEmail: null,
+        hotelPhone: null,
+        hotelWebsite: null,
+        hotelAddress: null,
+        hotelLogo: null,
+      };
+    }
+
+    const addressParts = [hotel.address, hotel.city, hotel.state, hotel.country].filter(Boolean);
+
+    return {
+      hotelName: hotel.name,
+      hotelEmail: hotel.email,
+      hotelPhone: hotel.phone,
+      hotelWebsite: hotel.website,
+      hotelAddress: addressParts.join(', '),
+      hotelLogo: hotel.logo,
+    };
   }
 
   private async logDelivery(args: {
@@ -71,6 +122,12 @@ export class EmailService {
   async sendEmail(options: SendEmailOptions) {
     const apiKey = this.config.get<string>('email.resendApiKey');
     const from = this.config.get<string>('email.from') || 'HotelOS <noreply@hotelos.com>';
+    const branding = await this.getBranding(options.hotelId ?? null);
+    const brandedHtml = renderBrandedEmail({
+      branding,
+      subject: options.subject,
+      html: options.html,
+    });
 
     if (!apiKey) {
       this.logger.warn(`RESEND_API_KEY is not configured; skipped email to ${options.to}.`);
@@ -100,7 +157,7 @@ export class EmailService {
           from,
           to: [options.to],
           subject: options.subject,
-          html: options.html,
+          html: brandedHtml,
           text: options.text,
         }),
       });

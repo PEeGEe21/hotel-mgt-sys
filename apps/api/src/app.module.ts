@@ -35,6 +35,7 @@ import { MailingModule } from './modules/mailing/mailing.module';
 import { RealtimeModule } from './modules/realtime/realtime.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { RedisModule } from './common/redis/redis.module';
+import { MonitoringModule } from './common/monitoring/monitoring.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { RedisModule } from './common/redis/redis.module';
       load: [appConfig],
       validate: validateEnv,
     }),
+    MonitoringModule,
     BullModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {

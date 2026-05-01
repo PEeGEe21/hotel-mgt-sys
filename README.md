@@ -52,6 +52,16 @@ pnpm dev
 **API Docs** → http://localhost:4000/api/docs  
 **DB Studio** → run `pnpm db:studio`
 
+## Operations
+
+- Health endpoints:
+  - `GET /api/v1/health/live`
+  - `GET /api/v1/health/ready`
+- Release metadata helper:
+  - `pnpm release:metadata`
+- Monitoring and rollback runbook:
+  - [docs/operations/monitoring-and-recovery.md](docs/operations/monitoring-and-recovery.md)
+
 ## Modules
 
 | Module | API Path | Description |

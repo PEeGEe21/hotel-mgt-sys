@@ -1,15 +1,28 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Bell, CheckCheck, ExternalLink, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import Pagination from '@/components/ui/pagination';
-import { useMarkAllNotificationsAsRead, useMarkNotificationAsRead, useNotifications } from '@/hooks/useNotifications';
+import {
+  type AppNotificationEvent,
+  useMarkAllNotificationsAsRead,
+  useMarkNotificationAsRead,
+  useNotifications,
+} from '@/hooks/useNotifications';
 import { usePermissions } from '@/hooks/usePermissions';
 import { getNotificationHref, getNotificationMailingHref } from '@/lib/notification-links';
+import {
+  formatNotificationEventLabel,
+  getNotificationContextSummary,
+  getNotificationSecondaryMessage,
+  getNotificationSeverity,
+  hasLinkedEmailDelivery,
+  NOTIFICATION_EVENT_LABELS,
+} from '@/lib/notification-presenter';
 import { cn } from '@/lib/utils';
 
 function formatFullDate(value: string) {
@@ -25,8 +38,15 @@ function formatFullDate(value: string) {
 export default function NotificationsPage() {
   const router = useRouter();
   const [page, setPage] = useState(1);
+  const [unreadOnly, setUnreadOnly] = useState(false);
+  const [eventFilter, setEventFilter] = useState<'all' | AppNotificationEvent>('all');
   const { can } = usePermissions();
-  const { data, isLoading } = useNotifications({ limit: 5, page });
+  const { data, isLoading } = useNotifications({
+    limit: 8,
+    page,
+    unreadOnly,
+    event: eventFilter === 'all' ? undefined : eventFilter,
+  });
   const markAsRead = useMarkNotificationAsRead();
   const markAllAsRead = useMarkAllNotificationsAsRead();
 
@@ -34,6 +54,10 @@ export default function NotificationsPage() {
   const unreadCount = data?.unreadCount ?? 0;
   const meta = data?.meta;
   const canViewMailing = can('view:mailing');
+  const eventOptions = useMemo(
+    () => ['all', ...Object.keys(NOTIFICATION_EVENT_LABELS)] as Array<'all' | AppNotificationEvent>,
+    [],
+  );
 
   const openNotification = (id: string, href: string | null, readAt: string | null) => {
     if (!readAt) markAsRead.mutate(id);
@@ -61,7 +85,7 @@ export default function NotificationsPage() {
             variant="outline"
             onClick={() => markAllAsRead.mutate()}
             disabled={unreadCount === 0 || markAllAsRead.isPending}
-            className="border-[#1e2536] bg-[#161b27] text-slate-200 hover:bg-white/5 hover:text-white"
+            className="!border-[#1e2536] bg-[#161b27] text-slate-200 hover:bg-white/5 hover:text-white"
           >
             <CheckCheck className="mr-2 h-4 w-4" />
             Mark all as read
@@ -71,7 +95,57 @@ export default function NotificationsPage() {
 
       <Card className="border-[#1e2536] bg-[#161b27] text-white shadow-none pb-0">
         <CardHeader className="border-b border-[#1e2536]">
-          <CardTitle className="text-base font-semibold">Recent activity</CardTitle>
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <CardTitle className="text-base font-semibold">Recent activity</CardTitle>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPage(1);
+                    setUnreadOnly(false);
+                  }}
+                  className={cn(
+                    'rounded-full border px-3 py-1.5 text-xs transition-colors',
+                    !unreadOnly
+                      ? 'border-blue-500/30 bg-blue-500/10 text-blue-200'
+                      : 'border-[#1e2536] bg-[#0f1117] text-slate-400 hover:text-slate-200',
+                  )}
+                >
+                  All
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPage(1);
+                    setUnreadOnly(true);
+                  }}
+                  className={cn(
+                    'rounded-full border px-3 py-1.5 text-xs transition-colors',
+                    unreadOnly
+                      ? 'border-blue-500/30 bg-blue-500/10 text-blue-200'
+                      : 'border-[#1e2536] bg-[#0f1117] text-slate-400 hover:text-slate-200',
+                  )}
+                >
+                  Unread only
+                </button>
+              </div>
+              <select
+                value={eventFilter}
+                onChange={(e) => {
+                  setPage(1);
+                  setEventFilter(e.target.value as 'all' | AppNotificationEvent);
+                }}
+                className="rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-2 text-sm text-slate-300 outline-none"
+              >
+                {eventOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option === 'all' ? 'All event types' : formatNotificationEventLabel(option)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="p-0">
           {isLoading && (
@@ -100,6 +174,10 @@ export default function NotificationsPage() {
                 const unread = !item.readAt;
                 const href = getNotificationHref(item.metadata);
                 const mailingHref = getNotificationMailingHref(item.metadata, canViewMailing);
+                const contextSummary = getNotificationContextSummary(item);
+                const secondaryMessage = getNotificationSecondaryMessage(item);
+                const linkedEmail = hasLinkedEmailDelivery(item.metadata);
+                const severity = getNotificationSeverity(item.metadata);
                 return (
                   <div
                     key={item.id}
@@ -111,25 +189,61 @@ export default function NotificationsPage() {
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <h3 className="text-sm font-semibold text-slate-100">{item.title}</h3>
+                        <Badge
+                          variant="outline"
+                          className="border-[#2a3448] bg-[#0f1117] text-slate-300"
+                        >
+                          {formatNotificationEventLabel(item.event)}
+                        </Badge>
                         {unread && (
                           <Badge className="rounded-full bg-blue-500/15 px-2 text-[11px] text-blue-200 hover:bg-blue-500/15">
                             New
+                          </Badge>
+                        )}
+                        {linkedEmail && (
+                          <Badge className="rounded-full bg-sky-500/15 px-2 text-[11px] text-sky-200 hover:bg-sky-500/15">
+                            Email linked
+                          </Badge>
+                        )}
+                        {severity && (
+                          <Badge
+                            className={cn(
+                              'rounded-full px-2 text-[11px] hover:bg-transparent',
+                              severity === 'critical' &&
+                                'bg-rose-500/15 text-rose-200 border border-rose-500/20',
+                              severity === 'warning' &&
+                                'bg-amber-500/15 text-amber-200 border border-amber-500/20',
+                              severity === 'success' &&
+                                'bg-emerald-500/15 text-emerald-200 border border-emerald-500/20',
+                              severity === 'info' &&
+                                'bg-slate-500/15 text-slate-200 border border-slate-500/20',
+                            )}
+                          >
+                            {severity}
                           </Badge>
                         )}
                       </div>
                       <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">
                         {item.message}
                       </p>
+                      {(contextSummary || secondaryMessage) && (
+                        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                          {contextSummary && (
+                            <span className="rounded-full border border-[#263046] bg-[#0f1117] px-2.5 py-1">
+                              {contextSummary}
+                            </span>
+                          )}
+                          {secondaryMessage && (
+                            <span className="rounded-full border border-[#263046] bg-[#0f1117] px-2.5 py-1">
+                              {secondaryMessage}
+                            </span>
+                          )}
+                        </div>
+                      )}
                       <p className="mt-3 text-xs text-slate-500">{formatFullDate(item.createdAt)}</p>
                     </div>
 
                     <div className="flex shrink-0 items-center gap-3">
-                      <Badge
-                        variant="outline"
-                        className="border-[#2a3448] bg-[#0f1117] text-slate-300"
-                      >
-                        {item.event}
-                      </Badge>
                       {href && (
                         <Button
                           type="button"

@@ -68,10 +68,14 @@ type DispatchNotificationResult = {
   };
   push: {
     eligible: number;
+    subscriptions: number;
     dispatched: number;
+    failed: number;
     skipped: number;
   };
 };
+
+type PushDeliveryStatus = 'healthy' | 'failing' | 'never_tested';
 
 @Injectable()
 export class NotificationsService {
@@ -209,11 +213,111 @@ export class NotificationsService {
     return { publicKey, privateKey, subject };
   }
 
+  private getPushFailureReason(error: unknown) {
+    if (error instanceof Error && error.message) return error.message;
+    return String(error);
+  }
+
+  private getPushHealth(subscription: {
+    lastSuccessAt: Date | null;
+    lastFailureAt: Date | null;
+  }): PushDeliveryStatus {
+    if (subscription.lastFailureAt && !subscription.lastSuccessAt) return 'failing';
+    if (
+      subscription.lastFailureAt &&
+      subscription.lastSuccessAt &&
+      subscription.lastFailureAt > subscription.lastSuccessAt
+    ) {
+      return 'failing';
+    }
+    if (subscription.lastSuccessAt) return 'healthy';
+    return 'never_tested';
+  }
+
+  private maskPushEndpoint(endpoint: string) {
+    try {
+      const url = new URL(endpoint);
+      const tail = url.pathname.length > 24 ? url.pathname.slice(-24) : url.pathname;
+      return `${url.origin}${tail}`;
+    } catch {
+      return endpoint.length > 48 ? endpoint.slice(-48) : endpoint;
+    }
+  }
+
   async getPushSettings() {
     const config = this.getPushConfig();
     return {
       enabled: Boolean(config),
       publicKey: config?.publicKey ?? null,
+    };
+  }
+
+  async getPushStatus(userId: string, hotelId: string | null) {
+    const [subscriptions, recentDeliveries] = await Promise.all([
+      this.prisma.pushSubscription.findMany({
+        where: {
+          userId,
+          ...(hotelId ? { hotelId } : {}),
+        },
+        orderBy: [{ updatedAt: 'desc' }],
+      }),
+      this.prisma.pushDeliveryLog.findMany({
+        where: {
+          userId,
+          ...(hotelId ? { hotelId } : {}),
+        },
+        orderBy: [{ createdAt: 'desc' }],
+        take: 10,
+      }),
+    ]);
+
+    const mappedSubscriptions = subscriptions.map((subscription) => ({
+      id: subscription.id,
+      endpointPreview: this.maskPushEndpoint(subscription.endpoint),
+      userAgent: subscription.userAgent,
+      createdAt: subscription.createdAt,
+      updatedAt: subscription.updatedAt,
+      lastAttemptAt: subscription.lastAttemptAt,
+      lastSuccessAt: subscription.lastSuccessAt,
+      lastFailureAt: subscription.lastFailureAt,
+      lastFailureReason: subscription.lastFailureReason,
+      lastFailureStatusCode: subscription.lastFailureStatusCode,
+      lastDeliveredEvent: subscription.lastDeliveredEvent,
+      health: this.getPushHealth(subscription),
+    }));
+
+    const healthCounts = mappedSubscriptions.reduce(
+      (acc: Record<PushDeliveryStatus, number>, subscription) => {
+        acc[subscription.health] += 1;
+        return acc;
+      },
+      { healthy: 0, failing: 0, never_tested: 0 } as Record<PushDeliveryStatus, number>,
+    );
+
+    const mappedDeliveries = recentDeliveries.map((delivery) => ({
+      id: delivery.id,
+      event: delivery.event,
+      title: delivery.title,
+      status: delivery.status,
+      failureReason: delivery.failureReason,
+      failureStatusCode: delivery.failureStatusCode,
+      endpointPreview: this.maskPushEndpoint(delivery.endpoint),
+      correlationId: delivery.correlationId,
+      isTest: delivery.isTest,
+      deliveredAt: delivery.deliveredAt,
+      createdAt: delivery.createdAt,
+    }));
+
+    return {
+      subscriptions: mappedSubscriptions,
+      recentDeliveries: mappedDeliveries,
+      summary: {
+        totalSubscriptions: mappedSubscriptions.length,
+        healthySubscriptions: healthCounts.healthy,
+        failingSubscriptions: healthCounts.failing,
+        neverTestedSubscriptions: healthCounts.never_tested,
+      },
+      lastTestResult: mappedDeliveries.find((delivery) => delivery.isTest) ?? null,
     };
   }
 
@@ -291,7 +395,7 @@ export class NotificationsService {
         totalRecipients: 0,
         email: { eligible: 0, sent: 0, failed: 0, skipped: 0 },
         inApp: { eligible: 0, dispatched: 0, skipped: 0 },
-        push: { eligible: 0, dispatched: 0, skipped: 0 },
+        push: { eligible: 0, subscriptions: 0, dispatched: 0, failed: 0, skipped: 0 },
       };
     }
 
@@ -309,7 +413,7 @@ export class NotificationsService {
         totalRecipients: 0,
         email: { eligible: 0, sent: 0, failed: 0, skipped: 0 },
         inApp: { eligible: 0, dispatched: 0, skipped: 0 },
-        push: { eligible: 0, dispatched: 0, skipped: 0 },
+        push: { eligible: 0, subscriptions: 0, dispatched: 0, failed: 0, skipped: 0 },
       };
     }
 
@@ -332,6 +436,9 @@ export class NotificationsService {
       preferences: this.resolvePreference(options.event, preferencesByUserId.get(user.id)),
     }));
     const dispatchMetadata = this.buildDispatchMetadata(options);
+    const correlationId =
+      typeof dispatchMetadata.correlationId === 'string' ? dispatchMetadata.correlationId : null;
+    const isTestDispatch = dispatchMetadata.source === 'profile-test-trigger';
 
     const emailEligibleRecipients = options.email
       ? resolvedRecipients.filter(
@@ -352,6 +459,7 @@ export class NotificationsService {
     let emailFailed = 0;
     let inAppDispatched = 0;
     let pushDispatched = 0;
+    let pushFailed = 0;
 
     if (options.email && emailEligibleRecipients.length) {
       const emailResults = await Promise.allSettled(
@@ -417,8 +525,10 @@ export class NotificationsService {
             user.preferences.channelPush && !(options.excludePushUserIds ?? []).includes(user.id),
         )
       : [];
+    let pushSubscriptionCount = 0;
 
     if (options.inApp && pushEligibleRecipients.length) {
+      const pushTitle = options.inApp.title;
       const pushConfig = this.getPushConfig();
       if (!pushConfig) {
         this.logger.warn(
@@ -435,8 +545,10 @@ export class NotificationsService {
             p256dh: true,
             auth: true,
             userId: true,
+            hotelId: true,
           },
         });
+        pushSubscriptionCount = subscriptions.length;
 
         const payload = JSON.stringify({
           title: options.inApp.title,
@@ -462,9 +574,65 @@ export class NotificationsService {
                 },
                 payload,
               );
+              const deliveredAt = new Date();
+              await this.prisma.$transaction([
+                this.prisma.pushDeliveryLog.create({
+                  data: {
+                    pushSubscriptionId: subscription.id,
+                    userId: subscription.userId,
+                    hotelId: subscription.hotelId,
+                    event: options.event,
+                    title: pushTitle,
+                    status: 'delivered',
+                    endpoint: subscription.endpoint,
+                    correlationId,
+                    isTest: isTestDispatch,
+                    metadata: dispatchMetadata as Prisma.InputJsonValue,
+                    deliveredAt,
+                  },
+                }),
+                this.prisma.pushSubscription.update({
+                  where: { id: subscription.id },
+                  data: {
+                    lastAttemptAt: deliveredAt,
+                    lastSuccessAt: deliveredAt,
+                    lastFailureAt: null,
+                    lastFailureReason: null,
+                    lastFailureStatusCode: null,
+                    lastDeliveredEvent: options.event,
+                  },
+                }),
+              ]);
               return true;
             } catch (error: any) {
               const statusCode = Number(error?.statusCode ?? 0);
+              const attemptedAt = new Date();
+              const failureReason = this.getPushFailureReason(error);
+              await this.prisma.pushDeliveryLog.create({
+                data: {
+                  pushSubscriptionId: subscription.id,
+                  userId: subscription.userId,
+                  hotelId: subscription.hotelId,
+                  event: options.event,
+                    title: pushTitle,
+                  status: 'failed',
+                  failureReason,
+                  failureStatusCode: Number.isFinite(statusCode) && statusCode > 0 ? statusCode : null,
+                  endpoint: subscription.endpoint,
+                  correlationId,
+                  isTest: isTestDispatch,
+                  metadata: dispatchMetadata as Prisma.InputJsonValue,
+                },
+              });
+              await this.prisma.pushSubscription.update({
+                where: { id: subscription.id },
+                data: {
+                  lastAttemptAt: attemptedAt,
+                  lastFailureAt: attemptedAt,
+                  lastFailureReason: failureReason,
+                  lastFailureStatusCode: Number.isFinite(statusCode) && statusCode > 0 ? statusCode : null,
+                },
+              });
               if (statusCode === 404 || statusCode === 410) {
                 await this.prisma.pushSubscription.deleteMany({
                   where: { id: subscription.id },
@@ -481,6 +649,7 @@ export class NotificationsService {
             continue;
           }
 
+          pushFailed += 1;
           const reason = result.status === 'rejected' ? result.reason : 'unknown push failure';
           this.logger.warn(
             `Push delivery failed for event ${options.event}: ${String(reason)}`,
@@ -507,7 +676,9 @@ export class NotificationsService {
       },
       push: {
         eligible: pushEligibleRecipients.length,
+        subscriptions: pushSubscriptionCount,
         dispatched: pushDispatched,
+        failed: pushFailed,
         skipped: Math.max(pushEligibleRecipients.length - pushDispatched, 0),
       },
     };
@@ -616,7 +787,12 @@ export class NotificationsService {
   async listInbox(
     userId: string,
     hotelId: string | null,
-    options: { limit?: number; page?: number; unreadOnly?: boolean } = {},
+    options: {
+      limit?: number;
+      page?: number;
+      unreadOnly?: boolean;
+      event?: NotificationEvent;
+    } = {},
   ) {
     if (!hotelId) {
       return {
@@ -636,9 +812,25 @@ export class NotificationsService {
     const limit = Math.min(Math.max(options.limit ?? 20, 1), 100);
     const page = Math.max(options.page ?? 1, 1);
     const skip = (page - 1) * limit;
+    const allowedEvents = await this.getAllowedEvents(userId, hotelId);
+    if (options.event && !allowedEvents.includes(options.event)) {
+      return {
+        items: [],
+        unreadCount: 0,
+        meta: {
+          total: 0,
+          current_page: page,
+          per_page: limit,
+          last_page: 1,
+          from: 0,
+          to: 0,
+        },
+      };
+    }
     const where = {
       userId,
       hotelId,
+      ...(options.event ? { event: options.event } : {}),
       ...(options.unreadOnly ? { readAt: null } : {}),
     };
 

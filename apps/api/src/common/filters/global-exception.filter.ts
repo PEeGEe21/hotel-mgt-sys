@@ -6,6 +6,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { StructuredLogger } from '../logger/structured-logger';
+import { monitoringNotifier } from '../monitoring/monitoring.notifier';
 
 type ErrorRequest = {
   method?: string;
@@ -87,6 +88,16 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       exception instanceof Error ? exception.stack : undefined,
       'ExceptionFilter',
     );
+
+    if (normalized.statusCode >= HttpStatus.INTERNAL_SERVER_ERROR) {
+      void monitoringNotifier.notifyUnhandledError('api.unhandled_exception', exception, {
+        requestId,
+        method: request.method,
+        path: request.originalUrl || request.url,
+        statusCode: normalized.statusCode,
+        error: normalized.error,
+      });
+    }
 
     response.status(normalized.statusCode).json({
       statusCode: normalized.statusCode,

@@ -1,7 +1,11 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { HotelCronJobType } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { FilterDto } from '../dtos/filter.dto';
 import { NotificationsService } from '../../notifications/notifications.service';
+
+const MAINTENANCE_ESCALATION_SCAN_JOB_TYPE =
+  'MAINTENANCE_ESCALATION_SCAN' as HotelCronJobType;
 
 @Injectable()
 export class FacilitiesService {
@@ -150,17 +154,37 @@ export class FacilitiesService {
         (args.roomNumber ? `\nRoom: ${args.roomNumber}` : '') +
         (args.assignedToName ? `\nAssigned to: ${args.assignedToName}` : ''),
       html: `
-        <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.6;">
+        <div>
           <p style="margin: 0 0 12px;">An urgent maintenance request was raised at <strong>${hotelName}</strong>.</p>
-          <table style="border-collapse: collapse;">
-            <tr><td style="padding: 4px 12px 4px 0;"><strong>Request</strong></td><td style="padding: 4px 0;">${requestNo}</td></tr>
-            <tr><td style="padding: 4px 12px 4px 0;"><strong>Title</strong></td><td style="padding: 4px 0;">${title}</td></tr>
-            <tr><td style="padding: 4px 12px 4px 0;"><strong>Priority</strong></td><td style="padding: 4px 0;">${priority}</td></tr>
-            <tr><td style="padding: 4px 12px 4px 0;"><strong>Status</strong></td><td style="padding: 4px 0;">${status}</td></tr>
-            ${facilityName ? `<tr><td style="padding: 4px 12px 4px 0;"><strong>Facility</strong></td><td style="padding: 4px 0;">${facilityName}</td></tr>` : ''}
-            ${roomNumber ? `<tr><td style="padding: 4px 12px 4px 0;"><strong>Room</strong></td><td style="padding: 4px 0;">${roomNumber}</td></tr>` : ''}
-            ${assignedToName ? `<tr><td style="padding: 4px 12px 4px 0;"><strong>Assigned to</strong></td><td style="padding: 4px 0;">${assignedToName}</td></tr>` : ''}
+          <p style="margin: 0 0 18px; color: #475569;">
+            This issue may need immediate operational attention depending on guest or facility impact.
+          </p>
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse; margin: 0 0 8px;">
+            <tr>
+              <td style="width: 50%; padding: 0 6px 12px 0; vertical-align: top;">
+                <div style="background: #fff7ed; border: 1px solid #fed7aa; border-radius: 14px; padding: 14px 16px;">
+                  <div style="margin-bottom: 6px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #9a3412;">Priority</div>
+                  <div style="font-size: 20px; font-weight: 700; color: #7c2d12;">${priority}</div>
+                </div>
+              </td>
+              <td style="width: 50%; padding: 0 0 12px 6px; vertical-align: top;">
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 14px; padding: 14px 16px;">
+                  <div style="margin-bottom: 6px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #64748b;">Status</div>
+                  <div style="font-size: 20px; font-weight: 700; color: #0f172a;">${status}</div>
+                </div>
+              </td>
+            </tr>
           </table>
+          <div style="margin-top: 16px; overflow: hidden; border: 1px solid #e2e8f0; border-radius: 16px;">
+            <div style="padding: 14px 16px; background: #f8fafc; font-weight: 700; color: #0f172a;">Request details</div>
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
+              <tr><td style="padding: 10px 16px 10px 0; color: #64748b; font-weight: 600;">Request</td><td style="padding: 10px 0; color: #0f172a;">${requestNo}</td></tr>
+              <tr><td style="padding: 10px 16px 10px 0; color: #64748b; font-weight: 600;">Issue</td><td style="padding: 10px 0; color: #0f172a;">${title}</td></tr>
+              ${facilityName ? `<tr><td style="padding: 10px 16px 10px 0; color: #64748b; font-weight: 600;">Facility</td><td style="padding: 10px 0; color: #0f172a;">${facilityName}</td></tr>` : ''}
+              ${roomNumber ? `<tr><td style="padding: 10px 16px 10px 0; color: #64748b; font-weight: 600;">Room</td><td style="padding: 10px 0; color: #0f172a;">${roomNumber}</td></tr>` : ''}
+              ${assignedToName ? `<tr><td style="padding: 10px 16px 10px 0; color: #64748b; font-weight: 600;">Assigned to</td><td style="padding: 10px 0; color: #0f172a;">${assignedToName}</td></tr>` : ''}
+            </table>
+          </div>
         </div>
       `,
     };
@@ -180,10 +204,11 @@ export class FacilitiesService {
       : args.roomNumber
         ? `room ${args.roomNumber}`
         : 'the property';
+    const priorityLabel = args.priority.toUpperCase();
 
     return {
-      title: 'Maintenance alert',
-      message: `${args.priority} maintenance request ${args.requestNo} was opened for ${target}: ${args.title}.`,
+      title: `${priorityLabel} maintenance request opened`,
+      message: `Request ${args.requestNo} was opened for ${target}. Issue: ${args.title}. Current status: ${args.status}.`,
       metadata: {
         requestId: args.requestId,
         requestNo: args.requestNo,
@@ -192,7 +217,208 @@ export class FacilitiesService {
         facilityName: args.facilityName ?? null,
         roomNumber: args.roomNumber ?? null,
         status: args.status,
+        severity:
+          args.priority === 'URGENT' || args.priority === 'HIGH'
+            ? 'critical'
+            : 'warning',
+        summary: `${priorityLabel} issue affecting ${target}`,
         href: '/facilities/maintenance',
+      },
+    };
+  }
+
+  private async recordCronJobSuccess(args: {
+    hotelId: string;
+    jobType: HotelCronJobType;
+    enabled: boolean;
+    runAtHour: number;
+    runAtMinute: number;
+    triggeredAt: Date;
+  }) {
+    await this.prisma.hotelCronSetting.upsert({
+      where: {
+        hotelId_jobType: {
+          hotelId: args.hotelId,
+          jobType: args.jobType,
+        },
+      },
+      update: {
+        enabled: args.enabled,
+        runAtHour: args.runAtHour,
+        runAtMinute: args.runAtMinute,
+        lastTriggeredAt: args.triggeredAt,
+        lastSucceededAt: args.triggeredAt,
+        lastError: null,
+      } as any,
+      create: {
+        hotelId: args.hotelId,
+        jobType: args.jobType,
+        enabled: args.enabled,
+        runAtHour: args.runAtHour,
+        runAtMinute: args.runAtMinute,
+        lastTriggeredAt: args.triggeredAt,
+        lastSucceededAt: args.triggeredAt,
+        lastError: null,
+      } as any,
+    });
+  }
+
+  private async recordCronJobFailure(args: {
+    hotelId: string;
+    jobType: HotelCronJobType;
+    enabled: boolean;
+    runAtHour: number;
+    runAtMinute: number;
+    triggeredAt: Date;
+    error: unknown;
+  }) {
+    const message =
+      args.error instanceof Error ? args.error.message : String(args.error ?? 'Unknown error');
+
+    await this.prisma.hotelCronSetting.upsert({
+      where: {
+        hotelId_jobType: {
+          hotelId: args.hotelId,
+          jobType: args.jobType,
+        },
+      },
+      update: {
+        enabled: args.enabled,
+        runAtHour: args.runAtHour,
+        runAtMinute: args.runAtMinute,
+        lastTriggeredAt: args.triggeredAt,
+        lastFailedAt: args.triggeredAt,
+        lastError: message,
+      } as any,
+      create: {
+        hotelId: args.hotelId,
+        jobType: args.jobType,
+        enabled: args.enabled,
+        runAtHour: args.runAtHour,
+        runAtMinute: args.runAtMinute,
+        lastTriggeredAt: args.triggeredAt,
+        lastFailedAt: args.triggeredAt,
+        lastError: message,
+      } as any,
+    });
+  }
+
+  private buildMaintenanceEscalationEmail(args: {
+    hotelName: string;
+    alertDate: string;
+    requests: Array<{
+      requestId: string;
+      requestNo: string;
+      title: string;
+      priority: string;
+      status: string;
+      facilityName: string | null;
+      roomNumber: string | null;
+      assignedToName: string | null;
+      hoursOpen: number;
+    }>;
+  }) {
+    const rows = args.requests
+      .map(
+        (request) => `
+          <tr>
+            <td style="padding: 6px 12px 6px 0;">${escapeHtml(request.requestNo)}</td>
+            <td style="padding: 6px 12px 6px 0;">${escapeHtml(request.priority)}</td>
+            <td style="padding: 6px 12px 6px 0;">${escapeHtml(request.status)}</td>
+            <td style="padding: 6px 12px 6px 0;">${escapeHtml(request.facilityName ?? request.roomNumber ?? 'Property-wide')}</td>
+            <td style="padding: 6px 0;">${request.hoursOpen}h</td>
+          </tr>
+        `,
+      )
+      .join('');
+
+    return {
+      subject: `Maintenance escalation for ${args.hotelName}`,
+      text:
+        `${args.requests.length} maintenance request${args.requests.length === 1 ? '' : 's'} still need escalation review as of ${args.alertDate}.\n` +
+        args.requests
+          .map(
+            (request) =>
+              `- ${request.requestNo}: ${request.title} (${request.priority}, ${request.status}, ${request.hoursOpen}h open)`,
+          )
+          .join('\n'),
+      html: `
+        <div>
+          <p style="margin: 0 0 12px;">
+            <strong>${escapeHtml(args.hotelName)}</strong> has urgent or high-priority maintenance requests that are still unresolved as of ${escapeHtml(args.alertDate)}.
+          </p>
+          <p style="margin: 0 0 18px; color: #475569;">
+            Review the requests below so blocked rooms, guest-impacting issues, and longer-running repairs are escalated before they slip further.
+          </p>
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse; margin: 0 0 8px;">
+            <tr>
+              <td style="width: 50%; padding: 0 6px 12px 0; vertical-align: top;">
+                <div style="background: #fff7ed; border: 1px solid #fed7aa; border-radius: 14px; padding: 14px 16px;">
+                  <div style="margin-bottom: 6px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #9a3412;">Escalations</div>
+                  <div style="font-size: 20px; font-weight: 700; color: #7c2d12;">${args.requests.length}</div>
+                </div>
+              </td>
+              <td style="width: 50%; padding: 0 0 12px 6px; vertical-align: top;">
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 14px; padding: 14px 16px;">
+                  <div style="margin-bottom: 6px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #64748b;">Alert Date</div>
+                  <div style="font-size: 20px; font-weight: 700; color: #0f172a;">${escapeHtml(args.alertDate)}</div>
+                </div>
+              </td>
+            </tr>
+          </table>
+          <div style="margin-top: 16px; overflow: hidden; border: 1px solid #e2e8f0; border-radius: 16px;">
+            <div style="padding: 14px 16px; background: #f8fafc; font-weight: 700; color: #0f172a;">Requests still open</div>
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
+              <thead>
+                <tr>
+                  <th style="padding: 12px 16px 10px 0; text-align: left; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;">Request</th>
+                  <th style="padding: 12px 16px 10px 0; text-align: left; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;">Priority</th>
+                  <th style="padding: 12px 16px 10px 0; text-align: left; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;">Status</th>
+                  <th style="padding: 12px 16px 10px 0; text-align: left; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;">Location</th>
+                  <th style="padding: 12px 0 10px; text-align: left; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;">Hours Open</th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+        </div>
+      `,
+    };
+  }
+
+  private buildMaintenanceEscalationInAppNotification(args: {
+    alertDate: string;
+    requests: Array<{
+      requestId: string;
+      requestNo: string;
+      title: string;
+      priority: string;
+      status: string;
+      facilityName: string | null;
+      roomNumber: string | null;
+      assignedToName: string | null;
+      hoursOpen: number;
+    }>;
+  }) {
+    const longestWaiting = args.requests.reduce(
+      (max, request) => Math.max(max, request.hoursOpen),
+      0,
+    );
+
+    return {
+      title: 'Maintenance issues need escalation',
+      message: `${args.requests.length} high-priority maintenance request${args.requests.length === 1 ? '' : 's'} remain open and need attention as of ${args.alertDate}.`,
+      metadata: {
+        alertDate: args.alertDate,
+        jobType: MAINTENANCE_ESCALATION_SCAN_JOB_TYPE,
+        severity: 'critical',
+        escalationCount: args.requests.length,
+        summary:
+          longestWaiting > 0
+            ? `Oldest urgent request has been open for ${longestWaiting}h`
+            : 'Urgent maintenance requests remain unresolved',
+        href: '/facilities/maintenance',
+        requests: args.requests,
       },
     };
   }
@@ -1002,6 +1228,165 @@ export class FacilitiesService {
     });
   }
 
+  async runMaintenanceEscalationScanForDate(
+    referenceDate = new Date(),
+    hotelIdFilter?: string,
+    force = false,
+  ) {
+    const reference = new Date(referenceDate);
+    const hotels = (await this.prisma.hotel.findMany({
+      where: hotelIdFilter ? { id: hotelIdFilter } : undefined,
+      select: {
+        id: true,
+        name: true,
+        timezone: true,
+        cronSettings: {
+          where: { jobType: MAINTENANCE_ESCALATION_SCAN_JOB_TYPE },
+          take: 1,
+        },
+      } as any,
+      orderBy: { createdAt: 'asc' },
+    })) as unknown as Array<{
+      id: string;
+      name: string;
+      timezone: string | null;
+      cronSettings: Array<{
+        enabled: boolean;
+        runAtHour: number;
+        runAtMinute: number;
+        lastTriggeredAt?: Date | null;
+      }>;
+    }>;
+
+    let requestsFlagged = 0;
+    let hotelsProcessed = 0;
+    let hotelsFailed = 0;
+
+    for (const hotel of hotels) {
+      const cronSetting = hotel.cronSettings[0];
+      const enabled = cronSetting?.enabled ?? true;
+      const runAtHour = cronSetting?.runAtHour ?? 16;
+      const runAtMinute = cronSetting?.runAtMinute ?? 0;
+      const timezone = hotel.timezone || 'Africa/Lagos';
+
+      if (!enabled && !force) continue;
+
+      const localNow = getZonedDateParts(reference, timezone);
+      const alertDate = localNow.date;
+      const localMinutes = localNow.hour * 60 + localNow.minute;
+      const scheduledMinutes = runAtHour * 60 + runAtMinute;
+
+      if (!force && localMinutes < scheduledMinutes) continue;
+
+      if (!force && cronSetting?.lastTriggeredAt) {
+        const lastTriggeredDate = getZonedDateParts(cronSetting.lastTriggeredAt, timezone).date;
+        if (lastTriggeredDate === alertDate) continue;
+      }
+
+      try {
+        const cutoff = new Date(reference.getTime() - 4 * 60 * 60 * 1000);
+        const requests = await this.prisma.maintenanceRequest.findMany({
+          where: {
+            hotelId: hotel.id,
+            priority: { in: ['HIGH', 'URGENT'] },
+            status: { in: ['OPEN', 'ASSIGNED', 'IN_PROGRESS', 'PENDING_PARTS'] },
+            createdAt: { lte: cutoff },
+          },
+          select: {
+            id: true,
+            requestNo: true,
+            title: true,
+            priority: true,
+            status: true,
+            createdAt: true,
+            facility: { select: { name: true } },
+            room: { select: { number: true } },
+            assignedToStaff: { select: { firstName: true, lastName: true } },
+          },
+          orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }],
+        });
+
+        if (!requests.length) {
+          await this.recordCronJobSuccess({
+            hotelId: hotel.id,
+            jobType: MAINTENANCE_ESCALATION_SCAN_JOB_TYPE,
+            enabled,
+            runAtHour,
+            runAtMinute,
+            triggeredAt: reference,
+          });
+          hotelsProcessed += 1;
+          continue;
+        }
+
+        const requestRows = requests.map((request) => ({
+          requestId: request.id,
+          requestNo: request.requestNo,
+          title: request.title,
+          priority: request.priority,
+          status: request.status,
+          facilityName: request.facility?.name ?? null,
+          roomNumber: request.room?.number ?? null,
+          assignedToName:
+            `${request.assignedToStaff?.firstName ?? ''} ${request.assignedToStaff?.lastName ?? ''}`.trim() ||
+            null,
+          hoursOpen: Math.max(
+            1,
+            Math.floor((reference.getTime() - request.createdAt.getTime()) / (60 * 60 * 1000)),
+          ),
+        }));
+
+        await this.notifications.dispatch({
+          hotelId: hotel.id,
+          event: 'maintenanceEscalation',
+          email: this.buildMaintenanceEscalationEmail({
+            hotelName: hotel.name,
+            alertDate,
+            requests: requestRows,
+          }),
+          inApp: this.buildMaintenanceEscalationInAppNotification({
+            alertDate,
+            requests: requestRows,
+          }),
+        });
+
+        await this.recordCronJobSuccess({
+          hotelId: hotel.id,
+          jobType: MAINTENANCE_ESCALATION_SCAN_JOB_TYPE,
+          enabled,
+          runAtHour,
+          runAtMinute,
+          triggeredAt: reference,
+        });
+
+        requestsFlagged += requestRows.length;
+        hotelsProcessed += 1;
+      } catch (error) {
+        hotelsFailed += 1;
+        this.logger.error(
+          `Maintenance escalation scan failed for hotel ${hotel.id}: ${String(error)}`,
+        );
+
+        await this.recordCronJobFailure({
+          hotelId: hotel.id,
+          jobType: MAINTENANCE_ESCALATION_SCAN_JOB_TYPE,
+          enabled,
+          runAtHour,
+          runAtMinute,
+          triggeredAt: reference,
+          error,
+        });
+      }
+    }
+
+    return {
+      date: reference.toISOString(),
+      hotelsProcessed,
+      hotelsFailed,
+      requestsFlagged,
+    };
+  }
+
   // ============ END MAINTENANCE =========== //
 
   // ============ COMPLAINTS =========== //
@@ -1491,4 +1876,25 @@ function escapeHtml(value: string) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+function getZonedDateParts(value: Date, timezone: string) {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+
+  const parts = formatter.formatToParts(value);
+  const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+
+  return {
+    date: `${map.year}-${map.month}-${map.day}`,
+    hour: Number(map.hour),
+    minute: Number(map.minute),
+  };
 }

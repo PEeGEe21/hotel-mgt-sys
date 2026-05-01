@@ -8,12 +8,17 @@ export type NotificationEvent =
   | 'newReservation'
   | 'checkIn'
   | 'checkOut'
+  | 'upcomingArrival'
   | 'checkOutDue'
+  | 'paymentOverdue'
   | 'paymentReceived'
   | 'lowInventory'
   | 'housekeepingAlert'
+  | 'noShowFollowUp'
   | 'maintenanceAlert'
+  | 'maintenanceEscalation'
   | 'attendanceAlert'
+  | 'dailyDigest'
   | 'systemAlerts';
 
 export type NotificationPreference = {
@@ -48,10 +53,12 @@ export function useUpdateNotificationPreferences() {
 }
 
 export function useSendTestNotification() {
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: (event: NotificationEvent) =>
       api.post('/notifications/test', { event }).then((r) => r.data),
     onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['notifications', 'push-status'] });
       openToast('success', 'Test notification sent');
     },
     onError: (e: any) =>

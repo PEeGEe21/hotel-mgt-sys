@@ -85,7 +85,7 @@ const nav: NavEntry[] = [
     ],
   },
   { label: 'Reports', href: '/reports', icon: BarChart3 },
-  { label: 'Mailing', href: '/mailing', icon: MessageCircleCode },
+  { label: 'Mailing', href: '/mailing', icon: MessageCircleCode, permission: 'view:mailing' },
   {
     label: 'Facilities',
     href: '/#',

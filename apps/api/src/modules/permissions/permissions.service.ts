@@ -84,6 +84,51 @@ export class PermissionsService {
     return { success: true };
   }
 
+  async backfillRolePermissions(hotelId: string, actorUserId: string) {
+    const roles = Object.keys(DEFAULT_ROLE_PERMISSIONS) as Role[];
+    const existing = await this.prisma.rolePermission.findMany({ where: { hotelId } });
+    const byRole = new Map(existing.map((record) => [record.role, record.permissions ?? []]));
+    const updatedRoles: { role: Role; addedPermissions: string[] }[] = [];
+
+    await this.prisma.$transaction(async (tx) => {
+      for (const role of roles) {
+        const before = this.normalize(byRole.get(role) ?? []);
+        const defaults = this.normalize(DEFAULT_ROLE_PERMISSIONS[role] ?? []);
+        const addedPermissions = defaults.filter((permission) => !before.includes(permission));
+
+        if (!addedPermissions.length) continue;
+
+        const after = this.normalize([...before, ...addedPermissions]);
+
+        await tx.rolePermission.upsert({
+          where: { hotelId_role: { hotelId, role } },
+          update: { permissions: after },
+          create: { hotelId, role, permissions: after },
+        });
+
+        await tx.permissionAuditLog.create({
+          data: {
+            hotelId,
+            actorUserId,
+            targetType: 'ROLE',
+            targetRole: role,
+            before,
+            after,
+            reason: 'Backfilled missing default role permissions',
+          },
+        });
+
+        updatedRoles.push({ role, addedPermissions });
+      }
+    });
+
+    return {
+      success: true,
+      updatedCount: updatedRoles.length,
+      updatedRoles,
+    };
+  }
+
   async listAudit(hotelId: string, limit = 50) {
     const rows = await this.prisma.permissionAuditLog.findMany({
       where: { hotelId },

@@ -2,9 +2,13 @@
 
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Shield, Check, X, Info } from 'lucide-react';
+import { ArrowLeft, Shield, Check, X, Info, RefreshCw } from 'lucide-react';
 import { ROLE_PERMISSIONS, PERMISSION_GROUPS, type Role, type Permission } from '@/lib/permissions';
-import { useRolePermissions, useUpdateRolePermissions } from '@/hooks/useRolePermissions';
+import {
+  useBackfillRolePermissions,
+  useRolePermissions,
+  useUpdateRolePermissions,
+} from '@/hooks/useRolePermissions';
 
 const roles: { key: Role; label: string; locked?: boolean }[] = [
   { key: 'SUPER_ADMIN', label: 'Super Admin', locked: true },
@@ -32,6 +36,7 @@ export default function RolesPage() {
   const router = useRouter();
   const { data, isLoading } = useRolePermissions();
   const updateRoles = useUpdateRolePermissions();
+  const backfillRoles = useBackfillRolePermissions();
   const [matrix, setMatrix] = useState<Record<Role, Permission[]>>({ ...ROLE_PERMISSIONS });
   const [saved, setSaved] = useState(false);
 
@@ -85,21 +90,35 @@ export default function RolesPage() {
             <p className="text-slate-500 text-sm mt-0.5">Control access for each role</p>
           </div>
         </div>
-        <button
-          onClick={handleSave}
-          disabled={updateRoles.isPending}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${saved ? 'bg-emerald-600 text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}
-        >
-          {updateRoles.isPending ? (
-            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-          ) : saved ? (
-            <>
-              <Check size={14} /> Saved!
-            </>
-          ) : (
-            'Save Changes'
-          )}
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => backfillRoles.mutate()}
+            disabled={backfillRoles.isPending || updateRoles.isPending}
+            className="flex items-center gap-2 rounded-lg border border-[#29406f] bg-[#17233b] px-4 py-2 text-sm font-semibold text-slate-100 transition-colors hover:bg-[#1d2d4a] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {backfillRoles.isPending ? (
+              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : (
+              <RefreshCw size={14} />
+            )}
+            Backfill Defaults
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={updateRoles.isPending || backfillRoles.isPending}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${saved ? 'bg-emerald-600 text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'} disabled:cursor-not-allowed disabled:opacity-60`}
+          >
+            {updateRoles.isPending ? (
+              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : saved ? (
+              <>
+                <Check size={14} /> Saved!
+              </>
+            ) : (
+              'Save Changes'
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Locked roles notice */}
@@ -117,6 +136,15 @@ export default function RolesPage() {
         <p className="text-sm text-blue-300">
           These are baseline permissions per role. You can still grant or deny specific users in
           HR → Permissions.
+        </p>
+      </div>
+
+      <div className="flex items-start gap-3 rounded-xl border border-[#29406f] bg-[#17233b] px-4 py-3">
+        <Info size={15} className="mt-0.5 shrink-0 text-sky-300" />
+        <p className="text-sm text-sky-100">
+          <span className="font-semibold">Backfill Defaults</span> repairs stored role rows by
+          adding any missing baseline permissions from code. It will not remove custom permissions,
+          but it can restore missing defaults for locked roles like Super Admin and Admin.
         </p>
       </div>
 

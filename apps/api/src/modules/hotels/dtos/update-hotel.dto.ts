@@ -21,9 +21,24 @@ export class UpdateHotelCronSettingsDto {
   @ApiPropertyOptional() @IsBoolean() @IsOptional() checkoutDueScanEnabled?: boolean;
   @ApiPropertyOptional() @IsInt() @Min(0) @Max(23) @IsOptional() checkoutDueScanHour?: number;
   @ApiPropertyOptional() @IsInt() @Min(0) @Max(59) @IsOptional() checkoutDueScanMinute?: number;
+  @ApiPropertyOptional() @IsBoolean() @IsOptional() upcomingArrivalScanEnabled?: boolean;
+  @ApiPropertyOptional() @IsInt() @Min(0) @Max(23) @IsOptional() upcomingArrivalScanHour?: number;
+  @ApiPropertyOptional() @IsInt() @Min(0) @Max(59) @IsOptional() upcomingArrivalScanMinute?: number;
+  @ApiPropertyOptional() @IsBoolean() @IsOptional() overduePaymentScanEnabled?: boolean;
+  @ApiPropertyOptional() @IsInt() @Min(0) @Max(23) @IsOptional() overduePaymentScanHour?: number;
+  @ApiPropertyOptional() @IsInt() @Min(0) @Max(59) @IsOptional() overduePaymentScanMinute?: number;
   @ApiPropertyOptional() @IsBoolean() @IsOptional() housekeepingFollowUpScanEnabled?: boolean;
   @ApiPropertyOptional() @IsInt() @Min(0) @Max(23) @IsOptional() housekeepingFollowUpScanHour?: number;
   @ApiPropertyOptional() @IsInt() @Min(0) @Max(59) @IsOptional() housekeepingFollowUpScanMinute?: number;
+  @ApiPropertyOptional() @IsBoolean() @IsOptional() noShowFollowUpScanEnabled?: boolean;
+  @ApiPropertyOptional() @IsInt() @Min(0) @Max(23) @IsOptional() noShowFollowUpScanHour?: number;
+  @ApiPropertyOptional() @IsInt() @Min(0) @Max(59) @IsOptional() noShowFollowUpScanMinute?: number;
+  @ApiPropertyOptional() @IsBoolean() @IsOptional() maintenanceEscalationScanEnabled?: boolean;
+  @ApiPropertyOptional() @IsInt() @Min(0) @Max(23) @IsOptional() maintenanceEscalationScanHour?: number;
+  @ApiPropertyOptional() @IsInt() @Min(0) @Max(59) @IsOptional() maintenanceEscalationScanMinute?: number;
+  @ApiPropertyOptional() @IsBoolean() @IsOptional() dailyDigestScanEnabled?: boolean;
+  @ApiPropertyOptional() @IsInt() @Min(0) @Max(23) @IsOptional() dailyDigestScanHour?: number;
+  @ApiPropertyOptional() @IsInt() @Min(0) @Max(59) @IsOptional() dailyDigestScanMinute?: number;
 }
 
 export class UpdateHotelDto {

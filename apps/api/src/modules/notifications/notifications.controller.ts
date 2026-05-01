@@ -21,11 +21,13 @@ export class NotificationsController {
     @Query('limit') limit?: string,
     @Query('page') page?: string,
     @Query('unreadOnly') unreadOnly?: string,
+    @Query('event') event?: string,
   ) {
     return this.notificationsService.listInbox(req.user.sub, req.user.hotelId ?? null, {
       limit: limit ? Number(limit) : undefined,
       page: page ? Number(page) : undefined,
       unreadOnly: unreadOnly === 'true',
+      event: event as any,
     });
   }
 
@@ -84,6 +86,14 @@ export class NotificationsController {
   @ApiOperation({ summary: 'Get browser push settings for the current environment' })
   getPushSettings() {
     return this.notificationsService.getPushSettings();
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Get('push/status')
+  @ApiOperation({ summary: 'Get current user push subscription health and recent delivery results' })
+  getPushStatus(@Request() req: any) {
+    return this.notificationsService.getPushStatus(req.user.sub, req.user.hotelId ?? null);
   }
 
   @ApiBearerAuth()

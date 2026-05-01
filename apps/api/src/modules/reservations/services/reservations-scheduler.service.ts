@@ -4,8 +4,14 @@ import { Queue } from 'bull';
 import {
   CHECKOUT_DUE_SCAN_JOB,
   CHECKOUT_DUE_SCAN_REPEAT_JOB_ID,
+  DAILY_DIGEST_SCAN_JOB,
+  DAILY_DIGEST_SCAN_REPEAT_JOB_ID,
   HOUSEKEEPING_FOLLOW_UP_SCAN_JOB,
   HOUSEKEEPING_FOLLOW_UP_SCAN_REPEAT_JOB_ID,
+  MAINTENANCE_ESCALATION_SCAN_JOB,
+  MAINTENANCE_ESCALATION_SCAN_REPEAT_JOB_ID,
+  NO_SHOW_FOLLOW_UP_SCAN_JOB,
+  NO_SHOW_FOLLOW_UP_SCAN_REPEAT_JOB_ID,
   RESERVATIONS_QUEUE,
 } from '../reservations.constants';
 
@@ -78,6 +84,18 @@ export class ReservationsSchedulerService implements OnModuleInit {
     await this.ensureHeartbeatJob(repeatableJobs, {
       id: HOUSEKEEPING_FOLLOW_UP_SCAN_REPEAT_JOB_ID,
       name: HOUSEKEEPING_FOLLOW_UP_SCAN_JOB,
+    });
+    await this.ensureHeartbeatJob(repeatableJobs, {
+      id: NO_SHOW_FOLLOW_UP_SCAN_REPEAT_JOB_ID,
+      name: NO_SHOW_FOLLOW_UP_SCAN_JOB,
+    });
+    await this.ensureHeartbeatJob(repeatableJobs, {
+      id: MAINTENANCE_ESCALATION_SCAN_REPEAT_JOB_ID,
+      name: MAINTENANCE_ESCALATION_SCAN_JOB,
+    });
+    await this.ensureHeartbeatJob(repeatableJobs, {
+      id: DAILY_DIGEST_SCAN_REPEAT_JOB_ID,
+      name: DAILY_DIGEST_SCAN_JOB,
     });
 
     this.logger.log('Scheduled reservation scheduler heartbeats every 5 minutes');

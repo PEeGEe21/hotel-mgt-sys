@@ -81,12 +81,15 @@ export function validateEnv(config: Record<string, unknown>) {
   const webPushPublicKey = readString(config, 'WEB_PUSH_PUBLIC_KEY');
   const webPushPrivateKey = readString(config, 'WEB_PUSH_PRIVATE_KEY');
   const webPushSubject = readString(config, 'WEB_PUSH_SUBJECT');
+  const monitoringAlertWebhookUrl = readString(config, 'MONITORING_ALERT_WEBHOOK_URL');
 
   assertInteger(readString(config, 'PORT'), 'PORT');
   assertInteger(readString(config, 'RATE_LIMIT_WINDOW_MS'), 'RATE_LIMIT_WINDOW_MS');
   assertInteger(readString(config, 'RATE_LIMIT_MAX'), 'RATE_LIMIT_MAX');
+  assertInteger(readString(config, 'MONITORING_ALERT_DEDUP_MS'), 'MONITORING_ALERT_DEDUP_MS');
   assertUrl(frontendUrl, 'FRONTEND_URL');
   assertUrl(redisUrl, 'REDIS_URL');
+  assertUrl(monitoringAlertWebhookUrl, 'MONITORING_ALERT_WEBHOOK_URL');
   assertCorsOrigins(corsOrigins);
   assertEmailFrom(emailFrom, 'EMAIL_FROM');
   assertPushSubject(webPushSubject, 'WEB_PUSH_SUBJECT');

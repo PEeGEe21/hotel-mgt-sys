@@ -43,7 +43,7 @@ export default function AuditLogsPage() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => router.push('/settings')}
+            onClick={() => router.back()}
             className="w-9 h-9 rounded-lg bg-[#161b27] border border-[#1e2536] flex items-center justify-center text-slate-400 hover:text-slate-200 transition-colors"
           >
             <ArrowLeft size={16} />
