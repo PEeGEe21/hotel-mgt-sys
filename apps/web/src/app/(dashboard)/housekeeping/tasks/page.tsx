@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import {
   Sparkles,
   LayoutGrid,
@@ -30,7 +30,7 @@ import {
 import { useFloors } from '@/hooks/useFloors';
 import { useDebounce } from '@/hooks/useDebounce';
 import NewTaskModal from '../_components/NewTaskModal';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import TaskCard from '../_components/TaskCard';
 import { KANBAN_COLS, STATUS_CONFIG } from '@/lib/housekeeping-data';
 import TaskDrawer from '../_components/TaskDrawer';
@@ -96,7 +96,9 @@ export default function HousekeepingTasksPage() {
   const [selected, setSelected] = useState<HKTask | null>(null);
   const [showDrawer, setShowDrawer] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const debouncedSearch = useDebounce(search, 300);
+  const taskId = searchParams.get('taskId');
   const { data: floors = [] } = useFloors();
   const { data: staff = [] } = useHKStaff();
 
@@ -122,6 +124,14 @@ export default function HousekeepingTasksPage() {
   );
 
   const rooms = useMemo(() => [...new Set(tasks.map((t) => t.room.number))].sort(), [tasks]);
+
+  useEffect(() => {
+    if (!taskId || tasks.length === 0) return;
+    const task = tasks.find((entry) => entry.id === taskId);
+    if (!task) return;
+    setSelected(task);
+    setShowDrawer(true);
+  }, [taskId, tasks]);
 
   const roomFloor = (roomNumber: string) => {
     const task = tasks.find((t) => t.room.number === roomNumber);
@@ -315,7 +325,10 @@ export default function HousekeepingTasksPage() {
                           tasks={tasks.filter((t) => t.room.number === roomNumber)}
                           onClick={() => {
                             const t = tasks.filter((x) => x.room.number === roomNumber);
-                            if (t.length) setSelected(t[0]);
+                            if (t.length) {
+                              setSelected(t[0]);
+                              setShowDrawer(true);
+                            }
                           }}
                         />
                       ))}

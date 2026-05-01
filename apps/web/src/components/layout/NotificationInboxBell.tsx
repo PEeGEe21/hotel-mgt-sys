@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { Bell, CheckCheck, ExternalLink } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Bell, CheckCheck, ExternalLink, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -18,6 +19,8 @@ import {
   type AppNotification,
 } from '@/hooks/useNotifications';
 import { useNotificationsRealtime } from '@/hooks/useNotificationsRealtime';
+import { usePermissions } from '@/hooks/usePermissions';
+import { getNotificationHref, getNotificationMailingHref } from '@/lib/notification-links';
 import { cn } from '@/lib/utils';
 
 function formatNotificationTime(value: string) {
@@ -41,45 +44,77 @@ function formatNotificationTime(value: string) {
 
 function NotificationRow({
   item,
-  onRead,
+  onOpen,
+  onOpenMailing,
   isUpdating,
+  canViewMailing,
 }: {
   item: AppNotification;
-  onRead: (id: string) => void;
+  onOpen: (item: AppNotification) => void;
+  onOpenMailing: (item: AppNotification) => void;
   isUpdating: boolean;
+  canViewMailing: boolean;
 }) {
   const unread = !item.readAt;
+  const primaryHref = getNotificationHref(item.metadata);
+  const mailingHref = getNotificationMailingHref(item.metadata, canViewMailing);
 
   return (
-    <button
-      type="button"
-      onClick={() => unread && onRead(item.id)}
+    <div
       className={cn(
-        'w-full rounded-xl border px-3 py-3 text-left transition-colors',
+        'rounded-xl border px-3 py-3 transition-colors',
         unread
           ? 'border-blue-500/20 bg-blue-500/8 hover:bg-blue-500/12'
           : 'border-[#1e2536] bg-[#0f1117] hover:bg-white/5',
       )}
-      disabled={isUpdating}
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
+        <button
+          type="button"
+          onClick={() => onOpen(item)}
+          className="min-w-0 flex-1 text-left"
+          disabled={isUpdating}
+        >
           <div className="flex items-center gap-2">
             <p className="truncate text-sm font-medium text-slate-100">{item.title}</p>
             {unread && <span className="h-2 w-2 rounded-full bg-blue-400" />}
           </div>
           <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-400">{item.message}</p>
-        </div>
+          {(primaryHref || mailingHref) && (
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
+              {primaryHref && <span>Open context</span>}
+              {mailingHref && <span>Open mail log</span>}
+            </div>
+          )}
+        </button>
         <span className="shrink-0 text-[11px] text-slate-500">
           {formatNotificationTime(item.createdAt)}
         </span>
       </div>
-    </button>
+
+      {mailingHref && (
+        <div className="mt-3 flex justify-end">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => onOpenMailing(item)}
+            disabled={isUpdating}
+            className="h-8 rounded-lg px-2 text-xs text-slate-300 hover:bg-white/5 hover:text-white"
+          >
+            <Mail className="mr-1 h-3.5 w-3.5" />
+            Mail log
+          </Button>
+        </div>
+      )}
+    </div>
   );
 }
 
 export default function NotificationInboxBell() {
   useNotificationsRealtime();
+  const router = useRouter();
+  const { can } = usePermissions();
 
   const { data, isLoading } = useNotifications({ limit: 8 });
   const markAsRead = useMarkNotificationAsRead();
@@ -87,6 +122,19 @@ export default function NotificationInboxBell() {
 
   const items = data?.items ?? [];
   const unreadCount = data?.unreadCount ?? 0;
+  const canViewMailing = can('view:mailing');
+
+  const openNotification = (item: AppNotification) => {
+    const href = getNotificationHref(item.metadata);
+    if (!item.readAt) markAsRead.mutate(item.id);
+    if (href) router.push(href);
+  };
+
+  const openNotificationMailing = (item: AppNotification) => {
+    const href = getNotificationMailingHref(item.metadata, canViewMailing);
+    if (!item.readAt) markAsRead.mutate(item.id);
+    if (href) router.push(href);
+  };
 
   return (
     <DropdownMenu>
@@ -157,8 +205,10 @@ export default function NotificationInboxBell() {
                 <NotificationRow
                   key={item.id}
                   item={item}
-                  onRead={(id) => markAsRead.mutate(id)}
+                  onOpen={openNotification}
+                  onOpenMailing={openNotificationMailing}
                   isUpdating={markAsRead.isPending}
+                  canViewMailing={canViewMailing}
                 />
               ))}
           </div>

@@ -174,6 +174,7 @@ export class ReservationsService {
   }
 
   private buildNewReservationInAppNotification(args: {
+    reservationId: string;
     reservationNo: string;
     guestName: string;
     roomNumber: string;
@@ -186,11 +187,13 @@ export class ReservationsService {
         `${args.guestName} was booked into room ${args.roomNumber} ` +
         `from ${fmtDate(args.checkIn)} to ${fmtDate(args.checkOut)}.`,
       metadata: {
+        reservationId: args.reservationId,
         reservationNo: args.reservationNo,
         guestName: args.guestName,
         roomNumber: args.roomNumber,
         checkIn: args.checkIn.toISOString(),
         checkOut: args.checkOut.toISOString(),
+        href: `/reservations/${args.reservationId}`,
       },
     };
   }
@@ -251,6 +254,7 @@ export class ReservationsService {
   }
 
   private buildPaymentReceivedInAppNotification(args: {
+    reservationId: string;
     reservationNo: string;
     guestName: string;
     amount: number;
@@ -264,11 +268,13 @@ export class ReservationsService {
         `on reservation ${args.reservationNo} via ${args.method}. ` +
         `Balance remaining: ${fmtMoney(args.balance)}.`,
       metadata: {
+        reservationId: args.reservationId,
         reservationNo: args.reservationNo,
         guestName: args.guestName,
         amount: args.amount,
         method: args.method,
         balance: args.balance,
+        href: `/reservations/${args.reservationId}`,
       },
     };
   }
@@ -309,6 +315,7 @@ export class ReservationsService {
   }
 
   private buildCheckInInAppNotification(args: {
+    reservationId: string;
     reservationNo: string;
     guestName: string;
     roomNumber: string;
@@ -318,10 +325,12 @@ export class ReservationsService {
       title: 'Guest checked in',
       message: `${args.guestName} checked into room ${args.roomNumber} on reservation ${args.reservationNo}.`,
       metadata: {
+        reservationId: args.reservationId,
         reservationNo: args.reservationNo,
         guestName: args.guestName,
         roomNumber: args.roomNumber,
         checkedInAt: args.checkedInAt.toISOString(),
+        href: `/reservations/${args.reservationId}`,
       },
     };
   }
@@ -362,6 +371,7 @@ export class ReservationsService {
   }
 
   private buildCheckOutInAppNotification(args: {
+    reservationId: string;
     reservationNo: string;
     guestName: string;
     roomNumber: string;
@@ -371,10 +381,12 @@ export class ReservationsService {
       title: 'Guest checked out',
       message: `${args.guestName} checked out of room ${args.roomNumber} from reservation ${args.reservationNo}.`,
       metadata: {
+        reservationId: args.reservationId,
         reservationNo: args.reservationNo,
         guestName: args.guestName,
         roomNumber: args.roomNumber,
         checkedOutAt: args.checkedOutAt.toISOString(),
+        href: `/reservations/${args.reservationId}`,
       },
     };
   }
@@ -467,6 +479,10 @@ export class ReservationsService {
         alertDate: args.alertDate,
         dueTodayCount: args.dueTodayCount,
         overdueCount: args.overdueCount,
+        href:
+          args.overdueCount > 0
+            ? '/reservations?checkoutTiming=overdue'
+            : '/reservations?checkoutTiming=dueToday',
         reservations: args.reservations.map((reservation) => ({
           reservationId: reservation.reservationId,
           reservationNo: reservation.reservationNo,
@@ -641,6 +657,7 @@ export class ReservationsService {
         alertDate: args.alertDate,
         graceHours: args.graceHours,
         jobType: HOUSEKEEPING_FOLLOW_UP_SCAN_JOB_TYPE,
+        href: args.tasks[0] ? `/housekeeping/tasks?taskId=${args.tasks[0].taskId}` : '/housekeeping/tasks',
         tasks: args.tasks.map((task) => ({
           taskId: task.taskId,
           roomId: task.roomId,
@@ -1039,6 +1056,7 @@ export class ReservationsService {
           totalAmount: Number(reservation.totalAmount),
         }),
         inApp: this.buildNewReservationInAppNotification({
+          reservationId: reservation.id,
           reservationNo: reservation.reservationNo,
           guestName,
           roomNumber: reservationDetails.room?.number ?? 'Unassigned',
@@ -1184,6 +1202,7 @@ export class ReservationsService {
           checkedInAt: new Date(),
         }),
         inApp: this.buildCheckInInAppNotification({
+          reservationId: updated.id,
           reservationNo: updated.reservationNo,
           guestName,
           roomNumber: reservationDetails.room?.number ?? 'Unassigned',
@@ -1241,6 +1260,7 @@ export class ReservationsService {
           checkedOutAt: new Date(),
         }),
         inApp: this.buildCheckOutInAppNotification({
+          reservationId: updated.id,
           reservationNo: updated.reservationNo,
           guestName,
           roomNumber: reservationDetails.room?.number ?? 'Unassigned',
@@ -1918,6 +1938,7 @@ export class ReservationsService {
           balance,
         }),
         inApp: this.buildPaymentReceivedInAppNotification({
+          reservationId: result.reservation.id,
           reservationNo: result.reservation.reservationNo,
           guestName,
           amount: Number(result.payment.amount),

@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   CalendarCheck,
   List,
@@ -184,12 +184,26 @@ function CalendarView({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function ReservationsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const searchParam = searchParams.get('search') ?? '';
+  const statusParam = searchParams.get('status');
+  const checkoutTimingParam = searchParams.get('checkoutTiming');
   const [view, setView] = useState<'list' | 'calendar'>('list');
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<ReservationStatus | 'All'>('All');
+  const [search, setSearch] = useState(searchParam);
+  const [statusFilter, setStatusFilter] = useState<ReservationStatus | 'All'>(
+    statusParam && ALL_STATUSES.includes(statusParam as ReservationStatus)
+      ? (statusParam as ReservationStatus)
+      : 'All',
+  );
   const [checkoutTiming, setCheckoutTiming] = useState<
     'All' | 'dueTomorrow' | 'dueToday' | 'overdue'
-  >('All');
+  >(
+    checkoutTimingParam === 'dueTomorrow' ||
+      checkoutTimingParam === 'dueToday' ||
+      checkoutTimingParam === 'overdue'
+      ? checkoutTimingParam
+      : 'All',
+  );
   const [page, setPage] = useState(1);
   const [showNew, setShowNew] = useState(false);
   const [limit, setLimit] = useState(20);
@@ -197,6 +211,28 @@ export default function ReservationsPage() {
 
   const debouncedSearch = useDebounce(search, 400);
   const resetPage = () => setPage(1);
+
+  useEffect(() => {
+    setSearch(searchParam);
+  }, [searchParam]);
+
+  useEffect(() => {
+    setStatusFilter(
+      statusParam && ALL_STATUSES.includes(statusParam as ReservationStatus)
+        ? (statusParam as ReservationStatus)
+        : 'All',
+    );
+  }, [statusParam]);
+
+  useEffect(() => {
+    setCheckoutTiming(
+      checkoutTimingParam === 'dueTomorrow' ||
+        checkoutTimingParam === 'dueToday' ||
+        checkoutTimingParam === 'overdue'
+        ? checkoutTimingParam
+        : 'All',
+    );
+  }, [checkoutTimingParam]);
 
   const { data, isLoading, isFetching } = useReservations({
     status: statusFilter !== 'All' ? statusFilter : undefined,

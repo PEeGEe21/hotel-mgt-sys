@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/api';
 import openToast from '@/components/ToastComponent';
 import { PaginationMeta } from '@/components/ui/pagination';
+import type { NotificationMetadata } from '@/lib/notification-links';
 
 export type AppNotificationEvent =
   | 'newReservation'
@@ -24,7 +25,7 @@ export type AppNotification = {
   event: AppNotificationEvent;
   title: string;
   message: string;
-  metadata: Record<string, unknown> | null;
+  metadata: NotificationMetadata;
   readAt: string | null;
   createdAt: string;
 };

@@ -167,6 +167,7 @@ export class FacilitiesService {
   }
 
   private buildMaintenanceAlertInAppNotification(args: {
+    requestId: string;
     requestNo: string;
     title: string;
     priority: string;
@@ -184,12 +185,14 @@ export class FacilitiesService {
       title: 'Maintenance alert',
       message: `${args.priority} maintenance request ${args.requestNo} was opened for ${target}: ${args.title}.`,
       metadata: {
+        requestId: args.requestId,
         requestNo: args.requestNo,
         title: args.title,
         priority: args.priority,
         facilityName: args.facilityName ?? null,
         roomNumber: args.roomNumber ?? null,
         status: args.status,
+        href: '/facilities/maintenance',
       },
     };
   }
@@ -952,6 +955,7 @@ export class FacilitiesService {
             status: request.status,
           }),
           inApp: this.buildMaintenanceAlertInAppNotification({
+            requestId: request.id,
             requestNo: request.requestNo,
             title: request.title,
             priority: request.priority,

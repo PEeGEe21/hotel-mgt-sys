@@ -8,6 +8,7 @@ export type NotificationEvent =
   | 'newReservation'
   | 'checkIn'
   | 'checkOut'
+  | 'checkOutDue'
   | 'paymentReceived'
   | 'lowInventory'
   | 'housekeepingAlert'
@@ -43,5 +44,17 @@ export function useUpdateNotificationPreferences() {
       openToast('success', 'Preferences updated');
     },
     onError: (e: any) => openToast('error', e?.response?.data?.message ?? 'Update failed'),
+  });
+}
+
+export function useSendTestNotification() {
+  return useMutation({
+    mutationFn: (event: NotificationEvent) =>
+      api.post('/notifications/test', { event }).then((r) => r.data),
+    onSuccess: () => {
+      openToast('success', 'Test notification sent');
+    },
+    onError: (e: any) =>
+      openToast('error', e?.response?.data?.message ?? 'Failed to send test notification'),
   });
 }

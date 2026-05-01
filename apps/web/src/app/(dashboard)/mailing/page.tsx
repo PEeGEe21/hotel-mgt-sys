@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
   ArrowLeft,
@@ -10,8 +10,9 @@ import {
   Mail,
   Search,
   Sparkles,
+  Link2,
 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Pagination from '@/components/ui/pagination';
 import { useMailing, type EmailDeliveryLog } from '@/hooks/useMailing';
 import {
@@ -114,6 +115,7 @@ function DeliveryRow({
 
 export default function MailingPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
   const [event, setEvent] = useState('');
@@ -121,16 +123,18 @@ export default function MailingPage() {
   const [limit, setLimit] = useState(20);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [selectedEmail, setSelectedEmail] = useState<EmailDeliveryLog | null>(null);
+  const correlationId = searchParams.get('correlationId')?.trim() || '';
 
   const filters = useMemo(
     () => ({
       search: search.trim() || undefined,
       status: status || undefined,
       event: event.trim() || undefined,
+      correlationId: correlationId || undefined,
       page,
       limit,
     }),
-    [search, status, event, page, limit],
+    [search, status, event, correlationId, page, limit],
   );
 
   const { data, isLoading } = useMailing(filters);
@@ -168,7 +172,12 @@ export default function MailingPage() {
     return { sent, failed, skipped };
   }, [emails]);
 
-  const activeFilterCount = [search.trim(), status, event.trim()].filter(Boolean).length;
+  const activeFilterCount = [search.trim(), status, event.trim(), correlationId].filter(Boolean).length;
+
+  useEffect(() => {
+    if (!correlationId || selectedEmail || emails.length === 0) return;
+    setSelectedEmail(emails[0]);
+  }, [correlationId, emails, selectedEmail]);
 
   const toggleGroup = (key: string) => {
     setExpandedGroups((current) => ({
@@ -182,6 +191,7 @@ export default function MailingPage() {
     setStatus('');
     setEvent('');
     setPage(1);
+    if (correlationId) router.replace('/mailing');
   };
 
   const prettyMetadata = selectedEmail?.metadata
@@ -293,6 +303,12 @@ export default function MailingPage() {
           </div>
 
           <div className="mt-3 flex flex-wrap items-center gap-2">
+            {correlationId && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-sky-500/20 bg-sky-500/10 px-3 py-1.5 text-xs text-sky-200">
+                <Link2 size={12} />
+                Linked delivery view
+              </span>
+            )}
             {['FAILED', 'SENT', 'SKIPPED'].map((quickStatus) => {
               const active = status === quickStatus;
               return (

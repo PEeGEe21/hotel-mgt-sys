@@ -28,6 +28,11 @@ export default () => ({
     from: process.env.EMAIL_FROM || 'noreply@hotelos.com',
     resendApiKey: process.env.RESEND_API_KEY,
   },
+  push: {
+    publicKey: process.env.WEB_PUSH_PUBLIC_KEY,
+    privateKey: process.env.WEB_PUSH_PRIVATE_KEY,
+    subject: process.env.WEB_PUSH_SUBJECT || process.env.EMAIL_FROM || 'mailto:noreply@hotelos.com',
+  },
   stripe: {
     secretKey: process.env.STRIPE_SECRET_KEY,
     webhookSecret: process.env.STRIPE_WEBHOOK_SECRET,

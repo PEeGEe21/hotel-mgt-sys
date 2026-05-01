@@ -20,6 +20,7 @@ export class MailingController {
     @Query('status') status?: string,
     @Query('event') event?: string,
     @Query('search') search?: string,
+    @Query('correlationId') correlationId?: string,
   ) {
     return this.mailingService.list({
       hotelId: req.user.hotelId ?? null,
@@ -28,6 +29,7 @@ export class MailingController {
       status,
       event,
       search,
+      correlationId,
     });
   }
 }

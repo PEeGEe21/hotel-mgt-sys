@@ -36,6 +36,9 @@ cp apps/api/.env.example apps/api/.env
 cp apps/web/.env.example apps/web/.env
 
 # Edit your .env files with your DB credentials
+# For browser push, generate VAPID keys once with:
+# npx web-push generate-vapid-keys
+# Then set WEB_PUSH_PUBLIC_KEY, WEB_PUSH_PRIVATE_KEY, and WEB_PUSH_SUBJECT in apps/api/.env
 
 # Run database migrations
 pnpm db:migrate

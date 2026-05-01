@@ -4,11 +4,11 @@ Last updated: 2026-05-01
 
 ## Next Up
 
-- [ ] Mobile responsiveness
-Notes: active focus. Prioritize mobile and tablet usability across the dashboard shell, starting with sidebar toggle/slide-in behavior and broader layout QA on key operational pages.
+- [x] Mobile responsiveness
+Notes: dashboard shell mobile/tablet responsiveness is now in place, including sidebar toggle/slide-in behavior and broader layout QA across key operational pages.
 
-- [ ] Web app features
-Notes: active focus. Define and implement the next round of web-app capabilities beyond core CRUD flows, including installability/app-shell polish and other product-level enhancements that improve the in-browser app experience.
+- [x] Web app features
+Notes: installability/app-shell foundations are now in place, including manifest support and standalone web-app behavior for the browser experience.
 
 - [ ] Background jobs / scheduler
 Notes: pending. Scheduler foundation is in place and current cron-backed workflows are running, but there is still follow-on work around expanding job coverage, observability, and production hardening.
@@ -95,14 +95,24 @@ Done recently:
 - guest checkout reminders now support day-before and same-day stages with email-log deduping
 - explicit `view:mailing` permission added to frontend/backend permission matrices
 - mailing API access moved from hard-coded admin roles to permission guards
+- notification/email correlation metadata added for shared delivery tracing
+- notification inbox items can now deep-link into related operational pages and linked mail-log views
+- mailing page now supports correlation-based filtered drill-in from notification links
+- checkout-due and housekeeping follow-up notifications now route into filtered reservations/task views
+- browser push subscription storage and VAPID-backed push delivery added
+- profile notifications settings now support browser push enable/disable flow
+- in-app realtime notification sound added with per-browser on/off toggle
+- self-serve test notification trigger added for settings managers to verify inbox, sound, push, and email delivery
+- API env examples now document required web-push settings
+- push delivery test tooling is permission-gated behind `manage:settings`
 
 Still pending:
 - richer email templates and branding consistency
-- optional linkage between in-app notifications and email delivery rows
 - expand scheduler / jobs coverage for additional timed notification workflows
-- link notification inbox items back to mail log detail where relevant
 - guest-facing reminder content polish
-- broader reminder timing options beyond the current day-before / same-day checkout flow
+- push delivery observability and admin-facing troubleshooting visibility
+- delivery retry/failure recovery flows for important transactional emails
+- deeper push delivery controls such as per-device management or explicit unsubscribe visibility
 
 - [ ] Realtime WebSocket/SSE
 Done recently:
@@ -115,10 +125,11 @@ Still pending:
 - housekeeping/facilities live task board updates
 - broader cross-module realtime event strategy and admin observability
 
-- [ ] Mobile Responsiveness
-Note:  Make sidebar show/Slide in on toggle on mobile and tablet. Add toggle button
+- [x] Mobile Responsiveness
+Note: sidebar now slides in on mobile/tablet with a toggle button and close controls.
 
-- [ ] Make Frontend into Web App
+- [x] Make Frontend into Web App
+Note: manifest-driven standalone web-app support is in place.
 
 ## Backlogged
 

@@ -65,6 +65,7 @@ export class InventoryService {
   }
 
   private buildLowInventoryInAppNotification(args: {
+    itemId?: string;
     itemName: string;
     sku: string;
     quantity: number;
@@ -77,11 +78,13 @@ export class InventoryService {
         `${args.itemName} (${args.sku}) is low on stock at ` +
         `${args.quantity} ${args.unit}. Minimum is ${args.minStock} ${args.unit}.`,
       metadata: {
+        itemId: args.itemId ?? null,
         itemName: args.itemName,
         sku: args.sku,
         quantity: args.quantity,
         minStock: args.minStock,
         unit: args.unit,
+        href: '/inventory',
       },
     };
   }
@@ -92,6 +95,7 @@ export class InventoryService {
     beforeQuantity: number;
     beforeMinStock: number;
     item: {
+      id?: string;
       name: string;
       sku: string;
       quantity: number | string;
@@ -131,6 +135,7 @@ export class InventoryService {
           location: args.item.location,
         }),
         inApp: this.buildLowInventoryInAppNotification({
+          itemId: args.item.id,
           itemName: args.item.name,
           sku: args.item.sku,
           quantity,
@@ -280,6 +285,7 @@ export class InventoryService {
       beforeQuantity: Number.POSITIVE_INFINITY,
       beforeMinStock: Number.NEGATIVE_INFINITY,
       item: {
+        id: item.id,
         name: item.name,
         sku: item.sku,
         quantity: Number(item.quantity),
@@ -336,6 +342,7 @@ export class InventoryService {
       beforeQuantity: Number(item.quantity),
       beforeMinStock: Number(item.minStock),
       item: {
+        id: updated.id,
         name: updated.name,
         sku: updated.sku,
         quantity: Number(updated.quantity),
@@ -443,6 +450,7 @@ export class InventoryService {
       beforeQuantity: Number(item.quantity),
       beforeMinStock: Number(item.minStock),
       item: {
+        id: result.item.id,
         name: result.item.name,
         sku: result.item.sku,
         quantity: result.item.quantity,

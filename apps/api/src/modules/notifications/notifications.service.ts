@@ -1,9 +1,12 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
 import { DEFAULT_ROLE_PERMISSIONS } from '../../common/constants/role-permissions';
 import { Prisma, Role } from '@prisma/client';
 import { EmailService } from '../../common/email/email.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
+import { randomUUID } from 'crypto';
+import * as webpush from 'web-push';
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
   NOTIFICATION_EVENT_PERMISSIONS,
@@ -73,11 +76,13 @@ type DispatchNotificationResult = {
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
+  private vapidConfigured = false;
 
   constructor(
     private prisma: PrismaService,
     private emailService: EmailService,
     private realtimeGateway: RealtimeGateway,
+    private configService: ConfigService,
   ) {}
 
   private publishNotificationsSync(
@@ -170,6 +175,84 @@ export class NotificationsService {
     };
   }
 
+  private buildDispatchMetadata(options: DispatchNotificationOptions) {
+    const existingMetadata = options.inApp?.metadata ?? {};
+    const existingCorrelationId =
+      typeof existingMetadata.correlationId === 'string' ? existingMetadata.correlationId : null;
+    const correlationId = existingCorrelationId ?? randomUUID();
+    const hasEmailDelivery = Boolean(options.email);
+
+    return {
+      ...existingMetadata,
+      correlationId,
+      ...(hasEmailDelivery
+        ? {
+            hasEmailDelivery: true,
+            mailingHref: `/mailing?correlationId=${encodeURIComponent(correlationId)}`,
+          }
+        : {}),
+    } as Record<string, unknown>;
+  }
+
+  private getPushConfig() {
+    const publicKey = this.configService.get<string>('push.publicKey');
+    const privateKey = this.configService.get<string>('push.privateKey');
+    const subject = this.configService.get<string>('push.subject');
+
+    if (!publicKey || !privateKey || !subject) return null;
+
+    if (!this.vapidConfigured) {
+      webpush.setVapidDetails(subject, publicKey, privateKey);
+      this.vapidConfigured = true;
+    }
+
+    return { publicKey, privateKey, subject };
+  }
+
+  async getPushSettings() {
+    const config = this.getPushConfig();
+    return {
+      enabled: Boolean(config),
+      publicKey: config?.publicKey ?? null,
+    };
+  }
+
+  async upsertPushSubscription(
+    userId: string,
+    hotelId: string | null,
+    dto: { endpoint: string; p256dh: string; auth: string },
+    userAgent?: string | null,
+  ) {
+    await this.prisma.pushSubscription.upsert({
+      where: { endpoint: dto.endpoint },
+      update: {
+        userId,
+        hotelId,
+        p256dh: dto.p256dh,
+        auth: dto.auth,
+        userAgent: userAgent ?? null,
+      },
+      create: {
+        userId,
+        hotelId,
+        endpoint: dto.endpoint,
+        p256dh: dto.p256dh,
+        auth: dto.auth,
+        userAgent: userAgent ?? null,
+      },
+    });
+
+    return { saved: true };
+  }
+
+  async removePushSubscription(userId: string, endpoint: string) {
+    const result = await this.prisma.pushSubscription.deleteMany({
+      where: { userId, endpoint },
+    });
+
+    return { removed: result.count };
+  }
+
   async dispatch(options: DispatchNotificationOptions): Promise<DispatchNotificationResult> {
     const eventPermission = NOTIFICATION_EVENT_PERMISSIONS[options.event];
     const candidateUsers = await this.prisma.user.findMany({
@@ -248,6 +331,7 @@ export class NotificationsService {
       ...user,
       preferences: this.resolvePreference(options.event, preferencesByUserId.get(user.id)),
     }));
+    const dispatchMetadata = this.buildDispatchMetadata(options);
 
     const emailEligibleRecipients = options.email
       ? resolvedRecipients.filter(
@@ -267,6 +351,7 @@ export class NotificationsService {
     let emailSent = 0;
     let emailFailed = 0;
     let inAppDispatched = 0;
+    let pushDispatched = 0;
 
     if (options.email && emailEligibleRecipients.length) {
       const emailResults = await Promise.allSettled(
@@ -278,7 +363,7 @@ export class NotificationsService {
             text: options.email!.text,
             hotelId: options.hotelId,
             event: options.event,
-            metadata: options.inApp?.metadata,
+            metadata: dispatchMetadata,
           }),
         ),
       );
@@ -309,8 +394,8 @@ export class NotificationsService {
           event: options.event,
           title: options.inApp!.title,
           message: options.inApp!.message,
-          metadata: options.inApp!.metadata
-            ? (options.inApp!.metadata as Prisma.InputJsonValue)
+          metadata: dispatchMetadata
+            ? (dispatchMetadata as Prisma.InputJsonValue)
             : Prisma.JsonNull,
         })),
       });
@@ -326,10 +411,83 @@ export class NotificationsService {
     }
 
     const inAppEligible = inAppEligibleRecipients.length;
-    const pushEligible = resolvedRecipients.filter(
-      (user) =>
-        user.preferences.channelPush && !(options.excludePushUserIds ?? []).includes(user.id),
-    ).length;
+    const pushEligibleRecipients = options.inApp
+      ? resolvedRecipients.filter(
+          (user) =>
+            user.preferences.channelPush && !(options.excludePushUserIds ?? []).includes(user.id),
+        )
+      : [];
+
+    if (options.inApp && pushEligibleRecipients.length) {
+      const pushConfig = this.getPushConfig();
+      if (!pushConfig) {
+        this.logger.warn(
+          `Push delivery skipped for event ${options.event}: WEB_PUSH_* env vars are not configured.`,
+        );
+      } else {
+        const subscriptions = await this.prisma.pushSubscription.findMany({
+          where: {
+            userId: { in: pushEligibleRecipients.map((user) => user.id) },
+          },
+          select: {
+            id: true,
+            endpoint: true,
+            p256dh: true,
+            auth: true,
+            userId: true,
+          },
+        });
+
+        const payload = JSON.stringify({
+          title: options.inApp.title,
+          body: options.inApp.message,
+          href:
+            typeof dispatchMetadata.href === 'string' && dispatchMetadata.href
+              ? dispatchMetadata.href
+              : undefined,
+          event: options.event,
+          timestamp: new Date().toISOString(),
+        });
+
+        const results = await Promise.allSettled(
+          subscriptions.map(async (subscription) => {
+            try {
+              await webpush.sendNotification(
+                {
+                  endpoint: subscription.endpoint,
+                  keys: {
+                    p256dh: subscription.p256dh,
+                    auth: subscription.auth,
+                  },
+                },
+                payload,
+              );
+              return true;
+            } catch (error: any) {
+              const statusCode = Number(error?.statusCode ?? 0);
+              if (statusCode === 404 || statusCode === 410) {
+                await this.prisma.pushSubscription.deleteMany({
+                  where: { id: subscription.id },
+                });
+              }
+              throw error;
+            }
+          }),
+        );
+
+        for (const result of results) {
+          if (result.status === 'fulfilled' && result.value) {
+            pushDispatched += 1;
+            continue;
+          }
+
+          const reason = result.status === 'rejected' ? result.reason : 'unknown push failure';
+          this.logger.warn(
+            `Push delivery failed for event ${options.event}: ${String(reason)}`,
+          );
+        }
+      }
+    }
 
     return {
       event: options.event,
@@ -348,9 +506,9 @@ export class NotificationsService {
         skipped: inAppEligible - inAppDispatched,
       },
       push: {
-        eligible: pushEligible,
-        dispatched: 0,
-        skipped: pushEligible,
+        eligible: pushEligibleRecipients.length,
+        dispatched: pushDispatched,
+        skipped: Math.max(pushEligibleRecipients.length - pushDispatched, 0),
       },
     };
   }
@@ -411,6 +569,48 @@ export class NotificationsService {
     });
 
     return this.listPreferences(userId, hotelId);
+  }
+
+  async sendTestNotification(
+    userId: string,
+    hotelId: string | null,
+    event: NotificationEvent,
+  ) {
+    if (!hotelId) {
+      throw new ForbiddenException('Test notifications require a hotel-scoped account.');
+    }
+
+    const allowedEvents = await this.getAllowedEvents(userId, hotelId);
+    if (!allowedEvents.includes(event)) {
+      throw new ForbiddenException('You are not allowed to receive this notification event.');
+    }
+
+    const eventLabel = event.replace(/([a-z])([A-Z])/g, '$1 $2');
+    const title = `Test ${eventLabel}`;
+    const message = `This is a test ${eventLabel.toLowerCase()} notification from your HotelOS profile settings.`;
+
+    return this.dispatch({
+      hotelId,
+      event,
+      recipientUserIds: [userId],
+      email: {
+        subject: title,
+        html: `<div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.6;">
+          <p style="margin: 0 0 12px;">This is a test <strong>${eventLabel}</strong> notification from HotelOS.</p>
+          <p style="margin: 0;">Use this to verify your email, in-app, and browser push notification setup.</p>
+        </div>`,
+        text: `This is a test ${eventLabel} notification from HotelOS. Use this to verify your email, in-app, and browser push notification setup.`,
+      },
+      inApp: {
+        title,
+        message,
+        metadata: {
+          href: '/notifications',
+          source: 'profile-test-trigger',
+          testEvent: event,
+        },
+      },
+    });
   }
 
   async listInbox(

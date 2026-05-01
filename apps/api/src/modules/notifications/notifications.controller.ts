@@ -1,8 +1,11 @@
-import { Body, Controller, Get, Param, Patch, Query, Request, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Query, Request, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../auth/guards';
+import { JwtAuthGuard, Permissions, PermissionsGuard } from '../auth/guards';
 import { NotificationsService } from './notifications.service';
 import { UpdateNotificationPreferencesDto } from './dtos/update-notification-preferences.dto';
+import { UpsertPushSubscriptionDto } from './dtos/upsert-push-subscription.dto';
+import { RemovePushSubscriptionDto } from './dtos/remove-push-subscription.dto';
+import { SendTestNotificationDto } from './dtos/send-test-notification.dto';
 
 @ApiTags('Notifications')
 @Controller('notifications')
@@ -60,5 +63,51 @@ export class NotificationsController {
   @ApiOperation({ summary: 'Mark a notification as read for current user' })
   markAsRead(@Request() req: any, @Param('id') id: string) {
     return this.notificationsService.markAsRead(req.user.sub, req.user.hotelId ?? null, id);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Post('test')
+  @Permissions('manage:settings')
+  @ApiOperation({ summary: 'Send a test notification to the current user' })
+  sendTestNotification(@Request() req: any, @Body() dto: SendTestNotificationDto) {
+    return this.notificationsService.sendTestNotification(
+      req.user.sub,
+      req.user.hotelId ?? null,
+      dto.event,
+    );
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Get('push/settings')
+  @ApiOperation({ summary: 'Get browser push settings for the current environment' })
+  getPushSettings() {
+    return this.notificationsService.getPushSettings();
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Post('push/subscriptions')
+  @ApiOperation({ summary: 'Register or update a browser push subscription for current user' })
+  upsertPushSubscription(
+    @Request() req: any,
+    @Body() dto: UpsertPushSubscriptionDto,
+    @Headers('user-agent') userAgent?: string,
+  ) {
+    return this.notificationsService.upsertPushSubscription(
+      req.user.sub,
+      req.user.hotelId ?? null,
+      dto,
+      userAgent,
+    );
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Delete('push/subscriptions')
+  @ApiOperation({ summary: 'Remove a browser push subscription for current user' })
+  removePushSubscription(@Request() req: any, @Body() dto: RemovePushSubscriptionDto) {
+    return this.notificationsService.removePushSubscription(req.user.sub, dto.endpoint);
   }
 }

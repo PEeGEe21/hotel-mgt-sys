@@ -30,8 +30,18 @@ import { Switch } from '@/components/ui/switch';
 import {
   type NotificationEvent,
   useNotificationPreferences,
+  useSendTestNotification,
   useUpdateNotificationPreferences,
 } from '@/hooks/useNotificationPreferences';
+import {
+  useDisablePushNotifications,
+  useEnablePushNotifications,
+  usePushSettings,
+} from '@/hooks/usePushNotifications';
+import {
+  isInAppNotificationSoundEnabled,
+  setInAppNotificationSoundEnabled,
+} from '@/lib/notification-sound-settings';
 import { useSearchParams } from 'next/navigation';
 import { type Permission } from '@/lib/permissions';
 import { validateImageFile } from '@/utils/image-file';
@@ -679,6 +689,7 @@ function NotificationsTab() {
       newReservation: { email: true, inApp: true, push: false },
       checkIn: { email: false, inApp: true, push: true },
       checkOut: { email: false, inApp: true, push: false },
+      checkOutDue: { email: true, inApp: true, push: true },
       paymentReceived: { email: true, inApp: true, push: false },
       lowInventory: { email: true, inApp: true, push: false },
       housekeepingAlert: { email: true, inApp: true, push: true },
@@ -690,6 +701,7 @@ function NotificationsTab() {
     newReservation: { label: 'New Reservation', sub: 'When a reservation is created' },
     checkIn: { label: 'Guest Check-in', sub: 'When a guest checks in' },
     checkOut: { label: 'Guest Check-out', sub: 'When a guest checks out' },
+    checkOutDue: { label: 'Checkout Due', sub: 'Due-today and overdue checkout alerts' },
     paymentReceived: { label: 'Payment Received', sub: 'When a payment is recorded' },
     lowInventory: { label: 'Low Inventory', sub: 'When stock falls below par' },
     housekeepingAlert: {
@@ -704,6 +716,7 @@ function NotificationsTab() {
     newReservation: 'view:reservations',
     checkIn: 'checkin:reservations',
     checkOut: 'checkout:reservations',
+    checkOutDue: 'checkout:reservations',
     paymentReceived: 'view:finance',
     lowInventory: 'view:inventory',
     housekeepingAlert: 'view:housekeeping',
@@ -714,9 +727,53 @@ function NotificationsTab() {
 
   const { data, isLoading } = useNotificationPreferences();
   const updatePrefs = useUpdateNotificationPreferences();
+  const sendTestNotification = useSendTestNotification();
+  const { data: pushSettings } = usePushSettings();
+  const enablePush = useEnablePushNotifications();
+  const disablePush = useDisablePushNotifications();
   const { can } = usePermissions();
   const [prefs, setPrefs] = useState(defaultPrefs);
   const [saved, setSaved] = useState(false);
+  const [pushSupported, setPushSupported] = useState(false);
+  const [pushPermission, setPushPermission] = useState<'default' | 'granted' | 'denied'>('default');
+  const [pushSubscribed, setPushSubscribed] = useState(false);
+  const [inAppSoundEnabled, setInAppSoundEnabledState] = useState(true);
+  const [testEvent, setTestEvent] = useState<NotificationEvent>('systemAlerts');
+
+  useEffect(() => {
+    setInAppSoundEnabledState(isInAppNotificationSoundEnabled());
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const inspectPush = async () => {
+      if (typeof window === 'undefined') return;
+      const supported =
+        'Notification' in window && 'serviceWorker' in navigator && 'PushManager' in window;
+      if (!supported) {
+        if (!cancelled) {
+          setPushSupported(false);
+          setPushSubscribed(false);
+        }
+        return;
+      }
+
+      const registration = await navigator.serviceWorker.getRegistration('/push-sw.js');
+      const subscription = await registration?.pushManager.getSubscription();
+
+      if (!cancelled) {
+        setPushSupported(true);
+        setPushPermission(Notification.permission);
+        setPushSubscribed(Boolean(subscription));
+      }
+    };
+
+    void inspectPush();
+    return () => {
+      cancelled = true;
+    };
+  }, [enablePush.isSuccess, disablePush.isSuccess]);
 
   const toggle = (key: keyof typeof prefs, channel: 'email' | 'inApp' | 'push') => {
     setPrefs((p) => ({ ...p, [key]: { ...p[key], [channel]: !p[key][channel] } }));
@@ -754,6 +811,14 @@ function NotificationsTab() {
     const required = eventPermissions[key];
     return !required || can(required);
   });
+  const canSendTestNotification = can('manage:settings');
+
+  useEffect(() => {
+    if (!visibleKeys.length) return;
+    if (!visibleKeys.includes(testEvent)) {
+      setTestEvent(visibleKeys[0]);
+    }
+  }, [testEvent, visibleKeys]);
 
   return (
     <div className="space-y-5">
@@ -838,6 +903,116 @@ function NotificationsTab() {
             </>
           )}
         </button>
+      </div>
+
+      <div className="rounded-xl border border-[#1e2536] bg-[#161b27] p-5">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold text-slate-200">In-app notification sound</p>
+            <p className="mt-1 text-xs text-slate-500">
+              Play a default chime when a new realtime notification arrives while you are using the app.
+            </p>
+          </div>
+          <Switch
+            checked={inAppSoundEnabled}
+            onCheckedChange={(checked) => {
+              const enabled = Boolean(checked);
+              setInAppSoundEnabledState(enabled);
+              setInAppNotificationSoundEnabled(enabled);
+            }}
+            className="data-[state=checked]:bg-blue-600 data-[state=unchecked]:bg-[#0f1117] border border-[#1e2536]"
+            aria-label="Toggle in-app notification sound"
+          />
+        </div>
+      </div>
+
+      {canSendTestNotification && (
+        <div className="rounded-xl border border-[#1e2536] bg-[#161b27] p-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-slate-200">Test notification trigger</p>
+              <p className="mt-1 text-xs text-slate-500">
+                Send a test notification to yourself using one of your allowed event types to verify inbox, sound, push, and email behavior.
+              </p>
+            </div>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <select
+                value={testEvent}
+                onChange={(e) => setTestEvent(e.target.value as NotificationEvent)}
+                className="rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-2 text-sm text-slate-300 outline-none"
+              >
+                {visibleKeys.map((key) => (
+                  <option key={key} value={key}>
+                    {labels[key].label}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={async () => {
+                  await sendTestNotification.mutateAsync(testEvent);
+                }}
+                disabled={!visibleKeys.length || sendTestNotification.isPending}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {sendTestNotification.isPending ? 'Sending...' : 'Send test notification'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="rounded-xl border border-[#1e2536] bg-[#161b27] p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-slate-200">Browser push delivery</p>
+            <p className="mt-1 text-xs text-slate-500">
+              Enable device-level notifications from this browser for real push delivery when your
+              push preferences are turned on.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full border border-[#1e2536] bg-[#0f1117] px-3 py-1.5 text-xs text-slate-400">
+              {pushSupported ? `Permission: ${pushPermission}` : 'Push unsupported'}
+            </span>
+            <span
+              className={`rounded-full border px-3 py-1.5 text-xs ${
+                pushSubscribed
+                  ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
+                  : 'border-amber-500/20 bg-amber-500/10 text-amber-300'
+              }`}
+            >
+              {pushSubscribed ? 'Subscribed' : 'Not subscribed'}
+            </span>
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={async () => {
+              if (!pushSettings?.enabled || !pushSettings.publicKey) {
+                openToast('error', 'Web push is not configured on the server yet.');
+                return;
+              }
+              await enablePush.mutateAsync(pushSettings.publicKey);
+            }}
+            disabled={!pushSupported || !pushSettings?.enabled || enablePush.isPending}
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {enablePush.isPending ? 'Enabling...' : 'Enable browser push'}
+          </button>
+          <button
+            type="button"
+            onClick={async () => {
+              await disablePush.mutateAsync();
+            }}
+            disabled={!pushSupported || disablePush.isPending}
+            className="rounded-lg border border-[#1e2536] bg-[#0f1117] px-4 py-2 text-sm font-semibold text-slate-300 transition-colors hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {disablePush.isPending ? 'Disabling...' : 'Disable browser push'}
+          </button>
+        </div>
       </div>
     </div>
   );

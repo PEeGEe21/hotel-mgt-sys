@@ -12,6 +12,7 @@ export class MailingService {
     status?: string;
     event?: string;
     search?: string;
+    correlationId?: string;
   }) {
     if (!params.hotelId) {
       return {
@@ -50,6 +51,18 @@ export class MailingService {
         { subject: { contains: params.search, mode: 'insensitive' } },
         { fromEmail: { contains: params.search, mode: 'insensitive' } },
         { event: { contains: params.search, mode: 'insensitive' } },
+      ];
+    }
+
+    if (params.correlationId) {
+      where.AND = [
+        ...(where.AND ?? []),
+        {
+          metadata: {
+            path: ['correlationId'],
+            equals: params.correlationId,
+          },
+        },
       ];
     }
 

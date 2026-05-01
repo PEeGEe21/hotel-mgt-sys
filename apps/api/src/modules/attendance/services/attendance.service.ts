@@ -138,6 +138,7 @@ export class AttendanceService {
   }
 
   private buildAttendanceAlertInAppNotification(args: {
+    staffId?: string;
     staffName: string;
     employeeCode: string;
     clockedInAt: Date;
@@ -147,10 +148,12 @@ export class AttendanceService {
       title: 'Attendance alert',
       message: `${args.staffName} clocked in late at ${fmtTime(args.clockedInAt)} via ${args.method}.`,
       metadata: {
+        targetStaffId: args.staffId ?? null,
         staffName: args.staffName,
         employeeCode: args.employeeCode,
         clockedInAt: args.clockedInAt.toISOString(),
         method: args.method,
+        href: args.staffId ? `/staff/${args.staffId}` : '/attendance',
       },
     };
   }
@@ -210,6 +213,7 @@ export class AttendanceService {
           method: args.method,
         }),
         inApp: this.buildAttendanceAlertInAppNotification({
+          staffId: args.staffId,
           staffName,
           employeeCode,
           clockedInAt: args.timestamp,
@@ -316,6 +320,7 @@ export class AttendanceService {
             alertKind: 'absence',
             alertDate: args.alertDate,
             expectedBy: cutoffTime,
+            href: `/staff/${args.staff.id}`,
           },
         },
       });

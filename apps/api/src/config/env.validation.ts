@@ -58,6 +58,19 @@ function assertEmailFrom(value: EnvValue, key: string) {
   }
 }
 
+function assertPushSubject(value: EnvValue, key: string) {
+  if (!value) return;
+  if (value.startsWith('mailto:')) {
+    const email = value.slice('mailto:'.length).trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw new Error(`${key} mailto value must contain a valid email address`);
+    }
+    return;
+  }
+
+  assertUrl(value, key);
+}
+
 export function validateEnv(config: Record<string, unknown>) {
   const nodeEnv = readString(config, 'NODE_ENV') || 'development';
   const frontendUrl = readString(config, 'FRONTEND_URL');
@@ -65,6 +78,9 @@ export function validateEnv(config: Record<string, unknown>) {
   const emailFrom = readString(config, 'EMAIL_FROM');
   const resendApiKey = readString(config, 'RESEND_API_KEY');
   const redisUrl = readString(config, 'REDIS_URL');
+  const webPushPublicKey = readString(config, 'WEB_PUSH_PUBLIC_KEY');
+  const webPushPrivateKey = readString(config, 'WEB_PUSH_PRIVATE_KEY');
+  const webPushSubject = readString(config, 'WEB_PUSH_SUBJECT');
 
   assertInteger(readString(config, 'PORT'), 'PORT');
   assertInteger(readString(config, 'RATE_LIMIT_WINDOW_MS'), 'RATE_LIMIT_WINDOW_MS');
@@ -73,6 +89,14 @@ export function validateEnv(config: Record<string, unknown>) {
   assertUrl(redisUrl, 'REDIS_URL');
   assertCorsOrigins(corsOrigins);
   assertEmailFrom(emailFrom, 'EMAIL_FROM');
+  assertPushSubject(webPushSubject, 'WEB_PUSH_SUBJECT');
+
+  const hasAnyPushConfig = Boolean(webPushPublicKey || webPushPrivateKey || webPushSubject);
+  if (hasAnyPushConfig && (!webPushPublicKey || !webPushPrivateKey || !webPushSubject)) {
+    throw new Error(
+      'WEB_PUSH_PUBLIC_KEY, WEB_PUSH_PRIVATE_KEY, and WEB_PUSH_SUBJECT must all be set together',
+    );
+  }
 
   if (nodeEnv === PRODUCTION) {
     if (!readString(config, 'DATABASE_URL')) {

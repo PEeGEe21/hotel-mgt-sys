@@ -1,12 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import { Bell, CheckCheck } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Bell, CheckCheck, ExternalLink, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import Pagination from '@/components/ui/pagination';
 import { useMarkAllNotificationsAsRead, useMarkNotificationAsRead, useNotifications } from '@/hooks/useNotifications';
+import { usePermissions } from '@/hooks/usePermissions';
+import { getNotificationHref, getNotificationMailingHref } from '@/lib/notification-links';
 import { cn } from '@/lib/utils';
 
 function formatFullDate(value: string) {
@@ -20,7 +23,9 @@ function formatFullDate(value: string) {
 }
 
 export default function NotificationsPage() {
+  const router = useRouter();
   const [page, setPage] = useState(1);
+  const { can } = usePermissions();
   const { data, isLoading } = useNotifications({ limit: 5, page });
   const markAsRead = useMarkNotificationAsRead();
   const markAllAsRead = useMarkAllNotificationsAsRead();
@@ -28,6 +33,12 @@ export default function NotificationsPage() {
   const items = data?.items ?? [];
   const unreadCount = data?.unreadCount ?? 0;
   const meta = data?.meta;
+  const canViewMailing = can('view:mailing');
+
+  const openNotification = (id: string, href: string | null, readAt: string | null) => {
+    if (!readAt) markAsRead.mutate(id);
+    if (href) router.push(href);
+  };
 
   return (
     <div className="space-y-6">
@@ -87,6 +98,8 @@ export default function NotificationsPage() {
             <div className="divide-y divide-[#1e2536]">
               {items.map((item) => {
                 const unread = !item.readAt;
+                const href = getNotificationHref(item.metadata);
+                const mailingHref = getNotificationMailingHref(item.metadata, canViewMailing);
                 return (
                   <div
                     key={item.id}
@@ -117,6 +130,32 @@ export default function NotificationsPage() {
                       >
                         {item.event}
                       </Badge>
+                      {href && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openNotification(item.id, href, item.readAt)}
+                          disabled={markAsRead.isPending}
+                          className="text-slate-300 hover:bg-white/5 hover:text-white"
+                        >
+                          <ExternalLink className="mr-2 h-4 w-4" />
+                          Open
+                        </Button>
+                      )}
+                      {mailingHref && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openNotification(item.id, mailingHref, item.readAt)}
+                          disabled={markAsRead.isPending}
+                          className="text-slate-300 hover:bg-white/5 hover:text-white"
+                        >
+                          <Mail className="mr-2 h-4 w-4" />
+                          Mail log
+                        </Button>
+                      )}
                       {unread && (
                         <Button
                           type="button"

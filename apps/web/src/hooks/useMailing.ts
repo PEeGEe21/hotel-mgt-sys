@@ -25,6 +25,7 @@ export type MailingFilters = {
   status?: string;
   event?: string;
   search?: string;
+  correlationId?: string;
 };
 
 export type MailingResponse = {
@@ -53,6 +54,7 @@ export function useMailing(filters: MailingFilters = {}) {
       if (filters.status) params.set('status', filters.status);
       if (filters.event) params.set('event', filters.event);
       if (filters.search) params.set('search', filters.search);
+      if (filters.correlationId) params.set('correlationId', filters.correlationId);
       const { data } = await api.get(`/mailing/emails?${params}`);
       return data;
     },
