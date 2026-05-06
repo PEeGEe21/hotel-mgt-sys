@@ -104,6 +104,11 @@ export class InventoryService {
         quantity: args.quantity,
         minStock: args.minStock,
         unit: args.unit,
+        severity: args.quantity === 0 ? 'critical' : 'warning',
+        summary:
+          args.quantity === 0
+            ? `${args.itemName} is out of stock`
+            : `${args.itemName} is below minimum by ${Math.max(0, args.minStock - args.quantity)} ${args.unit}`,
         href: '/inventory',
       },
     };

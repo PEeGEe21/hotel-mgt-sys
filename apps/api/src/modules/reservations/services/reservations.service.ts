@@ -74,6 +74,25 @@ export class ReservationsService {
     return users.map((user) => user.id);
   }
 
+  private countGroupedArrivalsNeedingReview(
+    reservations: Array<{ roomId: string | null; groupBooking: { id: string } | null }>,
+  ) {
+    const grouped = new Map<string, number>();
+
+    for (const reservation of reservations) {
+      if (!reservation.groupBooking || reservation.roomId) continue;
+      grouped.set(
+        reservation.groupBooking.id,
+        (grouped.get(reservation.groupBooking.id) ?? 0) + 1,
+      );
+    }
+
+    return {
+      groupBlockReviewCount: grouped.size,
+      groupedReservationReviewCount: [...grouped.values()].reduce((sum, count) => sum + count, 0),
+    };
+  }
+
   private async recordCronJobSuccess(args: {
     hotelId: string;
     jobType: HotelCronJobType;
@@ -260,6 +279,8 @@ export class ReservationsService {
         roomNumber: args.roomNumber,
         checkIn: args.checkIn.toISOString(),
         checkOut: args.checkOut.toISOString(),
+        severity: 'info',
+        summary: `Arrival ${fmtDate(args.checkIn)} · Departure ${fmtDate(args.checkOut)}`,
         href: `/reservations/${args.reservationId}`,
       },
     };
@@ -537,6 +558,8 @@ export class ReservationsService {
         guestName: args.guestName,
         roomNumber: args.roomNumber,
         checkedInAt: args.checkedInAt.toISOString(),
+        severity: 'success',
+        summary: `Room ${args.roomNumber} is now occupied`,
         href: `/reservations/${args.reservationId}`,
       },
     };
@@ -654,6 +677,7 @@ export class ReservationsService {
     alertDate: string;
     arrivalDate: string;
     arrivalCount: number;
+    unassignedCount: number;
     reservations: Array<{
       reservationId: string;
       reservationNo: string;
@@ -670,8 +694,12 @@ export class ReservationsService {
         alertDate: args.alertDate,
         arrivalDate: args.arrivalDate,
         arrivalCount: args.arrivalCount,
-        severity: 'info',
-        summary: `${args.arrivalCount} upcoming arrival${args.arrivalCount === 1 ? '' : 's'} scheduled for ${args.arrivalDate}`,
+        unassignedCount: args.unassignedCount,
+        severity: args.unassignedCount > 0 ? 'warning' : 'info',
+        summary:
+          args.unassignedCount > 0
+            ? `${args.arrivalCount} arrivals due · ${args.unassignedCount} still unassigned`
+            : `${args.arrivalCount} upcoming arrival${args.arrivalCount === 1 ? '' : 's'} scheduled for ${args.arrivalDate}`,
         href: '/reservations',
         reservations: args.reservations.map((reservation) => ({
           reservationId: reservation.reservationId,
@@ -1012,6 +1040,7 @@ export class ReservationsService {
         alertDate: args.alertDate,
         graceHours: args.graceHours,
         jobType: HOUSEKEEPING_FOLLOW_UP_SCAN_JOB_TYPE,
+        tasksCount: args.tasks.length,
         severity: 'warning',
         summary:
           overdueInProgress > 0
@@ -1148,6 +1177,12 @@ export class ReservationsService {
     departuresToday: number;
     overdueCheckouts: number;
     overduePayments: number;
+    severeCollectionsCount: number;
+    criticalCollectionsCount: number;
+    finalCollectionsCount: number;
+    unassignedArrivalsCount: number;
+    groupBlockReviewCount: number;
+    groupedReservationReviewCount: number;
     openCheckoutPrepTasks: number;
     urgentMaintenanceOpen: number;
   }) {
@@ -1159,6 +1194,12 @@ export class ReservationsService {
         `Due out today: ${args.departuresToday}\n` +
         `Overdue checkouts: ${args.overdueCheckouts}\n` +
         `Overdue payments: ${args.overduePayments}\n` +
+        `Severe collections cases: ${args.severeCollectionsCount}\n` +
+        `Critical collections cases: ${args.criticalCollectionsCount}\n` +
+        `Final collections cases: ${args.finalCollectionsCount}\n` +
+        `Unassigned arrivals tomorrow: ${args.unassignedArrivalsCount}\n` +
+        `Group bookings needing room-block review: ${args.groupBlockReviewCount}\n` +
+        `Grouped reservations still unassigned: ${args.groupedReservationReviewCount}\n` +
         `Open checkout prep tasks: ${args.openCheckoutPrepTasks}\n` +
         `Open urgent maintenance requests: ${args.urgentMaintenanceOpen}`,
       html: `
@@ -1177,7 +1218,19 @@ export class ReservationsService {
               ${this.buildEmailMetricCard({ label: 'Overdue Payments', value: String(args.overduePayments) })}
             </tr>
             <tr>
+              ${this.buildEmailMetricCard({ label: 'Severe Collections', value: String(args.severeCollectionsCount) })}
+              ${this.buildEmailMetricCard({ label: 'Critical Collections', value: String(args.criticalCollectionsCount) })}
+            </tr>
+            <tr>
+              ${this.buildEmailMetricCard({ label: 'Final Collections', value: String(args.finalCollectionsCount) })}
+              ${this.buildEmailMetricCard({ label: 'Unassigned Arrivals', value: String(args.unassignedArrivalsCount) })}
+            </tr>
+            <tr>
+              ${this.buildEmailMetricCard({ label: 'Group Block Reviews', value: String(args.groupBlockReviewCount) })}
               ${this.buildEmailMetricCard({ label: 'Open Checkout Prep', value: String(args.openCheckoutPrepTasks) })}
+            </tr>
+            <tr>
+              ${this.buildEmailMetricCard({ label: 'Grouped Reservations', value: String(args.groupedReservationReviewCount) })}
               ${this.buildEmailMetricCard({ label: 'Urgent Maintenance', value: String(args.urgentMaintenanceOpen) })}
             </tr>
           </table>
@@ -1191,6 +1244,12 @@ export class ReservationsService {
                 { label: 'Departures Due Today', value: String(args.departuresToday) },
                 { label: 'Overdue Checkouts', value: String(args.overdueCheckouts) },
                 { label: 'Overdue Payments', value: String(args.overduePayments) },
+                { label: 'Severe Collections Cases', value: String(args.severeCollectionsCount) },
+                { label: 'Critical Collections Cases', value: String(args.criticalCollectionsCount) },
+                { label: 'Final Collections Cases', value: String(args.finalCollectionsCount) },
+                { label: 'Unassigned Arrivals Tomorrow', value: String(args.unassignedArrivalsCount) },
+                { label: 'Group Bookings Needing Review', value: String(args.groupBlockReviewCount) },
+                { label: 'Grouped Reservations Unassigned', value: String(args.groupedReservationReviewCount) },
                 { label: 'Checkout Prep Still Open', value: String(args.openCheckoutPrepTasks) },
                 { label: 'Urgent Maintenance Still Open', value: String(args.urgentMaintenanceOpen) },
               ])}
@@ -1208,6 +1267,12 @@ export class ReservationsService {
     departuresToday: number;
     overdueCheckouts: number;
     overduePayments: number;
+    severeCollectionsCount: number;
+    criticalCollectionsCount: number;
+    finalCollectionsCount: number;
+    unassignedArrivalsCount: number;
+    groupBlockReviewCount: number;
+    groupedReservationReviewCount: number;
     openCheckoutPrepTasks: number;
     urgentMaintenanceOpen: number;
   }) {
@@ -1219,17 +1284,158 @@ export class ReservationsService {
         nextArrivalDate: args.nextArrivalDate,
         jobType: DAILY_DIGEST_SCAN_JOB_TYPE,
         severity:
-          args.overdueCheckouts > 0 || args.overduePayments > 0 || args.urgentMaintenanceOpen > 0
+          args.overdueCheckouts > 0 ||
+          args.overduePayments > 0 ||
+          args.urgentMaintenanceOpen > 0 ||
+          args.severeCollectionsCount > 0 ||
+          args.unassignedArrivalsCount > 0 ||
+          args.groupBlockReviewCount > 0 ||
+          args.finalCollectionsCount > 0
             ? 'warning'
             : 'info',
-        summary: `${args.departuresToday} departures due today · ${args.openCheckoutPrepTasks} checkout prep task${args.openCheckoutPrepTasks === 1 ? '' : 's'} still open`,
+        summary:
+          `${args.departuresToday} departures due today · ` +
+          `${args.openCheckoutPrepTasks} checkout prep task${args.openCheckoutPrepTasks === 1 ? '' : 's'} still open · ` +
+          `${args.finalCollectionsCount} final collections · ${args.groupBlockReviewCount} group review${args.groupBlockReviewCount === 1 ? '' : 's'}`,
         href: '/reports',
         arrivalsTomorrow: args.arrivalsTomorrow,
         departuresToday: args.departuresToday,
         overdueCheckouts: args.overdueCheckouts,
         overduePayments: args.overduePayments,
+        severeCollectionsCount: args.severeCollectionsCount,
+        criticalCollectionsCount: args.criticalCollectionsCount,
+        finalCollectionsCount: args.finalCollectionsCount,
+        unassignedArrivalsCount: args.unassignedArrivalsCount,
+        groupBlockReviewCount: args.groupBlockReviewCount,
+        groupedReservationReviewCount: args.groupedReservationReviewCount,
         openCheckoutPrepTasks: args.openCheckoutPrepTasks,
         urgentMaintenanceOpen: args.urgentMaintenanceOpen,
+      },
+    };
+  }
+
+  private buildManagerRiskDigestEmail(args: {
+    hotelName: string;
+    alertDate: string;
+    nextArrivalDate: string;
+    arrivalsTomorrow: number;
+    overdueCheckouts: number;
+    overduePayments: number;
+    severeCollectionsCount: number;
+    criticalCollectionsCount: number;
+    finalCollectionsCount: number;
+    unassignedArrivalsCount: number;
+    groupBlockReviewCount: number;
+    groupedReservationReviewCount: number;
+    openCheckoutPrepTasks: number;
+    urgentMaintenanceOpen: number;
+  }) {
+    return {
+      subject: `Management risk digest for ${args.hotelName} on ${args.alertDate}`,
+      text:
+        `${args.hotelName}: management risk digest for ${args.alertDate}.\n` +
+        `Tomorrow arrivals (${args.nextArrivalDate}): ${args.arrivalsTomorrow}\n` +
+        `Overdue checkouts: ${args.overdueCheckouts}\n` +
+        `Overdue payments: ${args.overduePayments}\n` +
+        `Severe collections cases: ${args.severeCollectionsCount}\n` +
+        `Critical collections cases: ${args.criticalCollectionsCount}\n` +
+        `Final collections cases: ${args.finalCollectionsCount}\n` +
+        `Unassigned arrivals tomorrow: ${args.unassignedArrivalsCount}\n` +
+        `Group bookings needing room-block review: ${args.groupBlockReviewCount}\n` +
+        `Grouped reservations still unassigned: ${args.groupedReservationReviewCount}\n` +
+        `Open checkout prep tasks: ${args.openCheckoutPrepTasks}\n` +
+        `Open urgent maintenance requests: ${args.urgentMaintenanceOpen}`,
+      html: `
+        <div>
+          <p style="margin: 0 0 12px;">Management risk digest for <strong>${escapeHtml(args.hotelName)}</strong> on <strong>${escapeHtml(args.alertDate)}</strong>.</p>
+          <p style="margin: 0 0 18px; color: #475569;">
+            This version highlights only the queues that are most likely to create service, revenue, or arrival risk if left unattended.
+          </p>
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse; margin: 0 0 12px;">
+            <tr>
+              ${this.buildEmailMetricCard({ label: 'Overdue Checkouts', value: String(args.overdueCheckouts) })}
+              ${this.buildEmailMetricCard({ label: 'Overdue Payments', value: String(args.overduePayments) })}
+            </tr>
+            <tr>
+              ${this.buildEmailMetricCard({ label: 'Severe Collections', value: String(args.severeCollectionsCount) })}
+              ${this.buildEmailMetricCard({ label: 'Critical Collections', value: String(args.criticalCollectionsCount) })}
+            </tr>
+            <tr>
+              ${this.buildEmailMetricCard({ label: 'Final Collections', value: String(args.finalCollectionsCount) })}
+              ${this.buildEmailMetricCard({ label: 'Unassigned Arrivals', value: String(args.unassignedArrivalsCount) })}
+            </tr>
+            <tr>
+              ${this.buildEmailMetricCard({ label: 'Group Block Reviews', value: String(args.groupBlockReviewCount) })}
+              ${this.buildEmailMetricCard({ label: 'Open Checkout Prep', value: String(args.openCheckoutPrepTasks) })}
+            </tr>
+            <tr>
+              ${this.buildEmailMetricCard({ label: 'Grouped Reservations', value: String(args.groupedReservationReviewCount) })}
+              ${this.buildEmailMetricCard({ label: 'Urgent Maintenance', value: String(args.urgentMaintenanceOpen) })}
+            </tr>
+          </table>
+          <div style="margin-top: 12px; overflow: hidden; border: 1px solid #e2e8f0; border-radius: 16px;">
+            <div style="padding: 14px 16px; background: #f8fafc; font-weight: 700; color: #0f172a;">Risk outlook</div>
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
+              ${this.buildEmailDetailRows([
+                { label: 'Digest Date', value: args.alertDate },
+                { label: 'Next Arrival Date', value: args.nextArrivalDate },
+                { label: 'Tomorrow Arrivals', value: String(args.arrivalsTomorrow) },
+                { label: 'Overdue Checkouts', value: String(args.overdueCheckouts) },
+                { label: 'Overdue Payments', value: String(args.overduePayments) },
+                { label: 'Severe Collections Cases', value: String(args.severeCollectionsCount) },
+                { label: 'Critical Collections Cases', value: String(args.criticalCollectionsCount) },
+                { label: 'Final Collections Cases', value: String(args.finalCollectionsCount) },
+                { label: 'Unassigned Arrivals Tomorrow', value: String(args.unassignedArrivalsCount) },
+                { label: 'Group Bookings Needing Review', value: String(args.groupBlockReviewCount) },
+                { label: 'Grouped Reservations Unassigned', value: String(args.groupedReservationReviewCount) },
+                { label: 'Checkout Prep Still Open', value: String(args.openCheckoutPrepTasks) },
+                { label: 'Urgent Maintenance Still Open', value: String(args.urgentMaintenanceOpen) },
+              ])}
+            </table>
+          </div>
+        </div>
+      `,
+    };
+  }
+
+  private buildManagerRiskDigestInAppNotification(args: {
+    alertDate: string;
+    nextArrivalDate: string;
+    overdueCheckouts: number;
+    overduePayments: number;
+    severeCollectionsCount: number;
+    criticalCollectionsCount: number;
+    finalCollectionsCount: number;
+    unassignedArrivalsCount: number;
+    groupBlockReviewCount: number;
+    groupedReservationReviewCount: number;
+    openCheckoutPrepTasks: number;
+    urgentMaintenanceOpen: number;
+  }) {
+    return {
+      title: 'Management risk digest ready',
+      message:
+        `${args.finalCollectionsCount} final collections, ${args.groupBlockReviewCount} group room-block review${args.groupBlockReviewCount === 1 ? '' : 's'}, ` +
+        `${args.overdueCheckouts} overdue checkouts, and ${args.urgentMaintenanceOpen} urgent maintenance issues need review.`,
+      metadata: {
+        alertDate: args.alertDate,
+        nextArrivalDate: args.nextArrivalDate,
+        severity: 'critical',
+        severeCollectionsCount: args.severeCollectionsCount,
+        criticalCollectionsCount: args.criticalCollectionsCount,
+        finalCollectionsCount: args.finalCollectionsCount,
+        unassignedArrivalsCount: args.unassignedArrivalsCount,
+        groupBlockReviewCount: args.groupBlockReviewCount,
+        groupedReservationReviewCount: args.groupedReservationReviewCount,
+        overdueCheckouts: args.overdueCheckouts,
+        overduePayments: args.overduePayments,
+        openCheckoutPrepTasks: args.openCheckoutPrepTasks,
+        urgentMaintenanceOpen: args.urgentMaintenanceOpen,
+        summary:
+          `${args.finalCollectionsCount} final collections · ` +
+          `${args.groupBlockReviewCount} group room-block review${args.groupBlockReviewCount === 1 ? '' : 's'} · ` +
+          `${args.urgentMaintenanceOpen} urgent maintenance`,
+        href: '/reports',
       },
     };
   }
@@ -1238,32 +1444,92 @@ export class ReservationsService {
     hotelName: string;
     alertDate: string;
     severeCount: number;
+    criticalCount: number;
+    finalCount: number;
     oldestDaysOverdue: number;
     totalOutstanding: number;
+    reservations: Array<{
+      reservationNo: string;
+      guestName: string;
+      roomNumber: string;
+      balance: number;
+      daysOverdue: number;
+    }>;
   }) {
+    const stageLabel =
+      args.finalCount > 0
+        ? 'Final collections escalation'
+        : args.criticalCount > 0
+          ? 'Critical collections escalation'
+          : 'Collections escalation review';
+    const rows = args.reservations
+      .map(
+        (reservation) => `
+          <tr>
+            <td style="padding: 10px 16px 10px 0; color: #0f172a;">${escapeHtml(reservation.reservationNo)}</td>
+            <td style="padding: 10px 16px 10px 0; color: #0f172a;">${escapeHtml(reservation.guestName)}</td>
+            <td style="padding: 10px 16px 10px 0; color: #0f172a;">${escapeHtml(reservation.roomNumber)}</td>
+            <td style="padding: 10px 16px 10px 0; color: #0f172a;">${fmtMoney(reservation.balance)}</td>
+            <td style="padding: 10px 0; color: #0f172a;">${reservation.daysOverdue}d</td>
+          </tr>
+        `,
+      )
+      .join('');
+
     return {
-      subject: `Collections escalation review for ${args.hotelName}`,
+      subject: `${stageLabel} for ${args.hotelName}`,
       text:
         `${args.hotelName}: ${args.severeCount} overdue folio` +
         `${args.severeCount === 1 ? ' is' : 's are'} now in severe collections territory as of ${args.alertDate}.\n` +
+        `Critical cases (14+ days): ${args.criticalCount}\n` +
+        `Final-stage cases (21+ days): ${args.finalCount}\n` +
         `Oldest age: ${args.oldestDaysOverdue} days overdue\n` +
-        `Total outstanding: ${fmtMoney(args.totalOutstanding)}`,
+        `Total outstanding: ${fmtMoney(args.totalOutstanding)}\n` +
+        args.reservations
+          .map(
+            (reservation) =>
+              `- ${reservation.reservationNo}: ${reservation.guestName} in room ${reservation.roomNumber} owes ${fmtMoney(reservation.balance)} (${reservation.daysOverdue} day${reservation.daysOverdue === 1 ? '' : 's'} overdue)`,
+          )
+          .join('\n'),
       html: `
         <div>
-          <p style="margin: 0 0 12px;">Collections escalation review for <strong>${escapeHtml(args.hotelName)}</strong>.</p>
+          <p style="margin: 0 0 12px;">${escapeHtml(stageLabel)} for <strong>${escapeHtml(args.hotelName)}</strong>.</p>
           <p style="margin: 0 0 12px; color: #475569;">
-            ${args.severeCount} overdue folio${args.severeCount === 1 ? '' : 's'} now need management review.
+            ${args.severeCount} overdue folio${args.severeCount === 1 ? '' : 's'} now need management review${args.criticalCount > 0 ? `, including ${args.criticalCount} critical case${args.criticalCount === 1 ? '' : 's'} at 14+ days overdue` : ''}${args.finalCount > 0 ? ` and ${args.finalCount} final-stage case${args.finalCount === 1 ? '' : 's'} at 21+ days overdue` : ''}.
           </p>
           <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
             <tr>
               ${this.buildEmailMetricCard({ label: 'Severe Cases', value: String(args.severeCount) })}
+              ${this.buildEmailMetricCard({ label: 'Critical Cases', value: String(args.criticalCount) })}
+            </tr>
+            <tr>
+              ${this.buildEmailMetricCard({ label: 'Final Cases', value: String(args.finalCount) })}
               ${this.buildEmailMetricCard({ label: 'Oldest Age', value: `${args.oldestDaysOverdue}d` })}
             </tr>
             <tr>
               ${this.buildEmailMetricCard({ label: 'Outstanding', value: fmtMoney(args.totalOutstanding) })}
               ${this.buildEmailMetricCard({ label: 'Alert Date', value: args.alertDate })}
             </tr>
+            <tr>
+              ${this.buildEmailMetricCard({ label: 'Top Cases', value: String(args.reservations.length) })}
+              ${this.buildEmailMetricCard({ label: 'Review Stage', value: stageLabel.replace(' escalation', '').replace(' review', '') })}
+            </tr>
           </table>
+          <div style="margin-top: 16px; overflow: hidden; border: 1px solid #e2e8f0; border-radius: 16px;">
+            <div style="padding: 14px 16px; background: #f8fafc; font-weight: 700; color: #0f172a;">Highest-risk folios</div>
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
+              <thead>
+                <tr>
+                  <th align="left" style="padding: 12px 16px 10px 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;">Reservation</th>
+                  <th align="left" style="padding: 12px 16px 10px 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;">Guest</th>
+                  <th align="left" style="padding: 12px 16px 10px 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;">Room</th>
+                  <th align="left" style="padding: 12px 16px 10px 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;">Balance</th>
+                  <th align="left" style="padding: 12px 0 10px; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;">Age</th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
         </div>
       `,
     };
@@ -1272,22 +1538,51 @@ export class ReservationsService {
   private buildCollectionsEscalationInAppNotification(args: {
     alertDate: string;
     severeCount: number;
+    criticalCount: number;
+    finalCount: number;
     oldestDaysOverdue: number;
     totalOutstanding: number;
+    reservations: Array<{
+      reservationNo: string;
+      guestName: string;
+      roomNumber: string;
+      balance: number;
+      daysOverdue: number;
+    }>;
   }) {
+    const criticalLabel =
+      args.criticalCount > 0
+        ? `${args.criticalCount} critical case${args.criticalCount === 1 ? '' : 's'} at 14+ days overdue. `
+        : '';
+    const finalLabel =
+      args.finalCount > 0
+        ? `${args.finalCount} final-stage case${args.finalCount === 1 ? '' : 's'} at 21+ days overdue. `
+        : '';
     return {
-      title: 'Collections escalation review needed',
+      title:
+        args.finalCount > 0
+          ? 'Final collections review needed'
+          : args.criticalCount > 0
+            ? 'Critical collections review needed'
+            : 'Collections escalation review needed',
       message:
+        finalLabel +
+        criticalLabel +
         `${args.severeCount} overdue folio${args.severeCount === 1 ? '' : 's'} now need management attention. ` +
         `Oldest age: ${args.oldestDaysOverdue} day${args.oldestDaysOverdue === 1 ? '' : 's'}.`,
       metadata: {
         alertDate: args.alertDate,
         severeCount: args.severeCount,
+        criticalCount: args.criticalCount,
+        finalCount: args.finalCount,
         oldestDaysOverdue: args.oldestDaysOverdue,
         totalOutstanding: args.totalOutstanding,
         severity: 'critical',
-        summary: `${fmtMoney(args.totalOutstanding)} now in severe collections review`,
+        summary:
+          `${fmtMoney(args.totalOutstanding)} in severe collections · ` +
+          `${args.finalCount} final-stage case${args.finalCount === 1 ? '' : 's'}`,
         href: '/reservations?checkoutTiming=overdue',
+        reservations: args.reservations,
       },
     };
   }
@@ -1328,6 +1623,109 @@ export class ReservationsService {
         severity: 'warning',
         summary: `${args.reservationCount} arrivals still unassigned`,
         href: '/reservations',
+      },
+    };
+  }
+
+  private buildGroupBlockReviewEmail(args: {
+    hotelName: string;
+    arrivalDate: string;
+    groupCount: number;
+    reservationCount: number;
+    unassignedCount: number;
+    groups: Array<{
+      groupNo: string;
+      name: string;
+      reservationCount: number;
+      unassignedCount: number;
+    }>;
+  }) {
+    const rows = args.groups
+      .map(
+        (group) => `
+          <tr>
+            <td style="padding: 10px 16px 10px 0; color: #0f172a;">${escapeHtml(group.groupNo)}</td>
+            <td style="padding: 10px 16px 10px 0; color: #0f172a;">${escapeHtml(group.name)}</td>
+            <td style="padding: 10px 16px 10px 0; color: #0f172a;">${group.reservationCount}</td>
+            <td style="padding: 10px 0; color: #0f172a;">${group.unassignedCount}</td>
+          </tr>
+        `,
+      )
+      .join('');
+
+    return {
+      subject: `Group arrival room-block review for ${args.hotelName}`,
+      text:
+        `${args.hotelName}: ${args.groupCount} group booking${args.groupCount === 1 ? '' : 's'} arriving on ${args.arrivalDate} still need room-block review.\n` +
+        `Grouped reservations: ${args.reservationCount}\n` +
+        `Unassigned rooms: ${args.unassignedCount}\n` +
+        args.groups
+          .map(
+            (group) =>
+              `- ${group.groupNo} ${group.name}: ${group.reservationCount} reservations, ${group.unassignedCount} unassigned`,
+          )
+          .join('\n'),
+      html: `
+        <div>
+          <p style="margin: 0 0 12px;">Group arrival room-block review for <strong>${escapeHtml(args.hotelName)}</strong>.</p>
+          <p style="margin: 0 0 12px; color: #475569;">
+            ${args.groupCount} group booking${args.groupCount === 1 ? '' : 's'} arriving on ${escapeHtml(args.arrivalDate)} still need room allocation review before check-in pressure builds.
+          </p>
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
+            <tr>
+              ${this.buildEmailMetricCard({ label: 'Groups', value: String(args.groupCount) })}
+              ${this.buildEmailMetricCard({ label: 'Grouped Reservations', value: String(args.reservationCount) })}
+            </tr>
+            <tr>
+              ${this.buildEmailMetricCard({ label: 'Unassigned Rooms', value: String(args.unassignedCount) })}
+              ${this.buildEmailMetricCard({ label: 'Arrival Date', value: args.arrivalDate })}
+            </tr>
+          </table>
+          <div style="margin-top: 16px; overflow: hidden; border: 1px solid #e2e8f0; border-radius: 16px;">
+            <div style="padding: 14px 16px; background: #f8fafc; font-weight: 700; color: #0f172a;">Groups needing review</div>
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
+              <thead>
+                <tr>
+                  <th align="left" style="padding: 12px 16px 10px 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;">Group No</th>
+                  <th align="left" style="padding: 12px 16px 10px 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;">Group</th>
+                  <th align="left" style="padding: 12px 16px 10px 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;">Reservations</th>
+                  <th align="left" style="padding: 12px 0 10px; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;">Unassigned</th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+        </div>
+      `,
+    };
+  }
+
+  private buildGroupBlockReviewInAppNotification(args: {
+    arrivalDate: string;
+    groupCount: number;
+    reservationCount: number;
+    unassignedCount: number;
+    groups: Array<{
+      groupNo: string;
+      name: string;
+      reservationCount: number;
+      unassignedCount: number;
+    }>;
+  }) {
+    return {
+      title: 'Group arrivals need room-block review',
+      message:
+        `${args.groupCount} arriving group booking${args.groupCount === 1 ? '' : 's'} on ${args.arrivalDate} still ` +
+        `have ${args.unassignedCount} unassigned room${args.unassignedCount === 1 ? '' : 's'} across ${args.reservationCount} grouped reservation${args.reservationCount === 1 ? '' : 's'}.`,
+      metadata: {
+        arrivalDate: args.arrivalDate,
+        groupCount: args.groupCount,
+        reservationCount: args.reservationCount,
+        unassignedCount: args.unassignedCount,
+        severity: args.unassignedCount > 3 ? 'critical' : 'warning',
+        summary: `${args.groupCount} groups arriving · ${args.unassignedCount} rooms still unassigned`,
+        href: '/reservations',
+        groups: args.groups,
       },
     };
   }
@@ -2685,6 +3083,12 @@ export class ReservationsService {
         if (severeReservations.length) {
           const managementRecipientIds = await this.getManagementRecipientIds(hotel.id);
           if (managementRecipientIds.length) {
+            const criticalReservations = severeReservations.filter(
+              (reservation) => reservation.daysOverdue >= 14,
+            );
+            const finalReservations = severeReservations.filter(
+              (reservation) => reservation.daysOverdue >= 21,
+            );
             const oldestDaysOverdue = severeReservations.reduce(
               (max, reservation) => Math.max(max, reservation.daysOverdue),
               0,
@@ -2693,6 +3097,19 @@ export class ReservationsService {
               (sum, reservation) => sum + reservation.balance,
               0,
             );
+            const topReservations = [...severeReservations]
+              .sort((a, b) => {
+                if (b.daysOverdue !== a.daysOverdue) return b.daysOverdue - a.daysOverdue;
+                return b.balance - a.balance;
+              })
+              .slice(0, 5)
+              .map((reservation) => ({
+                reservationNo: reservation.reservationNo,
+                guestName: reservation.guestName,
+                roomNumber: reservation.roomNumber,
+                balance: reservation.balance,
+                daysOverdue: reservation.daysOverdue,
+              }));
             await this.notifications.dispatch({
               hotelId: hotel.id,
               event: 'systemAlerts',
@@ -2701,14 +3118,20 @@ export class ReservationsService {
                 hotelName: hotel.name,
                 alertDate,
                 severeCount: severeReservations.length,
+                criticalCount: criticalReservations.length,
+                finalCount: finalReservations.length,
                 oldestDaysOverdue,
                 totalOutstanding: severeOutstanding,
+                reservations: topReservations,
               }),
               inApp: this.buildCollectionsEscalationInAppNotification({
                 alertDate,
                 severeCount: severeReservations.length,
+                criticalCount: criticalReservations.length,
+                finalCount: finalReservations.length,
                 oldestDaysOverdue,
                 totalOutstanding: severeOutstanding,
+                reservations: topReservations,
               }),
             });
           }
@@ -2821,6 +3244,7 @@ export class ReservationsService {
             totalAmount: true,
             adults: true,
             children: true,
+            groupBooking: { select: { id: true, groupNo: true, name: true } },
             guest: { select: { firstName: true, lastName: true } },
             room: { select: { number: true } },
           },
@@ -2844,6 +3268,7 @@ export class ReservationsService {
               totalAmount: Number(reservation.totalAmount),
               adults: reservation.adults,
               children: reservation.children,
+              groupBooking: reservation.groupBooking,
             };
           })
           .filter((reservation) => reservation.localCheckInDate === arrivalDate);
@@ -2875,6 +3300,7 @@ export class ReservationsService {
             alertDate,
             arrivalDate,
             arrivalCount: reservations.length,
+            unassignedCount: reservations.filter((reservation) => reservation.roomNumber === 'Unassigned').length,
             reservations,
           }),
         });
@@ -2899,6 +3325,67 @@ export class ReservationsService {
                 reservationCount: unassignedReservations.length,
               }),
             });
+          }
+        }
+
+        const groupRows = reservations.filter((reservation) => reservation.groupBooking);
+        if (groupRows.length) {
+          const grouped = new Map<
+            string,
+            { groupNo: string; name: string; reservationCount: number; unassignedCount: number }
+          >();
+          for (const reservation of groupRows) {
+            const key = reservation.groupBooking!.id;
+            const existing = grouped.get(key) ?? {
+              groupNo: reservation.groupBooking!.groupNo,
+              name: reservation.groupBooking!.name,
+              reservationCount: 0,
+              unassignedCount: 0,
+            };
+            existing.reservationCount += 1;
+            if (reservation.roomNumber === 'Unassigned') {
+              existing.unassignedCount += 1;
+            }
+            grouped.set(key, existing);
+          }
+
+          const groupsNeedingReview = [...grouped.values()].filter(
+            (group) => group.unassignedCount > 0,
+          );
+
+          if (groupsNeedingReview.length) {
+            const managementRecipientIds = await this.getManagementRecipientIds(hotel.id);
+            if (managementRecipientIds.length) {
+              const reservationCount = groupsNeedingReview.reduce(
+                (sum, group) => sum + group.reservationCount,
+                0,
+              );
+              const unassignedCount = groupsNeedingReview.reduce(
+                (sum, group) => sum + group.unassignedCount,
+                0,
+              );
+
+              await this.notifications.dispatch({
+                hotelId: hotel.id,
+                event: 'systemAlerts',
+                recipientUserIds: managementRecipientIds,
+                email: this.buildGroupBlockReviewEmail({
+                  hotelName: hotel.name,
+                  arrivalDate,
+                  groupCount: groupsNeedingReview.length,
+                  reservationCount,
+                  unassignedCount,
+                  groups: groupsNeedingReview,
+                }),
+                inApp: this.buildGroupBlockReviewInAppNotification({
+                  arrivalDate,
+                  groupCount: groupsNeedingReview.length,
+                  reservationCount,
+                  unassignedCount,
+                  groups: groupsNeedingReview,
+                }),
+              });
+            }
           }
         }
 
@@ -3008,7 +3495,11 @@ export class ReservationsService {
               hotelId: hotel.id,
               status: { in: [ReservationStatus.PENDING, ReservationStatus.CONFIRMED] },
             },
-            select: { checkIn: true },
+            select: {
+              checkIn: true,
+              roomId: true,
+              groupBooking: { select: { id: true } },
+            },
           }),
           this.prisma.reservation.findMany({
             where: {
@@ -3044,6 +3535,16 @@ export class ReservationsService {
         const arrivalsTomorrow = arrivalCandidates.filter(
           (reservation) => getZonedDateParts(reservation.checkIn, timezone).date === nextArrivalDate,
         ).length;
+        const unassignedArrivalsCount = arrivalCandidates.filter(
+          (reservation) =>
+            getZonedDateParts(reservation.checkIn, timezone).date === nextArrivalDate &&
+            !reservation.roomId,
+        ).length;
+        const arrivalsTomorrowRows = arrivalCandidates.filter(
+          (reservation) => getZonedDateParts(reservation.checkIn, timezone).date === nextArrivalDate,
+        );
+        const { groupBlockReviewCount, groupedReservationReviewCount } =
+          this.countGroupedArrivalsNeedingReview(arrivalsTomorrowRows);
         const departuresToday = checkedInReservations.filter(
           (reservation) => getZonedDateParts(reservation.checkOut, timezone).date === alertDate,
         ).length;
@@ -3055,6 +3556,27 @@ export class ReservationsService {
           const balance =
             Math.max(0, Number(reservation.totalAmount) - Number(reservation.paidAmount));
           return localCheckoutDate < alertDate && balance > 0;
+        }).length;
+        const severeCollectionsCount = overduePaymentCandidates.filter((reservation) => {
+          const localCheckoutDate = getZonedDateParts(reservation.checkOut, timezone).date;
+          const balance =
+            Math.max(0, Number(reservation.totalAmount) - Number(reservation.paidAmount));
+          const daysOverdue = diffDaysBetweenLocalDates(localCheckoutDate, alertDate);
+          return localCheckoutDate < alertDate && balance > 0 && daysOverdue >= 7;
+        }).length;
+        const criticalCollectionsCount = overduePaymentCandidates.filter((reservation) => {
+          const localCheckoutDate = getZonedDateParts(reservation.checkOut, timezone).date;
+          const balance =
+            Math.max(0, Number(reservation.totalAmount) - Number(reservation.paidAmount));
+          const daysOverdue = diffDaysBetweenLocalDates(localCheckoutDate, alertDate);
+          return localCheckoutDate < alertDate && balance > 0 && daysOverdue >= 14;
+        }).length;
+        const finalCollectionsCount = overduePaymentCandidates.filter((reservation) => {
+          const localCheckoutDate = getZonedDateParts(reservation.checkOut, timezone).date;
+          const balance =
+            Math.max(0, Number(reservation.totalAmount) - Number(reservation.paidAmount));
+          const daysOverdue = diffDaysBetweenLocalDates(localCheckoutDate, alertDate);
+          return localCheckoutDate < alertDate && balance > 0 && daysOverdue >= 21;
         }).length;
 
         await this.notifications.dispatch({
@@ -3068,6 +3590,12 @@ export class ReservationsService {
             departuresToday,
             overdueCheckouts,
             overduePayments,
+            severeCollectionsCount,
+            criticalCollectionsCount,
+            finalCollectionsCount,
+            unassignedArrivalsCount,
+            groupBlockReviewCount,
+            groupedReservationReviewCount,
             openCheckoutPrepTasks,
             urgentMaintenanceOpen,
           }),
@@ -3078,10 +3606,64 @@ export class ReservationsService {
             departuresToday,
             overdueCheckouts,
             overduePayments,
+            severeCollectionsCount,
+            criticalCollectionsCount,
+            finalCollectionsCount,
+            unassignedArrivalsCount,
+            groupBlockReviewCount,
+            groupedReservationReviewCount,
             openCheckoutPrepTasks,
             urgentMaintenanceOpen,
           }),
         });
+
+        const managementRecipientIds = await this.getManagementRecipientIds(hotel.id);
+        const hasManagementRisk =
+          overdueCheckouts > 0 ||
+          overduePayments > 0 ||
+          severeCollectionsCount > 0 ||
+          unassignedArrivalsCount > 0 ||
+          groupBlockReviewCount > 0 ||
+          openCheckoutPrepTasks > 0 ||
+          urgentMaintenanceOpen > 0;
+
+        if (managementRecipientIds.length && hasManagementRisk) {
+          await this.notifications.dispatch({
+            hotelId: hotel.id,
+            event: 'systemAlerts',
+            recipientUserIds: managementRecipientIds,
+            email: this.buildManagerRiskDigestEmail({
+              hotelName: hotel.name,
+              alertDate,
+              nextArrivalDate,
+              arrivalsTomorrow,
+              overdueCheckouts,
+              overduePayments,
+              severeCollectionsCount,
+              criticalCollectionsCount,
+              finalCollectionsCount,
+              unassignedArrivalsCount,
+              groupBlockReviewCount,
+              groupedReservationReviewCount,
+              openCheckoutPrepTasks,
+              urgentMaintenanceOpen,
+            }),
+            inApp: this.buildManagerRiskDigestInAppNotification({
+              alertDate,
+              nextArrivalDate,
+              overdueCheckouts,
+              overduePayments,
+              severeCollectionsCount,
+              criticalCollectionsCount,
+              finalCollectionsCount,
+              unassignedArrivalsCount,
+              groupBlockReviewCount,
+              groupedReservationReviewCount,
+              openCheckoutPrepTasks,
+              urgentMaintenanceOpen,
+            }),
+          });
+        }
 
         await this.recordCronJobSuccess({
           hotelId: hotel.id,

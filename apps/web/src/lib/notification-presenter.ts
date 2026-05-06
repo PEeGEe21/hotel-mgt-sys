@@ -13,6 +13,16 @@ function asNumber(metadata: NotificationMetadata, key: string) {
   return typeof value === 'number' ? value : null;
 }
 
+function formatCount(label: string, value: number | null, plural = `${label}s`) {
+  if (value === null) return null;
+  return `${value} ${value === 1 ? label : plural}`;
+}
+
+function formatMoney(value: number | null) {
+  if (value === null) return null;
+  return value.toLocaleString('en-NG');
+}
+
 export function getNotificationSeverity(metadata: NotificationMetadata) {
   const severity = asString(metadata, 'severity');
   if (!severity) return null;
@@ -64,14 +74,35 @@ export function getNotificationContextSummary(item: AppNotification) {
 
   switch (item.event) {
     case 'newReservation':
+      return [
+        asString(metadata, 'reservationNo'),
+        asString(metadata, 'roomNumber'),
+        asString(metadata, 'summary'),
+      ]
+        .filter(Boolean)
+        .join(' · ');
     case 'checkIn':
     case 'checkOut':
-    case 'upcomingArrival':
       return [asString(metadata, 'reservationNo'), asString(metadata, 'roomNumber')]
         .filter(Boolean)
         .join(' · ');
+    case 'upcomingArrival': {
+      const arrivalCount = asNumber(metadata, 'arrivalCount');
+      const unassignedCount = asNumber(metadata, 'unassignedCount');
+      return [
+        asString(metadata, 'arrivalDate'),
+        formatCount('arrival', arrivalCount),
+        unassignedCount ? `${unassignedCount} unassigned` : null,
+      ]
+        .filter(Boolean)
+        .join(' · ');
+    }
     case 'paymentReceived':
-      return [asString(metadata, 'reservationNo'), asString(metadata, 'method')]
+      return [
+        asString(metadata, 'reservationNo'),
+        asString(metadata, 'method'),
+        formatMoney(asNumber(metadata, 'amount')),
+      ]
         .filter(Boolean)
         .join(' · ');
     case 'paymentOverdue': {
@@ -98,7 +129,11 @@ export function getNotificationContextSummary(item: AppNotification) {
       return candidateCount !== null ? `Needs review: ${candidateCount}` : 'Arrival follow-up';
     }
     case 'maintenanceAlert':
-      return [asString(metadata, 'requestNo'), asString(metadata, 'priority')]
+      return [
+        asString(metadata, 'requestNo'),
+        asString(metadata, 'priority'),
+        asString(metadata, 'roomNumber') ?? asString(metadata, 'facilityName'),
+      ]
         .filter(Boolean)
         .join(' · ');
     case 'maintenanceEscalation': {
@@ -106,11 +141,19 @@ export function getNotificationContextSummary(item: AppNotification) {
       return escalationCount !== null ? `Escalations: ${escalationCount}` : 'Open urgent requests';
     }
     case 'attendanceAlert':
-      return [asString(metadata, 'employeeCode'), asString(metadata, 'alertKind')]
+      return [
+        asString(metadata, 'employeeCode'),
+        asString(metadata, 'alertKind'),
+        asString(metadata, 'summary'),
+      ]
         .filter(Boolean)
         .join(' · ');
     case 'dailyDigest':
-      return [asString(metadata, 'nextArrivalDate'), asString(metadata, 'summary')]
+      return [
+        asString(metadata, 'nextArrivalDate'),
+        formatCount('arrival', asNumber(metadata, 'arrivalsTomorrow')),
+        formatCount('departure', asNumber(metadata, 'departuresToday')),
+      ]
         .filter(Boolean)
         .join(' · ');
     case 'lowInventory':
@@ -118,7 +161,11 @@ export function getNotificationContextSummary(item: AppNotification) {
         .filter(Boolean)
         .join(' · ');
     case 'systemAlerts':
-      return [asString(metadata, 'summary'), asString(metadata, 'alertDate')]
+      return [
+        asString(metadata, 'summary'),
+        formatMoney(asNumber(metadata, 'totalOutstanding')),
+        asString(metadata, 'alertDate'),
+      ]
         .filter(Boolean)
         .join(' · ');
     default:
@@ -134,18 +181,62 @@ export function getNotificationSecondaryMessage(item: AppNotification) {
       const balance = asNumber(metadata, 'balance');
       return balance !== null ? `Balance remaining: ${balance.toLocaleString('en-NG')}` : null;
     }
+    case 'newReservation':
+      return [asString(metadata, 'guestName'), asString(metadata, 'roomNumber')]
+        .filter(Boolean)
+        .join(' · ');
+    case 'checkIn':
+      return asString(metadata, 'checkedInAt');
+    case 'checkOut':
+      return asString(metadata, 'checkedOutAt');
+    case 'upcomingArrival': {
+      const unassignedCount = asNumber(metadata, 'unassignedCount');
+      return unassignedCount
+        ? `${unassignedCount} arrival${unassignedCount === 1 ? '' : 's'} still need room assignment`
+        : asString(metadata, 'alertDate');
+    }
     case 'paymentOverdue':
       return asString(metadata, 'alertDate');
+    case 'checkOutDue':
+      return asString(metadata, 'alertDate');
+    case 'housekeepingAlert':
+      return formatCount('task', asNumber(metadata, 'tasksCount'));
     case 'noShowFollowUp':
       return asString(metadata, 'alertDate');
     case 'maintenanceAlert':
-      return asString(metadata, 'status');
+      return [asString(metadata, 'status'), asString(metadata, 'title')]
+        .filter(Boolean)
+        .join(' · ');
     case 'maintenanceEscalation':
-      return asString(metadata, 'alertDate');
-    case 'attendanceAlert':
+      return [
+        formatCount('request', asNumber(metadata, 'escalationCount')),
+        asString(metadata, 'alertDate'),
+      ]
+        .filter(Boolean)
+        .join(' · ');
+    case 'attendanceAlert': {
+      const alertKind = asString(metadata, 'alertKind');
+      if (alertKind === 'late') {
+        return [asString(metadata, 'staffName'), asString(metadata, 'method')]
+          .filter(Boolean)
+          .join(' · ');
+      }
+      if (alertKind === 'absence') {
+        return [asString(metadata, 'staffName'), asString(metadata, 'expectedBy')]
+          .filter(Boolean)
+          .join(' · ');
+      }
       return asString(metadata, 'staffName');
-    case 'dailyDigest':
-      return asString(metadata, 'alertDate');
+    }
+    case 'dailyDigest': {
+      const extra = [
+        formatCount('severe collection', asNumber(metadata, 'severeCollectionsCount')),
+        formatCount('unassigned arrival', asNumber(metadata, 'unassignedArrivalsCount')),
+      ]
+        .filter(Boolean)
+        .join(' · ');
+      return extra || asString(metadata, 'alertDate');
+    }
     case 'lowInventory': {
       const quantity = asNumber(metadata, 'quantity');
       const minStock = asNumber(metadata, 'minStock');
@@ -154,7 +245,11 @@ export function getNotificationSecondaryMessage(item: AppNotification) {
         : null;
     }
     case 'systemAlerts':
-      return asString(metadata, 'arrivalDate') ?? asString(metadata, 'alertDate');
+      return (
+        asString(metadata, 'arrivalDate') ??
+        formatCount('severe case', asNumber(metadata, 'severeCount')) ??
+        asString(metadata, 'alertDate')
+      );
     default:
       return null;
   }

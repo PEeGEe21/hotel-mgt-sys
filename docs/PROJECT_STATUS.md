@@ -161,14 +161,20 @@ Done recently:
 - notification severity fallback and system-alert metadata presentation have been improved in the inbox UI
 - guest checkout reminder copy has been polished with clearer departure guidance
 - timed notification workflows now also cover management-targeted overdue collections escalation and room-assignment review alerts for upcoming arrivals
+- reservation and scheduler in-app notifications now carry more consistent severity, summary, and context metadata across reservation, arrival, checkout, and digest flows
+- daily digest notifications now include severe collections and unassigned-arrival counts so managers get a fuller nightly summary
+- collections escalation alerts now distinguish severe vs critical overdue cases and include top high-risk folios for faster finance follow-up
+- attendance, inventory, and maintenance notifications now present stronger inbox summaries and secondary context instead of sparse generic labels
+- upcoming-arrival scans now also raise group-booking room-block review alerts when arriving grouped reservations still have unassigned rooms
+- daily digest scans now also send a management-only risk digest variant when overdue, collections, arrival-allocation, housekeeping, or maintenance pressure exists
+- timed workflow escalation now includes a final collections stage at 21+ overdue days
+- daily and management digests now also surface grouped room-block review pressure plus critical/final collections counts
 
-In progress:
-- hotel-level `emailAutoRetryEnabled` setting has been added to the schema/settings flow and is intended to default `off`, but final Prisma migration/client regeneration verification is still incomplete
-- notification `pinnedAt` / `archivedAt` columns have been added to the schema/migration so state can move out of JSON metadata, but final Prisma migration/client regeneration verification is still incomplete
+- hotel-level `emailAutoRetryEnabled` setting is now wired through schema/settings flow and defaults `off`
+- notification `pinnedAt` / `archivedAt` columns are now in place so state no longer depends on JSON metadata
 
 Still pending:
 - better notification content across event titles/messages, urgency levels, and metadata summaries across all event types
-- additional timed notification workflows such as deeper finance collections, room blocks, and manager digest variants
 
 - [~] Realtime WebSocket/SSE
 Done recently:
