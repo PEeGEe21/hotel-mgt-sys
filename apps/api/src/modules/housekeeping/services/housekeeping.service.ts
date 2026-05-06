@@ -1,9 +1,11 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { TaskStatus, TaskPriority } from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { RealtimeGateway } from '../../realtime/realtime.gateway';
 import { TaskFilterDto } from '../dtos/task-filter.dto';
 import { CreateTaskDto } from '../dtos/create-task.dto';
 import { UpdateTaskDto } from '../dtos/update-task.dto';
+import { HOUSEKEEPING_TASKS_SYNC_EVENT } from '../../realtime/realtime.events';
 
 const TASK_INCLUDE = {
   room: {
@@ -21,7 +23,41 @@ const TASK_INCLUDE = {
 
 @Injectable()
 export class HousekeepingService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private realtimeGateway: RealtimeGateway,
+  ) {}
+
+  private emitTaskSync(
+    hotelId: string,
+    action: 'created' | 'updated' | 'status_changed',
+    task: {
+      id: string | null;
+      roomId?: string | null;
+      room?: { number?: string | null } | null;
+      status?: TaskStatus | null;
+      priority?: TaskPriority | null;
+      assignedTo?: string | null;
+      count?: number;
+    },
+  ) {
+    this.realtimeGateway.emitHousekeepingTaskSync({
+      type: HOUSEKEEPING_TASKS_SYNC_EVENT,
+      entity: 'housekeeping.task',
+      action,
+      hotelId,
+      timestamp: new Date().toISOString(),
+      data: {
+        taskId: task.id,
+        roomId: task.roomId ?? null,
+        roomNumber: task.room?.number ?? null,
+        status: task.status ?? null,
+        priority: task.priority ?? null,
+        assignedTo: task.assignedTo ?? null,
+        count: task.count,
+      },
+    });
+  }
 
   // ── Stats for overview ─────────────────────────────────────────────────────
   async getStats(hotelId: string) {
@@ -132,7 +168,7 @@ export class HousekeepingService {
       await this.assertStaffBelongsToHotel(hotelId, dto.assignedTo);
     }
 
-    return this.prisma.housekeepingTask.create({
+    const task = await this.prisma.housekeepingTask.create({
       data: {
         hotelId,
         roomId: dto.roomId,
@@ -145,6 +181,9 @@ export class HousekeepingService {
       },
       include: TASK_INCLUDE,
     });
+
+    this.emitTaskSync(hotelId, 'created', task);
+    return task;
   }
 
   // ── Update ─────────────────────────────────────────────────────────────────
@@ -156,7 +195,7 @@ export class HousekeepingService {
 
     const completedAt = dto.status === TaskStatus.DONE ? new Date() : undefined;
 
-    return this.prisma.housekeepingTask.update({
+    const updated = await this.prisma.housekeepingTask.update({
       where: { id },
       data: {
         ...dto,
@@ -167,6 +206,13 @@ export class HousekeepingService {
       },
       include: TASK_INCLUDE,
     });
+
+    this.emitTaskSync(
+      hotelId,
+      dto.status ? 'status_changed' : 'updated',
+      updated,
+    );
+    return updated;
   }
 
   // ── Mark done & update room ─────────────────────────────────────────────────
@@ -197,6 +243,7 @@ export class HousekeepingService {
           }
         }),
     ]);
+    this.emitTaskSync(hotelId, 'status_changed', updated);
     return updated;
   }
 
@@ -207,11 +254,14 @@ export class HousekeepingService {
       await this.assertStaffBelongsToHotel(hotelId, staffId);
     }
 
-    return this.prisma.housekeepingTask.update({
+    const updated = await this.prisma.housekeepingTask.update({
       where: { id },
       data: { assignedTo: staffId },
       include: TASK_INCLUDE,
     });
+
+    this.emitTaskSync(hotelId, 'updated', updated);
+    return updated;
   }
 
   // ── Bulk create (e.g. after checkouts) ─────────────────────────────────────
@@ -235,6 +285,10 @@ export class HousekeepingService {
       status: TaskStatus.PENDING,
     }));
     await this.prisma.housekeepingTask.createMany({ data: tasks });
+    this.emitTaskSync(hotelId, 'created', {
+      id: null,
+      count: tasks.length,
+    });
     return { created: tasks.length };
   }
 

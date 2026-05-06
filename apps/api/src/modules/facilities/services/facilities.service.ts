@@ -3,6 +3,8 @@ import { HotelCronJobType } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { FilterDto } from '../dtos/filter.dto';
 import { NotificationsService } from '../../notifications/notifications.service';
+import { RealtimeGateway } from '../../realtime/realtime.gateway';
+import { FACILITIES_MAINTENANCE_SYNC_EVENT } from '../../realtime/realtime.events';
 
 const MAINTENANCE_ESCALATION_SCAN_JOB_TYPE =
   'MAINTENANCE_ESCALATION_SCAN' as HotelCronJobType;
@@ -14,7 +16,39 @@ export class FacilitiesService {
   constructor(
     private prisma: PrismaService,
     private notifications: NotificationsService,
+    private realtimeGateway: RealtimeGateway,
   ) {}
+
+  private emitMaintenanceSync(
+    hotelId: string,
+    action: 'created' | 'updated' | 'status_changed',
+    request: {
+      id: string;
+      requestNo: string;
+      status: string;
+      priority: string;
+      facilityId?: string | null;
+      roomId?: string | null;
+      assignedTo?: string | null;
+    },
+  ) {
+    this.realtimeGateway.emitFacilitiesMaintenanceSync({
+      type: FACILITIES_MAINTENANCE_SYNC_EVENT,
+      entity: 'facilities.maintenance-request',
+      action,
+      hotelId,
+      timestamp: new Date().toISOString(),
+      data: {
+        requestId: request.id,
+        requestNo: request.requestNo,
+        status: request.status,
+        priority: request.priority,
+        facilityId: request.facilityId ?? null,
+        roomId: request.roomId ?? null,
+        assignedTo: request.assignedTo ?? null,
+      },
+    });
+  }
 
   private generateCode(prefix: string) {
     const year = new Date().getFullYear();
@@ -1197,6 +1231,7 @@ export class FacilitiesService {
       }
     }
 
+    this.emitMaintenanceSync(hotelId, 'created', request);
     return request;
   }
 
@@ -1222,10 +1257,17 @@ export class FacilitiesService {
       this.assertInspectionBelongsToHotel(hotelId, data.verificationInspectionId),
     ]);
 
-    return this.prisma.maintenanceRequest.update({
+    const updated = await this.prisma.maintenanceRequest.update({
       where: { id: req.id },
       data,
     });
+
+    this.emitMaintenanceSync(
+      hotelId,
+      data.status ? 'status_changed' : 'updated',
+      updated,
+    );
+    return updated;
   }
 
   async runMaintenanceEscalationScanForDate(

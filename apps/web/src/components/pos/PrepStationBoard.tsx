@@ -18,6 +18,9 @@ import {
   CheckCircle2,
   Play,
   Undo2,
+  Wifi,
+  WifiOff,
+  Activity,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/auth.store';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -60,6 +63,47 @@ function fmtTime(value: string) {
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+function formatLastSeen(value: string | null) {
+  if (!value) return 'Waiting for activity';
+  return new Date(value).toLocaleTimeString('en-NG', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+}
+
+function realtimeTone(connectionState: string, isStale: boolean) {
+  if (isStale) {
+    return {
+      label: 'Stale',
+      className: 'border-amber-500/30 bg-amber-500/10 text-amber-200',
+      icon: Activity,
+    };
+  }
+
+  if (connectionState === 'connected') {
+    return {
+      label: 'Live',
+      className: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200',
+      icon: Wifi,
+    };
+  }
+
+  if (connectionState === 'reconnecting' || connectionState === 'connecting') {
+    return {
+      label: 'Reconnecting',
+      className: 'border-sky-500/30 bg-sky-500/10 text-sky-200',
+      icon: RefreshCw,
+    };
+  }
+
+  return {
+    label: 'Offline',
+    className: 'border-red-500/30 bg-red-500/10 text-red-200',
+    icon: WifiOff,
+  };
 }
 
 function routeContext(ticket: {
@@ -169,7 +213,7 @@ export default function PrepStationBoard({
   const Icon = config.icon;
 
   const { data, isLoading, isFetching, refetch } = usePrepBoard(station);
-  usePrepRealtime(station);
+  const realtime = usePrepRealtime(station);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -202,6 +246,12 @@ export default function PrepStationBoard({
       day: 'numeric',
     });
   }, [now]);
+
+  const realtimeStatus = useMemo(
+    () => realtimeTone(realtime.connectionState, realtime.isStale),
+    [realtime.connectionState, realtime.isStale],
+  );
+  const RealtimeIcon = realtimeStatus.icon;
 
   if (!ready || !isAuthenticated) {
     return (
@@ -250,6 +300,12 @@ export default function PrepStationBoard({
                     <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5">
                       Signed in as {user?.name ?? user?.email}
                     </span>
+                    <span
+                      className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 ${realtimeStatus.className}`}
+                    >
+                      <RealtimeIcon size={12} />
+                      {realtimeStatus.label}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -293,6 +349,47 @@ export default function PrepStationBoard({
               <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
                 <p className="text-xs uppercase tracking-[0.25em] text-slate-500">Delayed</p>
                 <p className="mt-2 text-3xl font-black text-red-300">{data?.summary.ageBuckets.critical ?? 0}</p>
+              </div>
+            </div>
+
+            <div className="mt-3 grid gap-3 xl:grid-cols-3">
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                <p className="text-xs uppercase tracking-[0.25em] text-slate-500">Realtime Status</p>
+                <p className="mt-2 text-lg font-bold text-white">{realtimeStatus.label}</p>
+                <p className="mt-1 text-xs text-slate-400">
+                  {realtime.isStale
+                    ? 'Connection is up, but prep sync has been quiet for over 90 seconds.'
+                    : realtime.connectionState === 'connected'
+                      ? 'Socket connected and listening for prep updates.'
+                      : realtime.connectionState === 'reconnecting' ||
+                          realtime.connectionState === 'connecting'
+                        ? 'Trying to restore live prep updates.'
+                        : 'Realtime socket is offline right now.'}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                <p className="text-xs uppercase tracking-[0.25em] text-slate-500">Last Prep Event</p>
+                <p className="mt-2 text-lg font-bold text-white">
+                  {formatLastSeen(realtime.lastEventAt)}
+                </p>
+                <p className="mt-1 text-xs text-slate-400">
+                  {realtime.lastEventAction && realtime.lastEventOrderNo
+                    ? `${realtime.lastEventAction.replace('_', ' ')} on ${realtime.lastEventOrderNo}`
+                    : 'No station-specific prep event received in this session yet.'}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                <p className="text-xs uppercase tracking-[0.25em] text-slate-500">Connection Trace</p>
+                <p className="mt-2 text-lg font-bold text-white">
+                  {formatLastSeen(realtime.lastConnectedAt)}
+                </p>
+                <p className="mt-1 text-xs text-slate-400">
+                  {realtime.lastErrorAt
+                    ? `Last socket error at ${formatLastSeen(realtime.lastErrorAt)}`
+                    : realtime.lastDisconnectedAt
+                      ? `Last disconnect at ${formatLastSeen(realtime.lastDisconnectedAt)}`
+                      : 'No connection interruptions recorded in this session.'}
+                </p>
               </div>
             </div>
           </div>

@@ -13,6 +13,7 @@ import {
 import { useStaff } from '@/hooks/staff/useStaff';
 import Pagination from '@/components/ui/pagination';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useOperationsRealtime } from '@/hooks/useOperationsRealtime';
 import {
   Drawer,
   DrawerContent,
@@ -92,6 +93,7 @@ function maintenanceCost(request: FacilityMaintenanceRequest) {
 
 export default function FacilityMaintenancePage() {
   const { can } = usePermissions();
+  useOperationsRealtime('facilities-maintenance');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);

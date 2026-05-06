@@ -12,9 +12,14 @@ import { Server, Socket } from 'socket.io';
 import { RealtimeAuthService, RealtimeUser } from './realtime-auth.service';
 import { NotificationEvent } from '../notifications/notifications.constants';
 import { PresenceUpdateEvent, RealtimePresenceService } from './realtime-presence.service';
+import { RealtimeDiagnosticsService } from './realtime-diagnostics.service';
 import {
+  FACILITIES_MAINTENANCE_SYNC_EVENT,
+  FacilitiesMaintenanceSyncPayload,
+  HOUSEKEEPING_TASKS_SYNC_EVENT,
   POS_ORDERS_SYNC_EVENT,
   POS_PREP_SYNC_EVENT,
+  HousekeepingTaskSyncPayload,
   PosOrderSyncPayload,
   PosPrepSyncPayload,
 } from './realtime.events';
@@ -48,6 +53,7 @@ export class RealtimeGateway
   constructor(
     private realtimeAuthService: RealtimeAuthService,
     private realtimePresenceService: RealtimePresenceService,
+    private realtimeDiagnosticsService: RealtimeDiagnosticsService,
   ) {}
 
   afterInit() {
@@ -114,6 +120,17 @@ export class RealtimeGateway
         ...payload,
       });
     });
+    void this.realtimeDiagnosticsService.recordEvent({
+      hotelId: payload.hotelId,
+      moduleKey: 'notifications',
+      eventName: 'notifications.sync',
+      eventType: payload.reason,
+      summary: payload.event
+        ? `Notification ${payload.reason} for ${payload.event}`
+        : `Notification ${payload.reason}`,
+      payload,
+      timestamp: payload.timestamp,
+    });
   }
 
   emitPresenceSync(payload: PresenceSyncPayload) {
@@ -121,13 +138,72 @@ export class RealtimeGateway
       this.server.to(this.getHotelRoom(payload.hotelId)).emit('presence.sync', payload);
     }
     this.server.to(this.getUserRoom(payload.userId)).emit('presence.sync', payload);
+    void this.realtimeDiagnosticsService.recordEvent({
+      hotelId: payload.hotelId,
+      moduleKey: 'presence',
+      eventName: 'presence.sync',
+      eventType: payload.isOnline ? 'online' : 'offline',
+      summary: `Presence ${payload.isOnline ? 'online' : 'offline'} for user ${payload.userId}`,
+      payload,
+      timestamp: payload.timestamp,
+    });
   }
 
   emitPosOrderSync(payload: PosOrderSyncPayload) {
     this.server.to(this.getHotelRoom(payload.hotelId)).emit(POS_ORDERS_SYNC_EVENT, payload);
+    void this.realtimeDiagnosticsService.recordEvent({
+      hotelId: payload.hotelId,
+      moduleKey: 'posOrders',
+      eventName: POS_ORDERS_SYNC_EVENT,
+      eventType: payload.action,
+      summary: `${payload.action} ${payload.data.orderNo}`,
+      payload,
+      timestamp: payload.timestamp,
+    });
   }
 
   emitPosPrepSync(payload: PosPrepSyncPayload) {
     this.server.to(this.getHotelRoom(payload.hotelId)).emit(POS_PREP_SYNC_EVENT, payload);
+    void this.realtimeDiagnosticsService.recordEvent({
+      hotelId: payload.hotelId,
+      moduleKey: 'prep',
+      eventName: POS_PREP_SYNC_EVENT,
+      eventType: payload.action,
+      summary: `${payload.action} ${payload.data.orderNo}`,
+      payload,
+      timestamp: payload.timestamp,
+    });
+  }
+
+  emitHousekeepingTaskSync(payload: HousekeepingTaskSyncPayload) {
+    this.server.to(this.getHotelRoom(payload.hotelId)).emit(HOUSEKEEPING_TASKS_SYNC_EVENT, payload);
+    void this.realtimeDiagnosticsService.recordEvent({
+      hotelId: payload.hotelId,
+      moduleKey: 'housekeeping',
+      eventName: HOUSEKEEPING_TASKS_SYNC_EVENT,
+      eventType: payload.action,
+      summary: payload.data.roomNumber
+        ? `${payload.action} room ${payload.data.roomNumber}`
+        : payload.data.count
+          ? `${payload.action} ${payload.data.count} tasks`
+          : `Housekeeping ${payload.action}`,
+      payload,
+      timestamp: payload.timestamp,
+    });
+  }
+
+  emitFacilitiesMaintenanceSync(payload: FacilitiesMaintenanceSyncPayload) {
+    this.server
+      .to(this.getHotelRoom(payload.hotelId))
+      .emit(FACILITIES_MAINTENANCE_SYNC_EVENT, payload);
+    void this.realtimeDiagnosticsService.recordEvent({
+      hotelId: payload.hotelId,
+      moduleKey: 'facilities',
+      eventName: FACILITIES_MAINTENANCE_SYNC_EVENT,
+      eventType: payload.action,
+      summary: `${payload.action} ${payload.data.requestNo}`,
+      payload,
+      timestamp: payload.timestamp,
+    });
   }
 }

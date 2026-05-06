@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/api';
 import { getRealtimeSocket } from '@/lib/realtime';
@@ -94,6 +94,23 @@ type PrepSyncPayload = {
   };
 };
 
+export type PrepRealtimeConnectionState =
+  | 'connecting'
+  | 'connected'
+  | 'reconnecting'
+  | 'disconnected';
+
+export type PrepRealtimeStatus = {
+  connectionState: PrepRealtimeConnectionState;
+  lastEventAt: string | null;
+  lastEventAction: PrepSyncPayload['action'] | null;
+  lastEventOrderNo: string | null;
+  lastConnectedAt: string | null;
+  lastDisconnectedAt: string | null;
+  lastErrorAt: string | null;
+  isStale: boolean;
+};
+
 export function usePrepBoard(
   station: Exclude<PrepStation, 'NONE'>,
   statuses: PrepStatus[] = ['QUEUED', 'IN_PROGRESS', 'READY'],
@@ -132,22 +149,75 @@ export function useUpdatePrepItemStatus(orderId: string, itemId: string) {
 export function usePrepRealtime(station?: Exclude<PrepStation, 'NONE'>) {
   const queryClient = useQueryClient();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const [connectionState, setConnectionState] = useState<PrepRealtimeConnectionState>('connecting');
+  const [lastEventAt, setLastEventAt] = useState<string | null>(null);
+  const [lastEventAction, setLastEventAction] = useState<PrepSyncPayload['action'] | null>(null);
+  const [lastEventOrderNo, setLastEventOrderNo] = useState<string | null>(null);
+  const [lastConnectedAt, setLastConnectedAt] = useState<string | null>(null);
+  const [lastDisconnectedAt, setLastDisconnectedAt] = useState<string | null>(null);
+  const [lastErrorAt, setLastErrorAt] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
-    if (!isAuthenticated) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 15_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setConnectionState('disconnected');
+      return;
+    }
 
     const socket = getRealtimeSocket();
     if (!socket) return;
+
+    const syncConnectionState = () => {
+      if (socket.connected) {
+        setConnectionState('connected');
+        return;
+      }
+
+      setConnectionState(socket.active ? 'reconnecting' : 'connecting');
+    };
 
     const handlePrepSync = (payload?: PrepSyncPayload) => {
       if (!payload) return;
       if (station && payload.data.prepStation !== station) return;
 
+      setLastEventAt(payload.timestamp ?? new Date().toISOString());
+      setLastEventAction(payload.action);
+      setLastEventOrderNo(payload.data.orderNo);
+
       queryClient.invalidateQueries({ queryKey: ['pos-prep-board'] });
       queryClient.invalidateQueries({ queryKey: ['pos-orders'] });
     };
 
+    const handleConnect = () => {
+      setConnectionState('connected');
+      setLastConnectedAt(new Date().toISOString());
+    };
+
+    const handleDisconnect = () => {
+      setConnectionState(socket.active ? 'reconnecting' : 'disconnected');
+      setLastDisconnectedAt(new Date().toISOString());
+    };
+
+    const handleConnectError = () => {
+      setConnectionState('reconnecting');
+      setLastErrorAt(new Date().toISOString());
+    };
+
+    const handleReconnectAttempt = () => {
+      setConnectionState('reconnecting');
+    };
+
     socket.on('pos.prep.sync', handlePrepSync);
+    socket.on('connect', handleConnect);
+    socket.on('disconnect', handleDisconnect);
+    socket.on('connect_error', handleConnectError);
+    socket.io.on('reconnect_attempt', handleReconnectAttempt);
+    syncConnectionState();
 
     if (!socket.connected) {
       socket.connect();
@@ -155,6 +225,48 @@ export function usePrepRealtime(station?: Exclude<PrepStation, 'NONE'>) {
 
     return () => {
       socket.off('pos.prep.sync', handlePrepSync);
+      socket.off('connect', handleConnect);
+      socket.off('disconnect', handleDisconnect);
+      socket.off('connect_error', handleConnectError);
+      socket.io.off('reconnect_attempt', handleReconnectAttempt);
     };
   }, [isAuthenticated, queryClient, station]);
+
+  const latestPrepBoardUpdateAt =
+    queryClient.getQueryState<PrepBoardResponse>(['pos-prep-board', station, ['QUEUED', 'IN_PROGRESS', 'READY']])
+      ?.dataUpdatedAt ?? 0;
+
+  const freshnessReference = Math.max(
+    latestPrepBoardUpdateAt,
+    lastEventAt ? new Date(lastEventAt).getTime() : 0,
+    lastConnectedAt ? new Date(lastConnectedAt).getTime() : 0,
+  );
+
+  const isStale =
+    connectionState === 'connected' &&
+    freshnessReference > 0 &&
+    now - freshnessReference > 90_000;
+
+  return useMemo(
+    () => ({
+      connectionState,
+      lastEventAt,
+      lastEventAction,
+      lastEventOrderNo,
+      lastConnectedAt,
+      lastDisconnectedAt,
+      lastErrorAt,
+      isStale,
+    }),
+    [
+      connectionState,
+      isStale,
+      lastConnectedAt,
+      lastDisconnectedAt,
+      lastErrorAt,
+      lastEventAction,
+      lastEventAt,
+      lastEventOrderNo,
+    ],
+  );
 }

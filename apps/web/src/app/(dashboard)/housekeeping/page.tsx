@@ -23,6 +23,7 @@ import {
   type HKTask,
   type TaskStatus,
 } from '@/hooks/useHousekeeping';
+import { useOperationsRealtime } from '@/hooks/useOperationsRealtime';
 import NewTaskModal from './_components/NewTaskModal';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -123,6 +124,7 @@ function TaskRow({ task }: { task: HKTask }) {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function HousekeepingPage() {
   const [showNew, setShowNew] = useState(false);
+  useOperationsRealtime('housekeeping');
 
   const { data: stats, isLoading: statsLoading } = useHKStats();
   const { data: tasksData, isLoading: tasksLoading } = useHKTasks({

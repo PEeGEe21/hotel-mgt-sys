@@ -10,8 +10,9 @@ import { FacilitiesRequisitionController } from './controllers/facilities-requis
 import { FacilitiesTypeController } from './controllers/facilities-type.controller';
 import { FacilitiesDepartmentController } from './controllers/facilities-department.controller';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { RealtimeModule } from '../realtime/realtime.module';
 @Module({
-  imports: [NotificationsModule],
+  imports: [NotificationsModule, RealtimeModule],
   providers: [FacilitiesService],
   controllers: [
     FacilitiesController,

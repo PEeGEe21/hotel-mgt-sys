@@ -34,6 +34,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import TaskCard from '../_components/TaskCard';
 import { KANBAN_COLS, STATUS_CONFIG } from '@/lib/housekeeping-data';
 import TaskDrawer from '../_components/TaskDrawer';
+import { useOperationsRealtime } from '@/hooks/useOperationsRealtime';
 
 // ─── Room Grid Card ───────────────────────────────────────────────────────────
 function RoomGridCard({
@@ -98,6 +99,7 @@ export default function HousekeepingTasksPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const debouncedSearch = useDebounce(search, 300);
+  useOperationsRealtime('housekeeping');
   const taskId = searchParams.get('taskId');
   const { data: floors = [] } = useFloors();
   const { data: staff = [] } = useHKStaff();

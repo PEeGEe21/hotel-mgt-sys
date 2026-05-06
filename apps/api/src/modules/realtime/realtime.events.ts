@@ -1,7 +1,9 @@
-import { OrderStatus, PrepStation, PrepStatus } from '@prisma/client';
+import { OrderStatus, PrepStation, PrepStatus, TaskPriority, TaskStatus } from '@prisma/client';
 
 export const POS_ORDERS_SYNC_EVENT = 'pos.orders.sync';
 export const POS_PREP_SYNC_EVENT = 'pos.prep.sync';
+export const HOUSEKEEPING_TASKS_SYNC_EVENT = 'housekeeping.tasks.sync';
+export const FACILITIES_MAINTENANCE_SYNC_EVENT = 'facilities.maintenance.sync';
 
 export type RealtimeEntityAction =
   | 'created'
@@ -64,3 +66,29 @@ export type PosPrepSyncPayload = {
     };
   };
 };
+
+export type HousekeepingTaskSyncPayload = RealtimeEntityEnvelope<
+  typeof HOUSEKEEPING_TASKS_SYNC_EVENT,
+  {
+    taskId: string | null;
+    roomId: string | null;
+    roomNumber: string | null;
+    status: TaskStatus | null;
+    priority: TaskPriority | null;
+    assignedTo: string | null;
+    count?: number;
+  }
+>;
+
+export type FacilitiesMaintenanceSyncPayload = RealtimeEntityEnvelope<
+  typeof FACILITIES_MAINTENANCE_SYNC_EVENT,
+  {
+    requestId: string;
+    requestNo: string;
+    status: string;
+    priority: string;
+    facilityId: string | null;
+    roomId: string | null;
+    assignedTo: string | null;
+  }
+>;

@@ -19,6 +19,7 @@ import {
   ShieldCheck,
   Mail,
   LayoutDashboard,
+  Radio,
 } from 'lucide-react';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Layers } from '@solar-icons/react';
@@ -130,6 +131,15 @@ const sections = [
     icon: ShieldCheck,
     color: 'text-emerald-400',
     bg: 'bg-emerald-500/10 border-emerald-500/20',
+    adminOnly: true,
+  },
+  {
+    label: 'Realtime Diagnostics',
+    description: 'Monitor websocket health across live operational modules',
+    href: '/settings/realtime',
+    icon: Radio,
+    color: 'text-cyan-400',
+    bg: 'bg-cyan-500/10 border-cyan-500/20',
     adminOnly: true,
   },
   // {

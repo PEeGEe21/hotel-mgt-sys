@@ -225,6 +225,8 @@ model Hotel {
   pushDeliveryLogs        PushDeliveryLog[]
   cronSettings            HotelCronSetting[]
   roleDashboardConfigs    RoleDashboardConfig[]
+  realtimeModuleHealth    RealtimeModuleHealth[]
+  realtimeEventLogs       RealtimeEventLog[]
 }
 
 model DashboardWidget {
@@ -292,6 +294,41 @@ model HotelCronSetting {
   @@unique([hotelId, jobType])
   @@index([jobType, enabled])
   @@index([hotelId])
+}
+
+model RealtimeModuleHealth {
+  id             String   @id @default(uuid())
+  hotelId        String
+  moduleKey      String
+  eventName      String
+  lastEventAt    DateTime
+  lastEventType  String?
+  lastSummary    String?
+  eventCount     Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  hotel Hotel @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+
+  @@unique([hotelId, moduleKey])
+  @@index([hotelId, lastEventAt])
+  @@index([moduleKey])
+}
+
+model RealtimeEventLog {
+  id         String   @id @default(uuid())
+  hotelId    String
+  moduleKey  String
+  eventName  String
+  eventType  String
+  summary    String
+  payload    Json?
+  createdAt  DateTime @default(now())
+
+  hotel Hotel @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+
+  @@index([hotelId, createdAt])
+  @@index([hotelId, moduleKey, createdAt])
 }
 
 // ─── USERS & AUTH ─────────────────────────────────────────────────────────────

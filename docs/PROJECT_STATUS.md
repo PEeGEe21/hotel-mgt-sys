@@ -12,21 +12,25 @@ Done recently:
 - websocket presence sync now invalidates staff/account views in near real time
 - standardized `pos.orders.sync` realtime payload added for POS order lifecycle events
 - dashboard POS views now invalidate live from websocket order sync instead of relying mainly on short polling
+- standardized `housekeeping.tasks.sync` and `facilities.maintenance.sync` hotel-scoped realtime payloads added
+- housekeeping dashboard/task board and facilities maintenance board now invalidate live from websocket sync events
+- kitchen/bar prep boards now surface live connection, stale-state, and last-event observability
+- admin-only `settings/realtime` now exposes both session-local diagnostics and persisted hotel-level realtime history
+- realtime degradation now raises cooldown-protected admin `systemAlerts` notifications with recovered-state history
+- `settings/realtime` now includes per-hotel alert enablement, cooldown, retention, and module-specific stale-threshold controls
+- `settings/realtime` now includes seven-day trends and module health summaries for persisted realtime diagnostics
 
 In progress:
-- expanding the websocket foundation beyond notifications/presence into kitchen display plus housekeeping/facilities live task boards
-- extending standardized realtime payload conventions beyond POS order sync
+- optional expansion of standardized realtime payload conventions to additional future live workflows
 
 Still pending:
-- kitchen display realtime updates are wired at the order/prep event level, but deeper board polish/observability remains
-- housekeeping/facilities live task board updates
-- broader cross-module realtime event strategy and admin observability
+- broader cross-module realtime event strategy beyond the currently tracked operational modules
 
 ## Confirmed Open Work
 
 In progress:
 1. Realtime expansion beyond notifications/presence
-   kitchen display updates beyond the current prep/order event wiring, housekeeping/facilities live task boards, and cross-module realtime event conventions/observability
+   cross-module realtime event conventions beyond the current operational modules
 2. Scheduler and Redis production hardening
    scheduler/email retry recovery completion, broader Redis-backed caching/session/distributed support, and deeper rollout hardening
 3. Notification model/settings cleanup
@@ -184,10 +188,8 @@ Done recently:
 - websocket presence sync now invalidates staff/account views in near real time
 - standardized `pos.orders.sync` realtime payload added for POS order lifecycle events
 - dashboard POS views now invalidate live from websocket order sync instead of relying mainly on short polling
-
-Still pending:
-- kitchen display realtime updates are wired at the order/prep event level, but deeper board polish/observability remains
 - housekeeping/facilities live task board updates
+- kitchen display realtime updates are wired at the order/prep event level, but deeper board polish/observability remains
 - broader cross-module realtime event strategy and admin observability
 
 - [x] Mobile Responsiveness
