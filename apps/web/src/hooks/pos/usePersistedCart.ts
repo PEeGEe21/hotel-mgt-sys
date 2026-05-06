@@ -6,14 +6,12 @@
  * Thin wrapper over usePosStore that exposes only the cart-related
  * state and actions. Used by the POS terminal page.
  *
- * Persists to sessionStorage via Zustand — carts survive page refreshes
- * within the same tab session but clear when the tab is closed.
- * This is intentional: you don't want yesterday's bar orders in the cart
- * when the morning shift opens the terminal.
+ * Persists via Zustand so the terminal can survive refreshes and reopens,
+ * while the store itself clears cart state when the business day rolls over.
  */
 
 import { useMemo } from 'react';
-import { usePosStore, type CartItem } from '@/store/pos2.store';
+import { usePosStore, type CartItem } from '@/store/pos.store';
 
 export type { CartItem };
 

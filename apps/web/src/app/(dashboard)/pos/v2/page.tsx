@@ -18,10 +18,21 @@ import {
   TrendingUp,
   Receipt,
   AlertCircle,
+  ChefHat,
+  Martini,
+  TriangleAlert,
+  X,
+  CheckCircle2,
 } from 'lucide-react';
 import Link from 'next/link';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { usePosOrders, useZReport, type ApiOrder } from '@/hooks/pos/usePosOrders';
+import {
+  useDeliverOrder,
+  usePosOrders,
+  usePayOrderById,
+  useZReport,
+  type ApiOrder,
+} from '@/hooks/pos/usePosOrders';
 import { useInventoryItemOptions } from '@/hooks/pos/usePosProducts';
 import { usePosTerminals, usePosTerminalGroups } from '@/hooks/pos/usePosTerminals';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -32,6 +43,7 @@ import { type PosTerminal } from '@/hooks/pos/usePosTerminals';
 import { useUpdatePosTerminal } from '@/hooks/pos/usePosTerminals';
 import { useDebounce } from '@/hooks/useDebounce';
 import Pagination from '@/components/ui/pagination';
+import StationSlaPanel from '@/components/pos/StationSlaPanel';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmtMoney(n: number) {
@@ -47,6 +59,9 @@ function fmt(iso: string) {
 function fmtTime(iso: string) {
   return new Date(iso).toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit' });
 }
+function ageMinutes(iso: string) {
+  return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60000));
+}
 
 const STATUS_STYLE: Record<string, string> = {
   PENDING: 'bg-amber-500/15 text-amber-400',
@@ -61,12 +76,137 @@ const TERMINAL_STATUS_STYLE: Record<string, string> = {
   Offline: 'bg-red-500/15    text-red-400',
 };
 
+type PayMethod = 'CASH' | 'CARD' | 'TRANSFER';
+
+function ContinuePaymentModal({
+  order,
+  onClose,
+}: {
+  order: ApiOrder;
+  onClose: () => void;
+}) {
+  const [method, setMethod] = useState<PayMethod>('CASH');
+  const [cash, setCash] = useState('');
+  const deliverOrder = useDeliverOrder();
+  const payOrder = usePayOrderById();
+  const total = Number(order.total);
+  const change = method === 'CASH' && Number(cash) >= total ? Number(cash) - total : 0;
+
+  const handleConfirm = async () => {
+    if (order.status === 'READY') {
+      await deliverOrder.mutateAsync({ orderId: order.id });
+    }
+    await payOrder.mutateAsync({
+      orderId: order.id,
+      method,
+      amountTendered: method === 'CASH' && cash ? Number(cash) : undefined,
+    });
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-sm rounded-2xl border border-[#1e2536] bg-[#161b27] p-6 shadow-2xl">
+        <div className="mb-5 flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-white">Continue Payment</h2>
+            <p className="text-xs text-slate-500 mt-1">{order.orderNo}</p>
+            {order.status === 'READY' && (
+              <p className="text-[11px] text-amber-400 mt-1">
+                This will mark the order delivered before recording payment.
+              </p>
+            )}
+          </div>
+          <button onClick={onClose} className="text-slate-500 hover:text-slate-300 transition-colors">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="mb-5 rounded-xl bg-[#0f1117] p-4">
+          <div className="flex justify-between text-sm text-slate-400">
+            <span>{order.tableNo ?? order.roomNo ?? order.posTerminal?.name ?? 'Walk-in order'}</span>
+            <span>{order.items.length} items</span>
+          </div>
+          <div className="mt-2 flex justify-between text-xl font-bold">
+            <span className="text-white">Total</span>
+            <span className="text-emerald-400">{fmtMoney(total)}</span>
+          </div>
+        </div>
+
+        <div className="mb-4 grid grid-cols-3 gap-2">
+          {(['CASH', 'CARD', 'TRANSFER'] as PayMethod[]).map((value) => (
+            <button
+              key={value}
+              onClick={() => setMethod(value)}
+              className={`rounded-xl border px-3 py-2.5 text-sm font-medium transition-all ${
+                method === value
+                  ? 'border-blue-500/40 bg-blue-600/20 text-blue-300'
+                  : 'border-[#1e2536] bg-[#0f1117] text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              {value}
+            </button>
+          ))}
+        </div>
+
+        {method === 'CASH' && (
+          <div className="mb-4 space-y-2">
+            <label className="block text-xs uppercase tracking-wider text-slate-500">
+              Cash Tendered
+            </label>
+            <input
+              type="number"
+              value={cash}
+              onChange={(e) => setCash(e.target.value)}
+              placeholder="0"
+              className="w-full rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-3 text-center text-2xl font-bold text-white outline-none transition-colors focus:border-emerald-500"
+            />
+            {change > 0 && (
+              <div className="flex items-center justify-between rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-4 py-2.5">
+                <span className="text-sm font-medium text-emerald-400">Change</span>
+                <span className="text-xl font-bold text-emerald-400">{fmtMoney(change)}</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="flex gap-3">
+          <button
+            onClick={onClose}
+            className="flex-1 rounded-lg border border-[#1e2536] px-4 py-2.5 text-sm text-slate-400 transition-colors hover:text-white"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleConfirm}
+            disabled={
+              deliverOrder.isPending ||
+              payOrder.isPending ||
+              (method === 'CASH' && !!cash && Number(cash) < total)
+            }
+            className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-500 disabled:opacity-50"
+          >
+            {deliverOrder.isPending || payOrder.isPending ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <CheckCircle2 size={14} />
+            )}
+            Confirm
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Sales Tab ────────────────────────────────────────────────────────────────
 function SalesTab() {
   const [search, setSearch] = useState('');
   const [dateFrom, setDateFrom] = useState(new Date().toISOString().slice(0, 10));
   const [dateTo, setDateTo] = useState(new Date().toISOString().slice(0, 10));
   const [page, setPage] = useState(1);
+  const [continueOrder, setContinueOrder] = useState<ApiOrder | null>(null);
+  const [quickFilter, setQuickFilter] = useState<'all' | 'ready' | 'awaitingPayment'>('all');
 
   const debouncedSearch = useDebounce(search, 400);
 
@@ -81,7 +221,19 @@ function SalesTab() {
   const { data: zReport } = useZReport({ date: dateFrom });
 
   const orders = data?.orders ?? [];
+  const filteredOrders = orders.filter((order) => {
+    if (quickFilter === 'ready') return order.status === 'READY';
+    if (quickFilter === 'awaitingPayment') {
+      return (order.status === 'READY' || order.status === 'DELIVERED') && !order.isPaid && !order.reservationId;
+    }
+    return true;
+  });
   const stats = data?.stats;
+  const readyCount = orders.filter((order) => order.status === 'READY').length;
+  const awaitingPaymentCount = orders.filter(
+    (order) => (order.status === 'READY' || order.status === 'DELIVERED') && !order.isPaid && !order.reservationId,
+  ).length;
+  const deliverOrder = useDeliverOrder();
 
   const paymentMixTotal = Object.values(zReport?.byMethod ?? {}).reduce((s, v) => s + v, 0);
 
@@ -100,21 +252,49 @@ function SalesTab() {
           <p className="text-xs text-slate-500 mt-1">Pending + preparing + ready</p>
         </div>
         <div className="bg-[#161b27] border border-[#1e2536] rounded-xl p-5">
-          <p className="text-xs text-slate-500 uppercase tracking-widest">Payment Mix</p>
-          <div className="flex items-center gap-3 text-xs text-slate-400 mt-3 flex-wrap">
-            {Object.entries(stats?.paymentMix ?? {}).map(([method, amount]) => (
-              <span key={method} className="flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
-                {method}{' '}
-                {paymentMixTotal > 0 ? Math.round((Number(amount) / paymentMixTotal) * 100) : 0}%
-              </span>
-            ))}
-            {!Object.keys(stats?.paymentMix ?? {}).length && (
-              <span className="text-slate-600">No sales yet today</span>
-            )}
+          <p className="text-xs text-slate-500 uppercase tracking-widest">Prep Readiness</p>
+          <p className="text-2xl font-bold text-emerald-400 mt-2">{stats?.prepReadyOrders ?? 0}</p>
+          <div className="flex items-center gap-2 text-xs text-slate-400 mt-3 flex-wrap">
+            <span className="flex items-center gap-1 rounded-full bg-[#0f1117] px-2.5 py-1">
+              <TriangleAlert size={12} className="text-rose-400" />
+              {stats?.delayedOrders ?? 0} delayed
+            </span>
+            <span className="flex items-center gap-1 rounded-full bg-[#0f1117] px-2.5 py-1">
+              <ChefHat size={12} className="text-orange-400" />
+              {stats?.stationQueues.kitchen ?? 0} kitchen queued
+            </span>
+            <span className="flex items-center gap-1 rounded-full bg-[#0f1117] px-2.5 py-1">
+              <Martini size={12} className="text-sky-400" />
+              {stats?.stationQueues.bar ?? 0} bar queued
+            </span>
           </div>
         </div>
       </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#1e2536] bg-[#161b27] px-4 py-3">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-300">
+          <Link href="/kitchen" className="flex items-center gap-1.5 rounded-lg bg-[#0f1117] px-3 py-2 hover:text-white transition-colors">
+            <ChefHat size={13} className="text-orange-400" />
+            Kitchen board
+          </Link>
+          <Link href="/bar" className="flex items-center gap-1.5 rounded-lg bg-[#0f1117] px-3 py-2 hover:text-white transition-colors">
+            <Martini size={13} className="text-sky-400" />
+            Bar board
+          </Link>
+        </div>
+        <div className="flex items-center gap-3 text-xs text-slate-500 flex-wrap">
+          {Object.entries(stats?.paymentMix ?? {}).map(([method, amount]) => (
+            <span key={method} className="flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+              {method}{' '}
+              {paymentMixTotal > 0 ? Math.round((Number(amount) / paymentMixTotal) * 100) : 0}%
+            </span>
+          ))}
+          {!Object.keys(stats?.paymentMix ?? {}).length && <span>No sales yet today</span>}
+        </div>
+      </div>
+
+      <StationSlaPanel />
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 items-center">
@@ -149,6 +329,29 @@ function SalesTab() {
         {isFetching && !isLoading && <Loader2 size={14} className="animate-spin text-slate-500" />}
       </div>
 
+      <div className="flex flex-wrap items-center gap-2">
+        {[
+          { key: 'all', label: 'All Sales', count: orders.length },
+          { key: 'ready', label: 'Ready to Deliver', count: readyCount },
+          { key: 'awaitingPayment', label: 'Awaiting Payment', count: awaitingPaymentCount },
+        ].map((item) => (
+          <button
+            key={item.key}
+            onClick={() => {
+              setQuickFilter(item.key as 'all' | 'ready' | 'awaitingPayment');
+              setPage(1);
+            }}
+            className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+              quickFilter === item.key
+                ? 'border-blue-500/40 bg-blue-600/20 text-blue-300'
+                : 'border-[#1e2536] bg-[#161b27] text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            {item.label} {item.count > 0 ? `(${item.count})` : ''}
+          </button>
+        ))}
+      </div>
+
       {/* Orders table */}
       <div className="bg-[#161b27] border border-[#1e2536] rounded-xl overflow-hidden">
         {isLoading ? (
@@ -166,9 +369,11 @@ function SalesTab() {
                     'Terminal',
                     'Table/Room',
                     'Items',
+                    'Prep',
                     'Total',
                     'Method',
                     'Status',
+                    'Action',
                   ].map((h) => (
                     <th
                       key={h}
@@ -180,7 +385,7 @@ function SalesTab() {
                 </tr>
               </thead>
               <tbody>
-                {orders.map((order) => (
+                {filteredOrders.map((order) => (
                   <tr
                     key={order.id}
                     className="border-b border-[#1e2536] last:border-0 hover:bg-white/[0.02] transition-colors"
@@ -199,6 +404,35 @@ function SalesTab() {
                         (order.reservation ? `Res ${order.reservation.reservationNo}` : '—')}
                     </td>
                     <td className="px-4 py-3 text-xs text-slate-400">{order.items.length}</td>
+                    <td className="px-4 py-3">
+                      {order.prepSummary.totalRoutedItems > 0 ? (
+                        <div className="space-y-1">
+                          <p className="text-xs text-slate-300">
+                            {order.prepSummary.ready + order.prepSummary.fulfilled}/
+                            {order.prepSummary.totalRoutedItems} ready
+                          </p>
+                          <div className="flex flex-wrap gap-1 text-[10px]">
+                            {order.prepSummary.queued > 0 && (
+                              <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-amber-400">
+                                {order.prepSummary.queued} queued
+                              </span>
+                            )}
+                            {order.prepSummary.inProgress > 0 && (
+                              <span className="rounded-full bg-blue-500/15 px-2 py-0.5 text-blue-400">
+                                {order.prepSummary.inProgress} preparing
+                              </span>
+                            )}
+                            {ageMinutes(order.createdAt) >= 20 && !order.prepSummary.isPrepComplete && (
+                              <span className="rounded-full bg-rose-500/15 px-2 py-0.5 text-rose-400">
+                                delayed
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-slate-600">No prep routing</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-sm font-semibold text-slate-200">
                       {fmtMoney(Number(order.total))}
                     </td>
@@ -218,13 +452,42 @@ function SalesTab() {
                         {order.status}
                       </span>
                     </td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-wrap gap-2">
+                        {order.status === 'READY' && (
+                          <button
+                            onClick={() => deliverOrder.mutateAsync({ orderId: order.id })}
+                            disabled={deliverOrder.isPending}
+                            className="rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-violet-500 disabled:opacity-50"
+                          >
+                            Mark delivered
+                          </button>
+                        )}
+                        {(order.status === 'READY' || order.status === 'DELIVERED') &&
+                        !order.isPaid &&
+                        !order.reservationId ? (
+                          <button
+                            onClick={() => setContinueOrder(order)}
+                            className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-500"
+                          >
+                            Continue payment
+                          </button>
+                        ) : order.status !== 'READY' ? (
+                          <span className="text-xs text-slate-600">—</span>
+                        ) : null}
+                      </div>
+                    </td>
                   </tr>
                 ))}
-                {orders.length === 0 && (
+                {filteredOrders.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="py-16 text-center">
+                    <td colSpan={10} className="py-16 text-center">
                       <ShoppingCart size={28} className="text-slate-700 mx-auto mb-2" />
-                      <p className="text-slate-500 text-sm">No orders in this range</p>
+                      <p className="text-slate-500 text-sm">
+                        {quickFilter === 'all'
+                          ? 'No orders in this range'
+                          : 'No orders match this quick filter'}
+                      </p>
                     </td>
                   </tr>
                 )}
@@ -233,10 +496,14 @@ function SalesTab() {
           </div>
         )}
 
-        {data?.meta && orders.length > 0 && (
+        {data?.meta && filteredOrders.length > 0 && (
           <Pagination meta={data.meta} currentPage={page} handlePageChange={setPage} />
         )}
       </div>
+
+      {continueOrder && (
+        <ContinuePaymentModal order={continueOrder} onClose={() => setContinueOrder(null)} />
+      )}
     </div>
   );
 }

@@ -3,17 +3,30 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { OrderStatus } from '@prisma/client';
+import { OrderStatus, PrepStation, PrepStatus, Prisma, Role } from '@prisma/client';
 import { genInvoiceNo, genOrderNo } from 'src/common/utils/orders.utils';
 import { PayOrderDto } from '../dtos/orders/pay-order.dto';
 import { UpdateItemDto } from '../dtos/orders/update-item.dto';
 import { AddItemDto } from '../dtos/orders/add-item.dto';
 import { CreateOrderDto } from '../dtos/orders/create-order.dto';
 import { OrderFilterDto } from '../dtos/orders/order-filter.dto';
+import { PrepBoardQueryDto } from '../dtos/orders/prep-board-query.dto';
+import { UpdateStatusDto } from '../dtos/orders/update-status.dto';
 import dayjs from 'dayjs';
 import { LedgerService } from '../../ledger/ledger.service';
+import { RealtimeGateway } from '../../realtime/realtime.gateway';
+import {
+  POS_ORDERS_SYNC_EVENT,
+  POS_PREP_SYNC_EVENT,
+  type PosOrderSyncPayload,
+  type PosPrepSyncPayload,
+  type PrepRealtimeAction,
+} from '../../realtime/realtime.events';
+import { DEFAULT_ROLE_PERMISSIONS } from '../../../common/constants/role-permissions';
+import { PosTerminalAuthService } from './pos-terminal-auth.service';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -21,7 +34,14 @@ const ORDER_INCLUDE = {
   items: {
     include: {
       product: {
-        select: { id: true, name: true, type: true, category: true, unit: true },
+        select: {
+          id: true,
+          name: true,
+          type: true,
+          prepStation: true,
+          unit: true,
+          category: { select: { id: true, name: true } },
+        },
       },
     },
   },
@@ -37,6 +57,35 @@ const ORDER_INCLUDE = {
   invoices: { include: { payments: true } },
 } as const;
 
+const ACTIVE_PREP_STATUSES: PrepStatus[] = [
+  PrepStatus.QUEUED,
+  PrepStatus.IN_PROGRESS,
+  PrepStatus.READY,
+];
+
+const PREP_PERMISSION_MAP: Record<
+  PrepStation,
+  { view: string; update: string } | null
+> = {
+  [PrepStation.NONE]: null,
+  [PrepStation.KITCHEN]: {
+    view: 'view:pos-kitchen-board',
+    update: 'update:pos-kitchen-board',
+  },
+  [PrepStation.BAR]: {
+    view: 'view:pos-bar-board',
+    update: 'update:pos-bar-board',
+  },
+};
+
+const PREP_TRANSITIONS: Record<PrepStatus, PrepStatus[]> = {
+  [PrepStatus.QUEUED]: [PrepStatus.IN_PROGRESS, PrepStatus.READY, PrepStatus.CANCELLED],
+  [PrepStatus.IN_PROGRESS]: [PrepStatus.QUEUED, PrepStatus.READY, PrepStatus.CANCELLED],
+  [PrepStatus.READY]: [PrepStatus.IN_PROGRESS, PrepStatus.FULFILLED, PrepStatus.CANCELLED],
+  [PrepStatus.FULFILLED]: [],
+  [PrepStatus.CANCELLED]: [],
+};
+
 // ─── Service ──────────────────────────────────────────────────────────────────
 
 @Injectable()
@@ -44,7 +93,475 @@ export class PosOrdersService {
   constructor(
     private prisma: PrismaService,
     private ledger: LedgerService,
+    private realtimeGateway: RealtimeGateway,
+    private terminalAuth: PosTerminalAuthService,
   ) {}
+
+  private async logAudit(params: {
+    actorUserId: string;
+    hotelId: string;
+    action: string;
+    targetId?: string | null;
+    metadata?: Prisma.InputJsonValue;
+    ipAddress?: string | null;
+    userAgent?: string | null;
+  }) {
+    await this.prisma.auditLog.create({
+      data: {
+        hotelId: params.hotelId,
+        actorUserId: params.actorUserId,
+        action: params.action,
+        targetType: 'pos_order',
+        targetId: params.targetId ?? null,
+        ipAddress: params.ipAddress ?? null,
+        userAgent: params.userAgent ?? null,
+        metadata: params.metadata ?? undefined,
+      },
+    });
+  }
+
+  private async resolveTerminalOperator(args: {
+    hotelId: string;
+    posTerminalId?: string | null;
+    terminalDeviceKey?: string | null;
+    staffId?: string | null;
+  }) {
+    if (!args.posTerminalId) {
+      return {
+        posTerminalId: null,
+        staffId: args.staffId ?? null,
+      };
+    }
+
+    const terminal = await this.terminalAuth.assertTerminalDeviceAccess(
+      args.posTerminalId,
+      args.terminalDeviceKey,
+    );
+
+    if (terminal.hotelId !== args.hotelId) {
+      throw new BadRequestException('POS terminal not found for this hotel.');
+    }
+
+    if (!terminal.currentStaffId) {
+      throw new BadRequestException('No staff member is signed in on this terminal.');
+    }
+
+    if (args.staffId && args.staffId !== terminal.currentStaffId) {
+      throw new BadRequestException('Terminal staff session does not match the submitted staff ID.');
+    }
+
+    await this.prisma.posTerminal.update({
+      where: { id: terminal.id },
+      data: { lastActivityAt: new Date() },
+    });
+
+    return {
+      posTerminalId: terminal.id,
+      staffId: terminal.currentStaffId,
+    };
+  }
+
+  private async assertTerminalOrderAccess(args: {
+    hotelId: string;
+    order: { posTerminalId: string | null; status: OrderStatus };
+    posTerminalId?: string | null;
+    terminalDeviceKey?: string | null;
+  }) {
+    if (!args.posTerminalId && !args.terminalDeviceKey) return;
+    if (!args.posTerminalId) {
+      throw new BadRequestException('Terminal ID is required for terminal payment and delivery actions.');
+    }
+
+    const terminal = await this.terminalAuth.assertTerminalDeviceAccess(
+      args.posTerminalId,
+      args.terminalDeviceKey,
+    );
+
+    if (terminal.hotelId !== args.hotelId) {
+      throw new BadRequestException('POS terminal not found for this hotel.');
+    }
+
+    if (args.order.posTerminalId !== terminal.id) {
+      throw new BadRequestException('This order belongs to a different terminal.');
+    }
+
+    if (!terminal.currentStaffId) {
+      throw new BadRequestException('No staff member is signed in on this terminal.');
+    }
+
+    await this.prisma.posTerminal.update({
+      where: { id: terminal.id },
+      data: { lastActivityAt: new Date() },
+    });
+  }
+
+  private enrichOrder<T extends { items: Array<{ prepStation: PrepStation; prepStatus: PrepStatus }> }>(
+    order: T,
+  ) {
+    return {
+      ...order,
+      prepSummary: this.buildPrepSummary(order.items),
+    };
+  }
+
+  private emitOrderSync(
+    action: PosOrderSyncPayload['action'],
+    order: {
+      id: string;
+      hotelId: string;
+      orderNo: string;
+      status: OrderStatus;
+      isPaid: boolean;
+      posTerminalId: string | null;
+      tableNo: string | null;
+      roomNo: string | null;
+      reservationId: string | null;
+    },
+  ) {
+    this.realtimeGateway.emitPosOrderSync({
+      type: POS_ORDERS_SYNC_EVENT,
+      entity: 'pos.order',
+      action,
+      hotelId: order.hotelId,
+      timestamp: new Date().toISOString(),
+      data: {
+        orderId: order.id,
+        orderNo: order.orderNo,
+        status: order.status,
+        isPaid: order.isPaid,
+        posTerminalId: order.posTerminalId,
+        tableNo: order.tableNo,
+        roomNo: order.roomNo,
+        reservationId: order.reservationId,
+      },
+    });
+  }
+
+  private emitPrepSync(
+    action: PrepRealtimeAction,
+    payload: {
+      hotelId: string;
+      orderId: string;
+      orderNo: string;
+      orderItemId: string;
+      prepStation: PrepStation;
+      prepStatus: PrepStatus;
+      tableNo: string | null;
+      roomNo: string | null;
+      itemName: string;
+      quantity: number;
+      orderType: string;
+      note: string | null;
+    },
+  ) {
+    if (payload.prepStation === PrepStation.NONE) return;
+
+    const event: PosPrepSyncPayload = {
+      type: POS_PREP_SYNC_EVENT,
+      entity: 'pos.prep-item',
+      action,
+      hotelId: payload.hotelId,
+      timestamp: new Date().toISOString(),
+      data: {
+        orderId: payload.orderId,
+        orderNo: payload.orderNo,
+        orderItemId: payload.orderItemId,
+        prepStation: payload.prepStation,
+        prepStatus: payload.prepStatus,
+        tableNo: payload.tableNo,
+        roomNo: payload.roomNo,
+        ticketSummary: {
+          itemName: payload.itemName,
+          quantity: payload.quantity,
+          orderType: payload.orderType,
+          note: payload.note,
+        },
+      },
+    };
+
+    this.realtimeGateway.emitPosPrepSync(event);
+  }
+
+  private buildPrepSummary(
+    items: Array<{ prepStation: PrepStation; prepStatus: PrepStatus }>,
+  ) {
+    const routedItems = items.filter((item) => item.prepStation !== PrepStation.NONE);
+    const counts = {
+      totalRoutedItems: routedItems.length,
+      queued: 0,
+      inProgress: 0,
+      ready: 0,
+      fulfilled: 0,
+      cancelled: 0,
+    };
+
+    routedItems.forEach((item) => {
+      if (item.prepStatus === PrepStatus.QUEUED) counts.queued += 1;
+      if (item.prepStatus === PrepStatus.IN_PROGRESS) counts.inProgress += 1;
+      if (item.prepStatus === PrepStatus.READY) counts.ready += 1;
+      if (item.prepStatus === PrepStatus.FULFILLED) counts.fulfilled += 1;
+      if (item.prepStatus === PrepStatus.CANCELLED) counts.cancelled += 1;
+    });
+
+    const activeRoutedItems = routedItems.filter((item) => item.prepStatus !== PrepStatus.CANCELLED);
+    const isPrepComplete =
+      activeRoutedItems.length === 0 ||
+      activeRoutedItems.every(
+        (item) =>
+          item.prepStatus === PrepStatus.READY || item.prepStatus === PrepStatus.FULFILLED,
+      );
+
+    return {
+      ...counts,
+      isPrepComplete,
+      hasQueuedPrepItems: counts.queued > 0,
+      hasInProgressPrepItems: counts.inProgress > 0,
+      hasReadyPrepItems: counts.ready > 0,
+    };
+  }
+
+  private deriveOperationalOrderStatus(
+    currentStatus: OrderStatus,
+    items: Array<{ prepStation: PrepStation; prepStatus: PrepStatus }>,
+  ): OrderStatus {
+    if (currentStatus === OrderStatus.CANCELLED || currentStatus === OrderStatus.DELIVERED) {
+      return currentStatus;
+    }
+
+    const summary = this.buildPrepSummary(items);
+    if (summary.totalRoutedItems === 0) {
+      return currentStatus;
+    }
+
+    if (summary.isPrepComplete) {
+      return OrderStatus.READY;
+    }
+
+    if (summary.hasInProgressPrepItems || summary.hasReadyPrepItems) {
+      return OrderStatus.PREPARING;
+    }
+
+    return OrderStatus.PENDING;
+  }
+
+  private async getEffectivePermissions(userId: string) {
+    const dbUser = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        role: true,
+        permissionGrants: true,
+        permissionDenies: true,
+        staff: { select: { hotelId: true } },
+      },
+    });
+
+    if (!dbUser) {
+      throw new ForbiddenException('Insufficient permissions');
+    }
+
+    const role = dbUser.role as Role;
+    if (role === Role.SUPER_ADMIN) {
+      return new Set<string>(['*']);
+    }
+
+    let rolePerms = DEFAULT_ROLE_PERMISSIONS[role] ?? [];
+    if (dbUser.staff?.hotelId) {
+      const record = await this.prisma.rolePermission.findUnique({
+        where: { hotelId_role: { hotelId: dbUser.staff.hotelId, role } },
+      });
+      if (record) {
+        rolePerms = record.permissions ?? [];
+      }
+    }
+
+    const effective = new Set(rolePerms);
+    (dbUser.permissionGrants ?? []).forEach((perm) => effective.add(perm));
+    (dbUser.permissionDenies ?? []).forEach((perm) => effective.delete(perm));
+    return effective;
+  }
+
+  private async assertPrepPermission(
+    userId: string,
+    station: PrepStation,
+    action: 'view' | 'update',
+  ) {
+    const permissionSet = PREP_PERMISSION_MAP[station];
+    if (!permissionSet) {
+      throw new BadRequestException('Stationless items do not belong on a prep board.');
+    }
+
+    const effective = await this.getEffectivePermissions(userId);
+    if (effective.has('*')) return;
+
+    const required = permissionSet[action];
+    if (!effective.has(required)) {
+      throw new ForbiddenException('Insufficient permissions');
+    }
+  }
+
+  private prepActionForStatus(status: PrepStatus): PrepRealtimeAction {
+    if (status === PrepStatus.QUEUED) return 'queued';
+    if (status === PrepStatus.IN_PROGRESS) return 'started';
+    if (status === PrepStatus.READY) return 'ready';
+    if (status === PrepStatus.FULFILLED) return 'fulfilled';
+    return 'cancelled';
+  }
+
+  private getPrepUrgency(createdAt: Date) {
+    const ageMinutes = dayjs().diff(createdAt, 'minute');
+
+    if (ageMinutes >= 20) return { ageMinutes, level: 'critical' as const };
+    if (ageMinutes >= 10) return { ageMinutes, level: 'warning' as const };
+    return { ageMinutes, level: 'normal' as const };
+  }
+
+  async getPrepBoard(hotelId: string, userId: string, query: PrepBoardQueryDto) {
+    if (query.station === PrepStation.NONE) {
+      throw new BadRequestException('Prep boards are only available for routed stations.');
+    }
+
+    await this.assertPrepPermission(userId, query.station, 'view');
+
+    const statuses = query.statuses?.length ? query.statuses : ACTIVE_PREP_STATUSES;
+
+    const matchingItems = await this.prisma.posOrderItem.findMany({
+      where: {
+        prepStation: query.station,
+        prepStatus: { in: statuses },
+        order: {
+          hotelId,
+          status: { not: OrderStatus.CANCELLED },
+        },
+      },
+      orderBy: [{ order: { createdAt: 'asc' } }],
+      include: {
+        order: {
+          select: {
+            id: true,
+            orderNo: true,
+            tableNo: true,
+            roomNo: true,
+            type: true,
+            status: true,
+            isPaid: true,
+            note: true,
+            createdAt: true,
+            staff: { select: { id: true, firstName: true, lastName: true } },
+          },
+        },
+      },
+    });
+
+    const orderIds = [...new Set(matchingItems.map((item) => item.orderId))];
+    const relatedItems = orderIds.length
+      ? await this.prisma.posOrderItem.findMany({
+          where: { orderId: { in: orderIds }, prepStation: { not: PrepStation.NONE } },
+          select: {
+            orderId: true,
+            prepStation: true,
+            prepStatus: true,
+          },
+        })
+      : [];
+
+    const prepByOrder = relatedItems.reduce<
+      Record<string, Array<{ prepStation: PrepStation; prepStatus: PrepStatus }>>
+    >((acc, item) => {
+      acc[item.orderId] ??= [];
+      acc[item.orderId].push(item);
+      return acc;
+    }, {});
+
+    const ticketsMap = new Map<
+      string,
+      {
+        orderId: string;
+        orderNo: string;
+        tableNo: string | null;
+        roomNo: string | null;
+        type: string;
+        orderStatus: OrderStatus;
+        isPaid: boolean;
+        note: string | null;
+        createdAt: string;
+        ageMinutes: number;
+        urgency: 'normal' | 'warning' | 'critical';
+        station: PrepStation;
+        staff: { id: string; firstName: string; lastName: string } | null;
+        items: Array<{
+          id: string;
+          name: string;
+          quantity: number;
+          note: string | null;
+          prepStatus: PrepStatus;
+          prepStartedAt: string | null;
+          prepCompletedAt: string | null;
+          bumpedAt: string | null;
+        }>;
+        prepSummary: ReturnType<PosOrdersService['buildPrepSummary']>;
+      }
+    >();
+
+    for (const item of matchingItems) {
+      const urgency = this.getPrepUrgency(item.order.createdAt);
+      const prepSummary = this.buildPrepSummary(prepByOrder[item.orderId] ?? []);
+
+      if (!ticketsMap.has(item.orderId)) {
+        ticketsMap.set(item.orderId, {
+          orderId: item.orderId,
+          orderNo: item.order.orderNo,
+          tableNo: item.order.tableNo,
+          roomNo: item.order.roomNo,
+          type: item.order.type,
+          orderStatus: item.order.status,
+          isPaid: item.order.isPaid,
+          note: item.order.note,
+          createdAt: item.order.createdAt.toISOString(),
+          ageMinutes: urgency.ageMinutes,
+          urgency: urgency.level,
+          station: query.station,
+          staff: item.order.staff,
+          items: [],
+          prepSummary,
+        });
+      }
+
+      ticketsMap.get(item.orderId)!.items.push({
+        id: item.id,
+        name: item.name,
+        quantity: item.quantity,
+        note: item.note,
+        prepStatus: item.prepStatus,
+        prepStartedAt: item.prepStartedAt?.toISOString() ?? null,
+        prepCompletedAt: item.prepCompletedAt?.toISOString() ?? null,
+        bumpedAt: item.bumpedAt?.toISOString() ?? null,
+      });
+    }
+
+    const tickets = [...ticketsMap.values()];
+    const summary = {
+      station: query.station,
+      counts: {
+        queued: matchingItems.filter((item) => item.prepStatus === PrepStatus.QUEUED).length,
+        inProgress: matchingItems.filter((item) => item.prepStatus === PrepStatus.IN_PROGRESS).length,
+        ready: matchingItems.filter((item) => item.prepStatus === PrepStatus.READY).length,
+      },
+      ageBuckets: {
+        normal: tickets.filter((ticket) => ticket.urgency === 'normal').length,
+        warning: tickets.filter((ticket) => ticket.urgency === 'warning').length,
+        critical: tickets.filter((ticket) => ticket.urgency === 'critical').length,
+      },
+      totalTickets: tickets.length,
+      totalItems: matchingItems.length,
+    };
+
+    return {
+      station: query.station,
+      statuses,
+      summary,
+      tickets,
+    };
+  }
 
   // ── List ───────────────────────────────────────────────────────────────────
   async findAll(hotelId: string, filters: OrderFilterDto) {
@@ -55,6 +572,8 @@ export class PosOrdersService {
     const where: any = { hotelId };
     if (filters.status) where.status = filters.status;
     if (filters.type) where.type = filters.type;
+    if (filters.billing === 'room_charge') where.reservationId = { not: null };
+    if (filters.billing === 'walk_in') where.reservationId = null;
     if (filters.posTerminalId) where.posTerminalId = filters.posTerminalId;
     if (filters.staffId) where.staffId = filters.staffId;
     if (filters.tableNo) where.tableNo = filters.tableNo;
@@ -116,6 +635,14 @@ export class PosOrdersService {
       }),
     ]);
 
+    const enrichedOrders = orders.map((order) => this.enrichOrder(order));
+    const activeVisibleOrders = enrichedOrders.filter(
+      (order) =>
+        order.status === OrderStatus.PENDING ||
+        order.status === OrderStatus.PREPARING ||
+        order.status === OrderStatus.READY,
+    );
+
     const todayRevenue = todayOrders
       .filter((o) => o.isPaid)
       .reduce((s, o) => s + Number(o.total), 0);
@@ -125,9 +652,24 @@ export class PosOrdersService {
       acc[m] = (acc[m] ?? 0) + Number(o.total);
       return acc;
     }, {});
+    const delayedOrders = activeVisibleOrders.filter(
+      (order) => dayjs().diff(order.createdAt, 'minute') >= 20,
+    ).length;
+    const prepReadyOrders = activeVisibleOrders.filter((order) => order.prepSummary.isPrepComplete).length;
+    const stationQueues = activeVisibleOrders.reduce(
+      (acc, order) => {
+        order.items.forEach((item) => {
+          if (item.prepStatus !== PrepStatus.QUEUED) return;
+          if (item.prepStation === PrepStation.KITCHEN) acc.kitchen += 1;
+          if (item.prepStation === PrepStation.BAR) acc.bar += 1;
+        });
+        return acc;
+      },
+      { kitchen: 0, bar: 0 },
+    );
 
     return {
-      orders,
+      orders: enrichedOrders,
       total,
       page,
       limit,
@@ -140,7 +682,15 @@ export class PosOrdersService {
         from: skip + 1,
         to: Math.min(skip + limit, total),
       },
-      stats: { todayRevenue, todayCount, activeOrders, paymentMix },
+      stats: {
+        todayRevenue,
+        todayCount,
+        activeOrders,
+        paymentMix,
+        prepReadyOrders,
+        delayedOrders,
+        stationQueues,
+      },
     };
   }
 
@@ -151,7 +701,7 @@ export class PosOrdersService {
       include: ORDER_INCLUDE,
     });
     if (!order) throw new NotFoundException('Order not found.');
-    return order;
+    return this.enrichOrder(order);
   }
 
   // ── Create ─────────────────────────────────────────────────────────────────
@@ -160,7 +710,18 @@ export class PosOrdersService {
       throw new BadRequestException('Order must have at least one item.');
     }
 
-    await this.validateOrderOwnershipFields(hotelId, dto);
+    const terminalContext = await this.resolveTerminalOperator({
+      hotelId,
+      posTerminalId: dto.posTerminalId,
+      terminalDeviceKey: dto.terminalDeviceKey,
+      staffId: dto.staffId,
+    });
+
+    await this.validateOrderOwnershipFields(hotelId, {
+      ...dto,
+      posTerminalId: terminalContext.posTerminalId ?? undefined,
+      staffId: terminalContext.staffId ?? undefined,
+    });
 
     // Validate reservation if provided
     if (dto.reservationId) {
@@ -221,8 +782,8 @@ export class PosOrdersService {
         tableNo: dto.tableNo,
         roomNo: dto.roomNo,
         reservationId: dto.reservationId,
-        posTerminalId: dto.posTerminalId,
-        staffId: dto.staffId,
+        posTerminalId: terminalContext.posTerminalId,
+        staffId: terminalContext.staffId,
         note: dto.note,
         subtotal,
         tax,
@@ -238,13 +799,32 @@ export class PosOrdersService {
             quantity: item.quantity,
             total: item.total,
             note: item.note,
+            prepStation: (item.product.prepStation as PrepStation | null) ?? PrepStation.NONE,
           })),
         },
       },
       include: ORDER_INCLUDE,
     });
 
-    return order;
+    this.emitOrderSync('created', order);
+    order.items.forEach((item) => {
+      this.emitPrepSync('queued', {
+        hotelId: order.hotelId,
+        orderId: order.id,
+        orderNo: order.orderNo,
+        orderItemId: item.id,
+        prepStation: item.prepStation,
+        prepStatus: item.prepStatus,
+        tableNo: order.tableNo,
+        roomNo: order.roomNo,
+        itemName: item.name,
+        quantity: item.quantity,
+        orderType: order.type,
+        note: item.note,
+      });
+    });
+
+    return this.enrichOrder(order);
   }
 
   private async validateOrderOwnershipFields(hotelId: string, dto: CreateOrderDto) {
@@ -286,7 +866,7 @@ export class PosOrdersService {
 
     const itemTotal = Number(product.price) * dto.quantity;
 
-    await this.prisma.posOrderItem.create({
+    const createdItem = await this.prisma.posOrderItem.create({
       data: {
         orderId,
         productId: dto.productId,
@@ -295,10 +875,27 @@ export class PosOrdersService {
         quantity: dto.quantity,
         total: itemTotal,
         note: dto.note,
+        prepStation: product.prepStation,
       },
     });
 
-    return this.recalcAndSave(orderId);
+    const updated = await this.recalcAndSave(orderId);
+    this.emitOrderSync('updated', updated);
+    this.emitPrepSync('queued', {
+      hotelId: updated.hotelId,
+      orderId: updated.id,
+      orderNo: updated.orderNo,
+      orderItemId: createdItem.id,
+      prepStation: createdItem.prepStation,
+      prepStatus: createdItem.prepStatus,
+      tableNo: updated.tableNo,
+      roomNo: updated.roomNo,
+      itemName: createdItem.name,
+      quantity: createdItem.quantity,
+      orderType: updated.type,
+      note: createdItem.note,
+    });
+    return this.enrichOrder(updated);
   }
 
   // ── Update item quantity ───────────────────────────────────────────────────
@@ -314,7 +911,22 @@ export class PosOrdersService {
     if (!item) throw new NotFoundException('Item not found.');
 
     if (dto.quantity === 0) {
+      const orderForDelete = order;
       await this.prisma.posOrderItem.delete({ where: { id: item.id } });
+      this.emitPrepSync('cancelled', {
+        hotelId,
+        orderId,
+        orderNo: orderForDelete.orderNo,
+        orderItemId: item.id,
+        prepStation: item.prepStation,
+        prepStatus: PrepStatus.CANCELLED,
+        tableNo: orderForDelete.tableNo,
+        roomNo: orderForDelete.roomNo,
+        itemName: item.name,
+        quantity: item.quantity,
+        orderType: orderForDelete.type,
+        note: item.note,
+      });
     } else {
       await this.prisma.posOrderItem.update({
         where: { id: item.id },
@@ -326,12 +938,146 @@ export class PosOrdersService {
       });
     }
 
-    return this.recalcAndSave(orderId);
+    const updated = await this.recalcAndSave(orderId);
+    this.emitOrderSync('updated', updated);
+    return this.enrichOrder(updated);
+  }
+
+  async updatePrepStatus(
+    hotelId: string,
+    userId: string,
+    staffId: string | null,
+    orderId: string,
+    itemId: string,
+    status: PrepStatus,
+  ) {
+    const item = await this.prisma.posOrderItem.findFirst({
+      where: {
+        id: itemId,
+        orderId,
+        order: { hotelId },
+      },
+      include: {
+        order: {
+          select: {
+            id: true,
+            hotelId: true,
+            orderNo: true,
+            tableNo: true,
+            roomNo: true,
+            type: true,
+            status: true,
+          },
+        },
+      },
+    });
+
+    if (!item) {
+      throw new NotFoundException('Order item not found.');
+    }
+
+    if (item.order.status === OrderStatus.CANCELLED || item.order.status === OrderStatus.DELIVERED) {
+      throw new BadRequestException('Prep items on delivered or cancelled orders cannot be updated.');
+    }
+
+    if (item.prepStation === PrepStation.NONE) {
+      throw new BadRequestException('This item is not routed to a prep station.');
+    }
+
+    await this.assertPrepPermission(userId, item.prepStation, 'update');
+
+    if (item.prepStatus === status) {
+      const order = await this.findOne(hotelId, orderId);
+      return order;
+    }
+
+    if (!PREP_TRANSITIONS[item.prepStatus].includes(status)) {
+      throw new BadRequestException(
+        `Cannot transition prep status from ${item.prepStatus} to ${status}.`,
+      );
+    }
+
+    const now = new Date();
+    await this.prisma.posOrderItem.update({
+      where: { id: item.id },
+      data: {
+        prepStatus: status,
+        prepStartedAt:
+          status === PrepStatus.IN_PROGRESS
+            ? item.prepStartedAt ?? now
+            : status === PrepStatus.QUEUED
+              ? null
+              : undefined,
+        prepCompletedAt:
+          status === PrepStatus.READY || status === PrepStatus.FULFILLED
+            ? item.prepCompletedAt ?? now
+            : status === PrepStatus.IN_PROGRESS || status === PrepStatus.QUEUED
+              ? null
+              : undefined,
+        bumpedAt: status === PrepStatus.FULFILLED ? now : undefined,
+        bumpedByStaffId: status === PrepStatus.FULFILLED ? staffId : undefined,
+      },
+    });
+
+    const refreshedItems = await this.prisma.posOrderItem.findMany({
+      where: { orderId },
+      select: {
+        prepStation: true,
+        prepStatus: true,
+      },
+    });
+    const nextOrderStatus = this.deriveOperationalOrderStatus(item.order.status, refreshedItems);
+
+    const updateData =
+      nextOrderStatus !== item.order.status ? { status: nextOrderStatus } : {};
+
+    const updatedOrder = await this.prisma.posOrder.update({
+      where: { id: orderId },
+      data: updateData,
+      include: ORDER_INCLUDE,
+    });
+
+    this.emitPrepSync(this.prepActionForStatus(status), {
+      hotelId,
+      orderId,
+      orderNo: item.order.orderNo,
+      orderItemId: item.id,
+      prepStation: item.prepStation,
+      prepStatus: status,
+      tableNo: item.order.tableNo,
+      roomNo: item.order.roomNo,
+      itemName: item.name,
+      quantity: item.quantity,
+      orderType: item.order.type,
+      note: item.note,
+    });
+
+    if (nextOrderStatus !== item.order.status) {
+      this.emitOrderSync('status_changed', updatedOrder);
+    } else {
+      this.emitOrderSync('updated', updatedOrder);
+    }
+
+    return this.enrichOrder(updatedOrder);
   }
 
   // ── Update order status ────────────────────────────────────────────────────
-  async updateStatus(hotelId: string, id: string, status: OrderStatus) {
+  async updateStatus(
+    hotelId: string,
+    actorUserId: string,
+    id: string,
+    dto: UpdateStatusDto,
+    meta?: { ipAddress?: string | null; userAgent?: string | null },
+  ) {
     const order = await this.findOne(hotelId, id);
+    const status = dto.status;
+
+    await this.assertTerminalOrderAccess({
+      hotelId,
+      order,
+      posTerminalId: dto.posTerminalId,
+      terminalDeviceKey: dto.terminalDeviceKey,
+    });
 
     const validTransitions: Record<string, string[]> = {
       PENDING: ['PREPARING', 'READY', 'DELIVERED', 'CANCELLED'],
@@ -347,18 +1093,42 @@ export class PosOrdersService {
 
     // DELIVERED triggers inventory deduction + journal entries
     if (status === OrderStatus.DELIVERED) {
-      return this.fulfillOrder(hotelId, id, order);
+      const prepSummary = this.buildPrepSummary(order.items);
+      if (!prepSummary.isPrepComplete) {
+        throw new BadRequestException('All routed prep items must be ready before delivery.');
+      }
+      return this.fulfillOrder(hotelId, actorUserId, id, order, meta);
     }
 
-    return this.prisma.posOrder.update({
+    const updated = await this.prisma.posOrder.update({
       where: { id },
       data: { status },
       include: ORDER_INCLUDE,
     });
+    await this.logAudit({
+      actorUserId,
+      hotelId,
+      action: 'pos.order.status_updated',
+      targetId: updated.id,
+      ipAddress: meta?.ipAddress ?? null,
+      userAgent: meta?.userAgent ?? null,
+      metadata: {
+        orderNo: updated.orderNo,
+        status: updated.status,
+      },
+    });
+    this.emitOrderSync('status_changed', updated);
+    return this.enrichOrder(updated);
   }
 
   // ── Fulfil order (DELIVERED) — the big one ────────────────────────────────
-  private async fulfillOrder(hotelId: string, id: string, order: any) {
+  private async fulfillOrder(
+    hotelId: string,
+    actorUserId: string,
+    id: string,
+    order: any,
+    meta?: { ipAddress?: string | null; userAgent?: string | null },
+  ) {
     const result = await this.prisma.$transaction(async (tx) => {
       let createdFolio: {
         id: string;
@@ -501,12 +1271,42 @@ export class PosOrdersService {
       });
     }
 
-    return result.updated;
+    if (result.updated) {
+      await this.logAudit({
+        actorUserId,
+        hotelId,
+        action: 'pos.order.delivered',
+        targetId: result.updated.id,
+        ipAddress: meta?.ipAddress ?? null,
+        userAgent: meta?.userAgent ?? null,
+        metadata: {
+          orderNo: result.updated.orderNo,
+          status: result.updated.status,
+          isPaid: result.updated.isPaid,
+        },
+      });
+      this.emitOrderSync('status_changed', result.updated);
+    }
+
+    return result.updated ? this.enrichOrder(result.updated) : result.updated;
   }
 
   // ── Pay order (walk-in direct payment) ────────────────────────────────────
-  async payOrder(hotelId: string, id: string, dto: PayOrderDto) {
+  async payOrder(
+    hotelId: string,
+    actorUserId: string,
+    id: string,
+    dto: PayOrderDto,
+    meta?: { ipAddress?: string | null; userAgent?: string | null },
+  ) {
     const order = await this.findOne(hotelId, id);
+
+    await this.assertTerminalOrderAccess({
+      hotelId,
+      order,
+      posTerminalId: dto.posTerminalId,
+      terminalDeviceKey: dto.terminalDeviceKey,
+    });
 
     if (order.status !== OrderStatus.DELIVERED) {
       throw new BadRequestException('Order must be delivered before payment.');
@@ -571,6 +1371,21 @@ export class PosOrdersService {
       invoiceId: result.invoice.id,
     });
 
+    await this.logAudit({
+      actorUserId,
+      hotelId,
+      action: 'pos.order.payment_recorded',
+      targetId: result.order.id,
+      ipAddress: meta?.ipAddress ?? null,
+      userAgent: meta?.userAgent ?? null,
+      metadata: {
+        orderNo: result.order.orderNo,
+        method: dto.method,
+        isPaid: result.order.isPaid,
+        amount: Number(result.order.total),
+      },
+    });
+    this.emitOrderSync('paid', result.order);
     return result;
   }
 
@@ -587,11 +1402,38 @@ export class PosOrdersService {
       throw new BadRequestException('Order is already cancelled.');
     }
 
-    return this.prisma.posOrder.update({
+    const updated = await this.prisma.posOrder.update({
       where: { id },
-      data: { status: OrderStatus.CANCELLED, note: reason ?? order.note },
+      data: {
+        status: OrderStatus.CANCELLED,
+        note: reason ?? order.note,
+        items: {
+          updateMany: {
+            where: { prepStation: { not: PrepStation.NONE } },
+            data: { prepStatus: PrepStatus.CANCELLED },
+          },
+        },
+      },
       include: ORDER_INCLUDE,
     });
+    this.emitOrderSync('cancelled', updated);
+    updated.items.forEach((item) => {
+      this.emitPrepSync('cancelled', {
+        hotelId: updated.hotelId,
+        orderId: updated.id,
+        orderNo: updated.orderNo,
+        orderItemId: item.id,
+        prepStation: item.prepStation,
+        prepStatus: item.prepStatus,
+        tableNo: updated.tableNo,
+        roomNo: updated.roomNo,
+        itemName: item.name,
+        quantity: item.quantity,
+        orderType: updated.type,
+        note: item.note,
+      });
+    });
+    return this.enrichOrder(updated);
   }
 
   // ── Close table (aggregate all orders for a table) ─────────────────────────
@@ -754,7 +1596,23 @@ export class PosOrdersService {
 
     return this.prisma.posOrder.update({
       where: { id: orderId },
-      data: { subtotal, tax, total },
+      data: {
+        subtotal,
+        tax,
+        total,
+        status: this.deriveOperationalOrderStatus(
+          (
+            await this.prisma.posOrder.findUnique({
+              where: { id: orderId },
+              select: { status: true },
+            })
+          )!.status,
+          items.map((item) => ({
+            prepStation: item.prepStation,
+            prepStatus: item.prepStatus,
+          })),
+        ),
+      },
       include: ORDER_INCLUDE,
     });
   }

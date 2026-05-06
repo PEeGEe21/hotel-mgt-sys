@@ -5,7 +5,7 @@ import {
   ConflictException,
   Logger,
 } from '@nestjs/common';
-import { ReservationStatus, PaymentStatus, RoomStatus, BookingType, HotelCronJobType, TaskPriority, TaskStatus } from '@prisma/client';
+import { ReservationStatus, PaymentStatus, RoomStatus, BookingType, HotelCronJobType, Role, TaskPriority, TaskStatus } from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { genReservationNo, nightsBetween } from 'src/common/utils/reservation.utils';
 import { buildCursor, buildCursorWhere, parseCursor } from 'src/common/utils/cursor.utils';
@@ -59,6 +59,19 @@ export class ReservationsService {
     const next = new Date(value);
     next.setHours(hour, minute, 0, 0);
     return next;
+  }
+
+  private async getManagementRecipientIds(hotelId: string) {
+    const users = await this.prisma.user.findMany({
+      where: {
+        isActive: true,
+        role: { in: [Role.ADMIN, Role.MANAGER] },
+        staff: { hotelId },
+      },
+      select: { id: true },
+    });
+
+    return users.map((user) => user.id);
   }
 
   private async recordCronJobSuccess(args: {
@@ -851,7 +864,7 @@ export class ReservationsService {
       text:
         `Hello ${args.guestName},\n` +
         `${intro}\n` +
-        `If you need help or an extension, please contact the front desk.`,
+        `Please review your departure timing, settle any outstanding balance, and contact the front desk if you need luggage help or would like to request an extension.`,
       html: `
         <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.6;">
           <p style="margin: 0 0 12px;">Hello <strong>${guestName}</strong>,</p>
@@ -859,6 +872,11 @@ export class ReservationsService {
             ${escapeHtml(intro)}
           </p>
           <p style="margin: 0 0 12px;">Reservation: <strong>${reservationNo}</strong></p>
+          <ul style="margin: 0 0 12px; padding-left: 18px; color: #334155;">
+            <li>Review your departure timing and travel arrangements.</li>
+            <li>Settle any remaining balance before leaving if needed.</li>
+            <li>Contact the front desk if you need luggage help or want to discuss an extension.</li>
+          </ul>
           <p style="margin: 0;">
             If you need help or would like to discuss an extension, please contact the front desk.
           </p>
@@ -1212,6 +1230,104 @@ export class ReservationsService {
         overduePayments: args.overduePayments,
         openCheckoutPrepTasks: args.openCheckoutPrepTasks,
         urgentMaintenanceOpen: args.urgentMaintenanceOpen,
+      },
+    };
+  }
+
+  private buildCollectionsEscalationEmail(args: {
+    hotelName: string;
+    alertDate: string;
+    severeCount: number;
+    oldestDaysOverdue: number;
+    totalOutstanding: number;
+  }) {
+    return {
+      subject: `Collections escalation review for ${args.hotelName}`,
+      text:
+        `${args.hotelName}: ${args.severeCount} overdue folio` +
+        `${args.severeCount === 1 ? ' is' : 's are'} now in severe collections territory as of ${args.alertDate}.\n` +
+        `Oldest age: ${args.oldestDaysOverdue} days overdue\n` +
+        `Total outstanding: ${fmtMoney(args.totalOutstanding)}`,
+      html: `
+        <div>
+          <p style="margin: 0 0 12px;">Collections escalation review for <strong>${escapeHtml(args.hotelName)}</strong>.</p>
+          <p style="margin: 0 0 12px; color: #475569;">
+            ${args.severeCount} overdue folio${args.severeCount === 1 ? '' : 's'} now need management review.
+          </p>
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
+            <tr>
+              ${this.buildEmailMetricCard({ label: 'Severe Cases', value: String(args.severeCount) })}
+              ${this.buildEmailMetricCard({ label: 'Oldest Age', value: `${args.oldestDaysOverdue}d` })}
+            </tr>
+            <tr>
+              ${this.buildEmailMetricCard({ label: 'Outstanding', value: fmtMoney(args.totalOutstanding) })}
+              ${this.buildEmailMetricCard({ label: 'Alert Date', value: args.alertDate })}
+            </tr>
+          </table>
+        </div>
+      `,
+    };
+  }
+
+  private buildCollectionsEscalationInAppNotification(args: {
+    alertDate: string;
+    severeCount: number;
+    oldestDaysOverdue: number;
+    totalOutstanding: number;
+  }) {
+    return {
+      title: 'Collections escalation review needed',
+      message:
+        `${args.severeCount} overdue folio${args.severeCount === 1 ? '' : 's'} now need management attention. ` +
+        `Oldest age: ${args.oldestDaysOverdue} day${args.oldestDaysOverdue === 1 ? '' : 's'}.`,
+      metadata: {
+        alertDate: args.alertDate,
+        severeCount: args.severeCount,
+        oldestDaysOverdue: args.oldestDaysOverdue,
+        totalOutstanding: args.totalOutstanding,
+        severity: 'critical',
+        summary: `${fmtMoney(args.totalOutstanding)} now in severe collections review`,
+        href: '/reservations?checkoutTiming=overdue',
+      },
+    };
+  }
+
+  private buildRoomAssignmentReviewEmail(args: {
+    hotelName: string;
+    arrivalDate: string;
+    reservationCount: number;
+  }) {
+    return {
+      subject: `Room assignment review for ${args.hotelName}`,
+      text:
+        `${args.hotelName}: ${args.reservationCount} arrival` +
+        `${args.reservationCount === 1 ? ' is' : 's are'} due on ${args.arrivalDate} without a room assignment.`,
+      html: `
+        <div>
+          <p style="margin: 0 0 12px;">Room assignment review for <strong>${escapeHtml(args.hotelName)}</strong>.</p>
+          <p style="margin: 0; color: #475569;">
+            ${args.reservationCount} upcoming arrival${args.reservationCount === 1 ? '' : 's'} still need room assignment before ${escapeHtml(args.arrivalDate)}.
+          </p>
+        </div>
+      `,
+    };
+  }
+
+  private buildRoomAssignmentReviewInAppNotification(args: {
+    arrivalDate: string;
+    reservationCount: number;
+  }) {
+    return {
+      title: 'Upcoming arrivals need room assignment',
+      message:
+        `${args.reservationCount} arrival${args.reservationCount === 1 ? '' : 's'} due on ${args.arrivalDate} still ` +
+        `need room assignment review.`,
+      metadata: {
+        arrivalDate: args.arrivalDate,
+        reservationCount: args.reservationCount,
+        severity: 'warning',
+        summary: `${args.reservationCount} arrivals still unassigned`,
+        href: '/reservations',
       },
     };
   }
@@ -2565,6 +2681,39 @@ export class ReservationsService {
           }),
         });
 
+        const severeReservations = reservations.filter((reservation) => reservation.daysOverdue >= 7);
+        if (severeReservations.length) {
+          const managementRecipientIds = await this.getManagementRecipientIds(hotel.id);
+          if (managementRecipientIds.length) {
+            const oldestDaysOverdue = severeReservations.reduce(
+              (max, reservation) => Math.max(max, reservation.daysOverdue),
+              0,
+            );
+            const severeOutstanding = severeReservations.reduce(
+              (sum, reservation) => sum + reservation.balance,
+              0,
+            );
+            await this.notifications.dispatch({
+              hotelId: hotel.id,
+              event: 'systemAlerts',
+              recipientUserIds: managementRecipientIds,
+              email: this.buildCollectionsEscalationEmail({
+                hotelName: hotel.name,
+                alertDate,
+                severeCount: severeReservations.length,
+                oldestDaysOverdue,
+                totalOutstanding: severeOutstanding,
+              }),
+              inApp: this.buildCollectionsEscalationInAppNotification({
+                alertDate,
+                severeCount: severeReservations.length,
+                oldestDaysOverdue,
+                totalOutstanding: severeOutstanding,
+              }),
+            });
+          }
+        }
+
         await this.recordCronJobSuccess({
           hotelId: hotel.id,
           jobType: OVERDUE_PAYMENT_SCAN_JOB_TYPE,
@@ -2729,6 +2878,29 @@ export class ReservationsService {
             reservations,
           }),
         });
+
+        const unassignedReservations = reservations.filter(
+          (reservation) => reservation.roomNumber === 'Unassigned',
+        );
+        if (unassignedReservations.length) {
+          const managementRecipientIds = await this.getManagementRecipientIds(hotel.id);
+          if (managementRecipientIds.length) {
+            await this.notifications.dispatch({
+              hotelId: hotel.id,
+              event: 'systemAlerts',
+              recipientUserIds: managementRecipientIds,
+              email: this.buildRoomAssignmentReviewEmail({
+                hotelName: hotel.name,
+                arrivalDate,
+                reservationCount: unassignedReservations.length,
+              }),
+              inApp: this.buildRoomAssignmentReviewInAppNotification({
+                arrivalDate,
+                reservationCount: unassignedReservations.length,
+              }),
+            });
+          }
+        }
 
         await this.recordCronJobSuccess({
           hotelId: hotel.id,

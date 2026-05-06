@@ -1,7 +1,8 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/api';
+import openToast from '@/components/ToastComponent';
 
 export type EmailDeliveryLog = {
   id: string;
@@ -59,5 +60,17 @@ export function useMailing(filters: MailingFilters = {}) {
       return data;
     },
     staleTime: 30_000,
+  });
+}
+
+export function useRetryMailDelivery() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post(`/mailing/emails/${id}/retry`).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['mailing'] });
+      openToast('success', 'Retry queued');
+    },
+    onError: (e: any) => openToast('error', e?.response?.data?.message ?? 'Retry failed'),
   });
 }

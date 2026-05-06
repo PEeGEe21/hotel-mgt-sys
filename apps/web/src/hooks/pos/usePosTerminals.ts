@@ -14,6 +14,11 @@ export type PosTerminal = {
   status: string;
   staffId: string | null;
   staffName: string | null;
+  currentStaffName: string | null;
+  registeredDeviceName: string | null;
+  registeredIpAddress: string | null;
+  registeredAt: string | null;
+  lastActivityAt: string | null;
   createdAt: string;
 };
 
@@ -89,6 +94,18 @@ export function useDeletePosTerminal() {
       openToast('success', 'Terminal removed');
     },
     onError: (e: any) => openToast('error', e?.response?.data?.message ?? 'Delete failed'),
+  });
+}
+
+export function useDeregisterPosTerminalDevice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post(`/pos/terminals/${id}/deregister-device`).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['pos-terminals'] });
+      openToast('success', 'Terminal device deregistered');
+    },
+    onError: (e: any) => openToast('error', e?.response?.data?.message ?? 'Deregister failed'),
   });
 }
 

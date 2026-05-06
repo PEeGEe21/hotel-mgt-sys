@@ -32,6 +32,7 @@ export type HotelProfile = {
   defaultCheckoutMinute?: number;
   guestCheckoutReminderEnabled?: boolean;
   guestCheckoutReminderLeadDays?: number[];
+  emailAutoRetryEnabled?: boolean;
   autoCreateCheckoutHousekeepingTasks: boolean;
   housekeepingFollowUpEnabled?: boolean;
   housekeepingFollowUpGraceHours?: number;
@@ -151,6 +152,7 @@ export function useUpdateHotelProfile() {
         defaultCheckoutMinute: data.defaultCheckoutMinute,
         guestCheckoutReminderEnabled: data.guestCheckoutReminderEnabled,
         guestCheckoutReminderLeadDays: data.guestCheckoutReminderLeadDays,
+        emailAutoRetryEnabled: data.emailAutoRetryEnabled,
         autoCreateCheckoutHousekeepingTasks: data.autoCreateCheckoutHousekeepingTasks,
         housekeepingFollowUpEnabled: data.housekeepingFollowUpEnabled,
         housekeepingFollowUpGraceHours: data.housekeepingFollowUpGraceHours,

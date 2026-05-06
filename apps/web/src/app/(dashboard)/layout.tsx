@@ -13,6 +13,8 @@ import { stopImpersonationAction } from '@/actions/auth.actions';
 import { useState } from 'react';
 import openToast from '@/components/ToastComponent';
 import { useQueryClient } from '@tanstack/react-query';
+import { usePosOrdersRealtime } from '@/hooks/pos/usePosOrdersRealtime';
+import { useDashboardPosRealtime } from '@/hooks/dashboard/useDashboardPosRealtime';
 
 function AuthOverlay({ label }: { label: string }) {
   const hotel = useAppStore((s) => s.hotel);
@@ -46,6 +48,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter();
   const queryClient = useQueryClient();
   const { canPath, ready } = usePermissions();
+  usePosOrdersRealtime();
+  useDashboardPosRealtime();
 
   if (!hydrated) {
     return (

@@ -21,6 +21,8 @@ import { UpdateItemDto } from '../dtos/orders/update-item.dto';
 import { PayOrderDto } from '../dtos/orders/pay-order.dto';
 import { CancelDto } from '../dtos/orders/cancel.dto';
 import { UpdateStatusDto } from '../dtos/orders/update-status.dto';
+import { PrepBoardQueryDto } from '../dtos/orders/prep-board-query.dto';
+import { UpdatePrepStatusDto } from '../dtos/orders/update-prep-status.dto';
 
 @ApiTags('POS Orders')
 @ApiBearerAuth()
@@ -46,6 +48,13 @@ export class PosOrdersController {
   @ApiOperation({ summary: 'Get table summary for close-table flow' })
   closeTableSummary(@Request() req: any, @Param('tableNo') tableNo: string) {
     return this.svc.closeTable(req.user.hotelId, tableNo);
+  }
+
+  @Get('prep-board')
+  @Permissions('view:pos')
+  @ApiOperation({ summary: 'Get active prep tickets for a station board' })
+  getPrepBoard(@Request() req: any, @Query() query: PrepBoardQueryDto) {
+    return this.svc.getPrepBoard(req.user.hotelId, req.user.sub, query);
   }
 
   @Get()
@@ -89,12 +98,28 @@ export class PosOrdersController {
     return this.svc.updateItem(req.user.hotelId, id, itemId, dto);
   }
 
+  @Patch(':id/items/:itemId/prep-status')
+  @Permissions('view:pos')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Update an order item prep status for kitchen/bar boards' })
+  updatePrepStatus(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Param('itemId') itemId: string,
+    @Body() dto: UpdatePrepStatusDto,
+  ) {
+    return this.svc.updatePrepStatus(req.user.hotelId, req.user.sub, req.user.staffId, id, itemId, dto.status);
+  }
+
   @Patch(':id/status')
   @Permissions('create:pos')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Update order status — DELIVERED triggers inventory + invoice' })
   updateStatus(@Request() req: any, @Param('id') id: string, @Body() dto: UpdateStatusDto) {
-    return this.svc.updateStatus(req.user.hotelId, id, dto.status);
+    return this.svc.updateStatus(req.user.hotelId, req.user.sub, id, dto, {
+      ipAddress: req.ip ?? null,
+      userAgent: req.headers['user-agent'] ?? null,
+    });
   }
 
   @Post(':id/pay')
@@ -102,7 +127,10 @@ export class PosOrdersController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Record payment for a delivered walk-in order' })
   pay(@Request() req: any, @Param('id') id: string, @Body() dto: PayOrderDto) {
-    return this.svc.payOrder(req.user.hotelId, id, dto);
+    return this.svc.payOrder(req.user.hotelId, req.user.sub, id, dto, {
+      ipAddress: req.ip ?? null,
+      userAgent: req.headers['user-agent'] ?? null,
+    });
   }
 
   @Patch(':id/cancel')

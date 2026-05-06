@@ -6,6 +6,7 @@ import openToast from '@/components/ToastComponent';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export type ProductType = 'PHYSICAL' | 'SERVICE' | 'BUNDLE';
+export type PrepStation = 'NONE' | 'KITCHEN' | 'BAR';
 
 export type InventoryItemOption = {
   id: string;
@@ -37,11 +38,12 @@ export type ApiProduct = {
   isAvailable: boolean;
   stock: number | null;
   type: ProductType;
+  prepStation: PrepStation;
   createdAt: string;
   updatedAt: string;
   ingredients: ProductIngredient[];
   _count?: { orderItems: number };
-  category: { name: string; id: string };
+  category: { name: string; id: string; color?: string | null; icon?: string | null };
 };
 
 export type CreateProductInput = {
@@ -55,6 +57,7 @@ export type CreateProductInput = {
   image?: string;
   isAvailable?: boolean;
   stock?: number;
+  prepStation?: PrepStation;
   ingredients?: { inventoryItemId: string; quantity: number; unit?: string }[];
 };
 

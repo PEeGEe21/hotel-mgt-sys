@@ -16,6 +16,7 @@ enum Role {
   RECEPTIONIST
   HOUSEKEEPING
   CASHIER
+  COOK
   BARTENDER
   STAFF
 }
@@ -87,6 +88,20 @@ enum OrderStatus {
   PREPARING
   READY
   DELIVERED
+  CANCELLED
+}
+
+enum PrepStation {
+  NONE
+  KITCHEN
+  BAR
+}
+
+enum PrepStatus {
+  QUEUED
+  IN_PROGRESS
+  READY
+  FULFILLED
   CANCELLED
 }
 
@@ -162,6 +177,7 @@ model Hotel {
   defaultCheckoutMinute               Int      @default(0)
   guestCheckoutReminderEnabled        Boolean  @default(false)
   guestCheckoutReminderLeadDays       Int[]    @default([1, 0])
+  emailAutoRetryEnabled               Boolean  @default(false)
   autoCreateCheckoutHousekeepingTasks Boolean  @default(true)
   housekeepingFollowUpEnabled         Boolean  @default(false)
   housekeepingFollowUpGraceHours      Int      @default(2)
@@ -385,6 +401,8 @@ model Notification {
   message   String
   metadata  Json?
   readAt    DateTime?
+  pinnedAt  DateTime?
+  archivedAt DateTime?
   createdAt DateTime  @default(now())
 
   user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -393,6 +411,8 @@ model Notification {
   @@index([hotelId, createdAt])
   @@index([userId, createdAt])
   @@index([userId, readAt])
+  @@index([userId, pinnedAt])
+  @@index([userId, archivedAt])
 }
 
 model EmailDeliveryLog {
@@ -977,17 +997,26 @@ model ProductIngredient {
 }
 
 model PosOrderItem {
-  id        String  @id @default(uuid())
-  orderId   String
-  productId String
-  name      String // snapshot at time of sale
-  price     Decimal // snapshot at time of sale
-  quantity  Int
-  total     Decimal
-  note      String?
+  id              String      @id @default(uuid())
+  orderId         String
+  productId       String
+  name            String      // snapshot at time of sale
+  price           Decimal     // snapshot at time of sale
+  quantity        Int
+  total           Decimal
+  note            String?
+  prepStation     PrepStation @default(NONE)
+  prepStatus      PrepStatus  @default(QUEUED)
+  prepStartedAt   DateTime?
+  prepCompletedAt DateTime?
+  bumpedAt        DateTime?
+  bumpedByStaffId String?
 
   order   PosOrder   @relation(fields: [orderId], references: [id])
   product PosProduct @relation(fields: [productId], references: [id])
+
+  @@index([orderId, prepStation])
+  @@index([prepStation, prepStatus])
 }
 
 model PosProduct {
@@ -1001,6 +1030,7 @@ model PosProduct {
   unit        String   @default("item")
   image       String?
   type        String   @default("PHYSICAL") // PHYSICAL | SERVICE | BUNDLE
+  prepStation PrepStation @default(NONE)
   isAvailable Boolean  @default(true)
   stock       Int? // null = unlimited (e.g. services)
   createdAt   DateTime @default(now())
@@ -1013,6 +1043,7 @@ model PosProduct {
 
   @@unique([hotelId, sku])
   @@index([hotelId])
+  @@index([hotelId, prepStation])
 }
 
 model PosProductCategory {
@@ -1044,7 +1075,12 @@ model PosTerminal {
   device          String
   status          String    @default("Online")
   setupCode       String?
+  setupCodeExpiresAt DateTime?
   setupCodeQr     String?
+  registeredDeviceKeyHash String?
+  registeredDeviceName String?
+  registeredIpAddress String?
+  registeredAt    DateTime?
   currentStaffId  String?
   lastActivityAt  DateTime?
   createdAt       DateTime  @default(now())

@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CreatePosTerminalDto } from '../dtos/terminals/create-pos-terminal.dto';
 import { UpdatePosTerminalDto } from '../dtos/terminals/update-pos-terminal.dto';
@@ -14,12 +15,32 @@ import { UpdatePosTerminalGroupDto } from '../dtos/terminals/update-pos-terminal
 export class PosTerminalsService {
   constructor(private prisma: PrismaService) {}
 
+  private async logAudit(params: {
+    actorUserId: string;
+    hotelId: string;
+    action: string;
+    targetId?: string | null;
+    metadata?: Prisma.InputJsonValue;
+  }) {
+    await this.prisma.auditLog.create({
+      data: {
+        hotelId: params.hotelId,
+        actorUserId: params.actorUserId,
+        action: params.action,
+        targetType: 'pos_terminal',
+        targetId: params.targetId ?? null,
+        metadata: params.metadata ?? undefined,
+      },
+    });
+  }
+
   async list(hotelId: string) {
     const terminals = await this.prisma.posTerminal.findMany({
       where: { hotelId },
       orderBy: { createdAt: 'desc' },
       include: {
         staff: { select: { id: true, firstName: true, lastName: true } },
+        currentStaff: { select: { id: true, firstName: true, lastName: true } },
         terminalGroup: { select: { id: true, name: true } },
       },
     });
@@ -35,11 +56,18 @@ export class PosTerminalsService {
       status: t.status,
       staffId: t.staffId,
       staffName: t.staff ? `${t.staff.firstName} ${t.staff.lastName}` : null,
+      currentStaffName: t.currentStaff
+        ? `${t.currentStaff.firstName} ${t.currentStaff.lastName}`
+        : null,
+      registeredDeviceName: t.registeredDeviceName,
+      registeredIpAddress: t.registeredIpAddress,
+      registeredAt: t.registeredAt,
+      lastActivityAt: t.lastActivityAt,
       createdAt: t.createdAt,
     }));
   }
 
-  async create(hotelId: string, dto: CreatePosTerminalDto) {
+  async create(hotelId: string, actorUserId: string, dto: CreatePosTerminalDto) {
     const name = dto.name.trim();
     const location = dto.location.trim();
     const device = dto.device.trim();
@@ -83,6 +111,18 @@ export class PosTerminalsService {
       },
     });
 
+    await this.logAudit({
+      actorUserId,
+      hotelId,
+      action: 'pos.terminal.created',
+      targetId: terminal.id,
+      metadata: {
+        name: terminal.name,
+        location: terminal.location,
+        device: terminal.device,
+      },
+    });
+
     return {
       id: terminal.id,
       name: terminal.name,
@@ -92,11 +132,16 @@ export class PosTerminalsService {
       status: terminal.status,
       staffId: terminal.staffId,
       staffName: terminal.staff ? `${terminal.staff.firstName} ${terminal.staff.lastName}` : null,
+      currentStaffName: null,
+      registeredDeviceName: terminal.registeredDeviceName,
+      registeredIpAddress: terminal.registeredIpAddress,
+      registeredAt: terminal.registeredAt,
+      lastActivityAt: terminal.lastActivityAt,
       createdAt: terminal.createdAt,
     };
   }
 
-  async update(hotelId: string, id: string, dto: UpdatePosTerminalDto) {
+  async update(hotelId: string, actorUserId: string, id: string, dto: UpdatePosTerminalDto) {
     const terminal = await this.prisma.posTerminal.findFirst({
       where: { id, hotelId },
     });
@@ -135,7 +180,22 @@ export class PosTerminalsService {
       },
       include: {
         staff: { select: { id: true, firstName: true, lastName: true } },
+        currentStaff: { select: { id: true, firstName: true, lastName: true } },
         terminalGroup: { select: { id: true, name: true } },
+      },
+    });
+
+    await this.logAudit({
+      actorUserId,
+      hotelId,
+      action: 'pos.terminal.updated',
+      targetId: updated.id,
+      metadata: {
+        name: updated.name,
+        location: updated.location,
+        device: updated.device,
+        status: updated.status,
+        staffId: updated.staffId,
       },
     });
 
@@ -148,19 +208,75 @@ export class PosTerminalsService {
       status: updated.status,
       staffId: updated.staffId,
       staffName: updated.staff ? `${updated.staff.firstName} ${updated.staff.lastName}` : null,
+      currentStaffName: updated.currentStaff
+        ? `${updated.currentStaff.firstName} ${updated.currentStaff.lastName}`
+        : null,
+      registeredDeviceName: updated.registeredDeviceName,
+      registeredIpAddress: updated.registeredIpAddress,
+      registeredAt: updated.registeredAt,
+      lastActivityAt: updated.lastActivityAt,
       createdAt: updated.createdAt,
     };
   }
 
-  async remove(hotelId: string, id: string) {
+  async remove(hotelId: string, actorUserId: string, id: string) {
     const terminal = await this.prisma.posTerminal.findFirst({
       where: { id, hotelId },
-      select: { id: true },
+      select: { id: true, name: true },
     });
     if (!terminal) throw new NotFoundException('Terminal not found.');
 
     await this.prisma.posTerminal.delete({ where: { id } });
+    await this.logAudit({
+      actorUserId,
+      hotelId,
+      action: 'pos.terminal.deleted',
+      targetId: terminal.id,
+      metadata: { name: terminal.name },
+    });
     return { success: true };
+  }
+
+  async deregisterDevice(hotelId: string, actorUserId: string, id: string) {
+    const terminal = await this.prisma.posTerminal.findFirst({
+      where: { id, hotelId },
+      select: {
+        id: true,
+        name: true,
+        registeredDeviceName: true,
+        registeredIpAddress: true,
+      },
+    });
+    if (!terminal) throw new NotFoundException('Terminal not found.');
+
+    const updated = await this.prisma.posTerminal.update({
+      where: { id },
+      data: {
+        setupCode: null,
+        setupCodeQr: null,
+        setupCodeExpiresAt: null,
+        registeredDeviceKeyHash: null,
+        registeredDeviceName: null,
+        registeredIpAddress: null,
+        registeredAt: null,
+        currentStaffId: null,
+        lastActivityAt: null,
+      },
+    });
+
+    await this.logAudit({
+      actorUserId,
+      hotelId,
+      action: 'pos.terminal.device_deregistered',
+      targetId: terminal.id,
+      metadata: {
+        name: terminal.name,
+        previousDeviceName: terminal.registeredDeviceName,
+        previousIpAddress: terminal.registeredIpAddress,
+      },
+    });
+
+    return { success: true, terminalId: updated.id };
   }
 
   // ---------------- POS TERMINAL GROUP ---------------//

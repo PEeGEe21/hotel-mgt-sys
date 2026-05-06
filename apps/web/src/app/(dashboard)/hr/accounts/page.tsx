@@ -39,6 +39,7 @@ type Role =
   | 'RECEPTIONIST'
   | 'HOUSEKEEPING'
   | 'CASHIER'
+  | 'COOK'
   | 'BARTENDER'
   | 'STAFF';
 type AccountStatus = 'Active' | 'Suspended' | 'Pending';
@@ -50,6 +51,7 @@ const roleColors: Record<Role, string> = {
   RECEPTIONIST: 'text-sky-400 bg-sky-500/15',
   HOUSEKEEPING: 'text-emerald-400 bg-emerald-500/15',
   CASHIER: 'text-amber-400 bg-amber-500/15',
+  COOK: 'text-rose-400 bg-rose-500/15',
   BARTENDER: 'text-orange-400 bg-orange-500/15',
   STAFF: 'text-slate-400 bg-slate-500/15',
 };
@@ -66,6 +68,7 @@ const roles: Role[] = [
   'RECEPTIONIST',
   'HOUSEKEEPING',
   'CASHIER',
+  'COOK',
   'BARTENDER',
   'STAFF',
 ];

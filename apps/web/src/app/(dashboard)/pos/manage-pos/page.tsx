@@ -4,26 +4,32 @@ import { useState, useMemo } from 'react';
 import {
   ShoppingCart,
   Search,
-  Filter,
-  CalendarDays,
   SlidersHorizontal,
-  Package,
-  RefreshCcw,
   ArrowUpRight,
-  Wallet,
-  CreditCard,
-  FileText,
   Loader2,
   BarChart2,
-  TrendingUp,
-  Receipt,
   AlertCircle,
+  ChefHat,
+  Martini,
+  TriangleAlert,
+  X,
+  CheckCircle2,
+  ShieldCheck,
 } from 'lucide-react';
 import Link from 'next/link';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { usePosOrders, useZReport, type ApiOrder } from '@/hooks/pos/usePosOrders';
+import {
+  useDeliverOrder,
+  usePosOrders,
+  usePayOrderById,
+  useZReport,
+  type ApiOrder,
+} from '@/hooks/pos/usePosOrders';
 import { useInventoryItemOptions } from '@/hooks/pos/usePosProducts';
-import { usePosTerminals, usePosTerminalGroups } from '@/hooks/pos/usePosTerminals';
+import {
+  useDeregisterPosTerminalDevice,
+  usePosTerminals,
+} from '@/hooks/pos/usePosTerminals';
 import { usePermissions } from '@/hooks/usePermissions';
 import AddPosTerminal from './../_components/AddPosTerminal';
 import EditPosTerminal from './../_components/EditPosTerminal';
@@ -33,6 +39,10 @@ import { useUpdatePosTerminal } from '@/hooks/pos/usePosTerminals';
 import { useDebounce } from '@/hooks/useDebounce';
 import Pagination from '@/components/ui/pagination';
 import { SetupCodeModal } from '../_components/SetupCodeModal';
+import StationSlaPanel from '@/components/pos/StationSlaPanel';
+import { useStaffAll } from '@/hooks/staff/useStaff';
+import { useAuditLogs } from '@/hooks/useAuditLogs';
+import { useAllUserAccounts } from '@/hooks/useUserAccounts';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmtMoney(n: number) {
@@ -48,6 +58,34 @@ function fmt(iso: string) {
 function fmtTime(iso: string) {
   return new Date(iso).toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit' });
 }
+function ageMinutes(iso: string) {
+  return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60000));
+}
+function fmtDateTime(iso: string) {
+  return new Date(iso).toLocaleString('en-NG', {
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+function prettifyAuditAction(action: string) {
+  return action
+    .replace(/^pos\./, '')
+    .replace(/[._]/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+function formatAuditSummary(metadata: any) {
+  if (!metadata || typeof metadata !== 'object') return 'No extra details';
+  if (metadata.orderNo && metadata.method) return `${metadata.orderNo} via ${metadata.method}`;
+  if (metadata.orderNo && metadata.status) return `${metadata.orderNo} → ${metadata.status}`;
+  if (metadata.name && metadata.previousDeviceName)
+    return `${metadata.name} cleared from ${metadata.previousDeviceName}`;
+  if (metadata.name && metadata.device) return `${metadata.name} • ${metadata.device}`;
+  if (metadata.name) return metadata.name;
+  if (metadata.orderNo) return metadata.orderNo;
+  return 'Details recorded';
+}
 
 const STATUS_STYLE: Record<string, string> = {
   PENDING: 'bg-amber-500/15 text-amber-400',
@@ -62,19 +100,152 @@ const TERMINAL_STATUS_STYLE: Record<string, string> = {
   Offline: 'bg-red-500/15    text-red-400',
 };
 
+type PayMethod = 'CASH' | 'CARD' | 'TRANSFER';
+
+function ContinuePaymentModal({
+  order,
+  onClose,
+}: {
+  order: ApiOrder;
+  onClose: () => void;
+}) {
+  const [method, setMethod] = useState<PayMethod>('CASH');
+  const [cash, setCash] = useState('');
+  const deliverOrder = useDeliverOrder();
+  const payOrder = usePayOrderById();
+  const total = Number(order.total);
+  const change = method === 'CASH' && Number(cash) >= total ? Number(cash) - total : 0;
+
+  const handleConfirm = async () => {
+    if (order.status === 'READY') {
+      await deliverOrder.mutateAsync({ orderId: order.id });
+    }
+    await payOrder.mutateAsync({
+      orderId: order.id,
+      method,
+      amountTendered: method === 'CASH' && cash ? Number(cash) : undefined,
+    });
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-sm rounded-2xl border border-[#1e2536] bg-[#161b27] p-6 shadow-2xl">
+        <div className="mb-5 flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-white">Continue Payment</h2>
+            <p className="text-xs text-slate-500 mt-1">{order.orderNo}</p>
+            {order.status === 'READY' && (
+              <p className="text-[11px] text-amber-400 mt-1">
+                This will mark the order delivered before recording payment.
+              </p>
+            )}
+          </div>
+          <button onClick={onClose} className="text-slate-500 hover:text-slate-300 transition-colors">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="mb-5 rounded-xl bg-[#0f1117] p-4">
+          <div className="flex justify-between text-sm text-slate-400">
+            <span>{order.tableNo ?? order.roomNo ?? order.posTerminal?.name ?? 'Walk-in order'}</span>
+            <span>{order.items.length} items</span>
+          </div>
+          <div className="mt-2 flex justify-between text-xl font-bold">
+            <span className="text-white">Total</span>
+            <span className="text-emerald-400">{fmtMoney(total)}</span>
+          </div>
+        </div>
+
+        <div className="mb-4 grid grid-cols-3 gap-2">
+          {(['CASH', 'CARD', 'TRANSFER'] as PayMethod[]).map((value) => (
+            <button
+              key={value}
+              onClick={() => setMethod(value)}
+              className={`rounded-xl border px-3 py-2.5 text-sm font-medium transition-all ${
+                method === value
+                  ? 'border-blue-500/40 bg-blue-600/20 text-blue-300'
+                  : 'border-[#1e2536] bg-[#0f1117] text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              {value}
+            </button>
+          ))}
+        </div>
+
+        {method === 'CASH' && (
+          <div className="mb-4 space-y-2">
+            <label className="block text-xs uppercase tracking-wider text-slate-500">
+              Cash Tendered
+            </label>
+            <input
+              type="number"
+              value={cash}
+              onChange={(e) => setCash(e.target.value)}
+              placeholder="0"
+              className="w-full rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-3 text-center text-2xl font-bold text-white outline-none transition-colors focus:border-emerald-500"
+            />
+            {change > 0 && (
+              <div className="flex items-center justify-between rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-4 py-2.5">
+                <span className="text-sm font-medium text-emerald-400">Change</span>
+                <span className="text-xl font-bold text-emerald-400">{fmtMoney(change)}</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="flex gap-3">
+          <button
+            onClick={onClose}
+            className="flex-1 rounded-lg border border-[#1e2536] px-4 py-2.5 text-sm text-slate-400 transition-colors hover:text-white"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleConfirm}
+            disabled={
+              deliverOrder.isPending ||
+              payOrder.isPending ||
+              (method === 'CASH' && !!cash && Number(cash) < total)
+            }
+            className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-500 disabled:opacity-50"
+          >
+            {deliverOrder.isPending || payOrder.isPending ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <CheckCircle2 size={14} />
+            )}
+            Confirm
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Sales Tab ────────────────────────────────────────────────────────────────
 function SalesTab() {
   const [search, setSearch] = useState('');
   const [dateFrom, setDateFrom] = useState(new Date().toISOString().slice(0, 10));
   const [dateTo, setDateTo] = useState(new Date().toISOString().slice(0, 10));
   const [page, setPage] = useState(1);
+  const [continueOrder, setContinueOrder] = useState<ApiOrder | null>(null);
+  const [quickFilter, setQuickFilter] = useState<'all' | 'ready' | 'awaitingPayment'>('all');
+  const [billing, setBilling] = useState<'all' | 'walk_in' | 'room_charge'>('all');
+  const [terminalId, setTerminalId] = useState('all');
+  const [staffId, setStaffId] = useState('all');
 
   const debouncedSearch = useDebounce(search, 400);
+  const { data: terminals = [] } = usePosTerminals();
+  const { data: staff = [] } = useStaffAll();
 
   const { data, isLoading, isFetching } = usePosOrders({
     search: debouncedSearch || undefined,
     dateFrom: dateFrom || undefined,
     dateTo: dateTo || undefined,
+    billing: billing === 'all' ? undefined : billing,
+    posTerminalId: terminalId === 'all' ? undefined : terminalId,
+    staffId: staffId === 'all' ? undefined : staffId,
     page,
     limit: 20,
   });
@@ -82,7 +253,21 @@ function SalesTab() {
   const { data: zReport } = useZReport({ date: dateFrom });
 
   const orders = data?.orders ?? [];
+  const filteredOrders = orders.filter((order) => {
+    if (quickFilter === 'ready') return order.status === 'READY';
+    if (quickFilter === 'awaitingPayment') {
+      return (order.status === 'READY' || order.status === 'DELIVERED') && !order.isPaid && !order.reservationId;
+    }
+    return true;
+  });
   const stats = data?.stats;
+  const readyCount = orders.filter((order) => order.status === 'READY').length;
+  const awaitingPaymentCount = orders.filter(
+    (order) => (order.status === 'READY' || order.status === 'DELIVERED') && !order.isPaid && !order.reservationId,
+  ).length;
+  const deliverOrder = useDeliverOrder();
+  const hasActiveFilters =
+    billing !== 'all' || terminalId !== 'all' || staffId !== 'all' || search.trim().length > 0;
 
   const paymentMixTotal = Object.values(zReport?.byMethod ?? {}).reduce((s, v) => s + v, 0);
 
@@ -101,21 +286,49 @@ function SalesTab() {
           <p className="text-xs text-slate-500 mt-1">Pending + preparing + ready</p>
         </div>
         <div className="bg-[#161b27] border border-[#1e2536] rounded-xl p-5">
-          <p className="text-xs text-slate-500 uppercase tracking-widest">Payment Mix</p>
-          <div className="flex items-center gap-3 text-xs text-slate-400 mt-3 flex-wrap">
-            {Object.entries(stats?.paymentMix ?? {}).map(([method, amount]) => (
-              <span key={method} className="flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
-                {method}{' '}
-                {paymentMixTotal > 0 ? Math.round((Number(amount) / paymentMixTotal) * 100) : 0}%
-              </span>
-            ))}
-            {!Object.keys(stats?.paymentMix ?? {}).length && (
-              <span className="text-slate-600">No sales yet today</span>
-            )}
+          <p className="text-xs text-slate-500 uppercase tracking-widest">Prep Readiness</p>
+          <p className="text-2xl font-bold text-emerald-400 mt-2">{stats?.prepReadyOrders ?? 0}</p>
+          <div className="flex items-center gap-2 text-xs text-slate-400 mt-3 flex-wrap">
+            <span className="flex items-center gap-1 rounded-full bg-[#0f1117] px-2.5 py-1">
+              <TriangleAlert size={12} className="text-rose-400" />
+              {stats?.delayedOrders ?? 0} delayed
+            </span>
+            <span className="flex items-center gap-1 rounded-full bg-[#0f1117] px-2.5 py-1">
+              <ChefHat size={12} className="text-orange-400" />
+              {stats?.stationQueues.kitchen ?? 0} kitchen queued
+            </span>
+            <span className="flex items-center gap-1 rounded-full bg-[#0f1117] px-2.5 py-1">
+              <Martini size={12} className="text-sky-400" />
+              {stats?.stationQueues.bar ?? 0} bar queued
+            </span>
           </div>
         </div>
       </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#1e2536] bg-[#161b27] px-4 py-3">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-300">
+          <Link href="/kitchen" className="flex items-center gap-1.5 rounded-lg bg-[#0f1117] px-3 py-2 hover:text-white transition-colors">
+            <ChefHat size={13} className="text-orange-400" />
+            Kitchen board
+          </Link>
+          <Link href="/bar" className="flex items-center gap-1.5 rounded-lg bg-[#0f1117] px-3 py-2 hover:text-white transition-colors">
+            <Martini size={13} className="text-sky-400" />
+            Bar board
+          </Link>
+        </div>
+        <div className="flex items-center gap-3 text-xs text-slate-500 flex-wrap">
+          {Object.entries(stats?.paymentMix ?? {}).map(([method, amount]) => (
+            <span key={method} className="flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+              {method}{' '}
+              {paymentMixTotal > 0 ? Math.round((Number(amount) / paymentMixTotal) * 100) : 0}%
+            </span>
+          ))}
+          {!Object.keys(stats?.paymentMix ?? {}).length && <span>No sales yet today</span>}
+        </div>
+      </div>
+
+      <StationSlaPanel />
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 items-center">
@@ -147,7 +360,111 @@ function SalesTab() {
             className="bg-transparent text-slate-300 text-xs outline-none [color-scheme:dark]"
           />
         </div>
+        <select
+          value={billing}
+          onChange={(e) => {
+            setBilling(e.target.value as 'all' | 'walk_in' | 'room_charge');
+            setPage(1);
+          }}
+          className="bg-[#161b27] border border-[#1e2536] rounded-lg px-3 py-2 text-xs text-slate-300 outline-none"
+        >
+          <option value="all">All billing types</option>
+          <option value="walk_in">Walk-ins</option>
+          <option value="room_charge">Room charges</option>
+        </select>
+        <select
+          value={terminalId}
+          onChange={(e) => {
+            setTerminalId(e.target.value);
+            setPage(1);
+          }}
+          className="bg-[#161b27] border border-[#1e2536] rounded-lg px-3 py-2 text-xs text-slate-300 outline-none"
+        >
+          <option value="all">All terminals</option>
+          {terminals.map((terminal) => (
+            <option key={terminal.id} value={terminal.id}>
+              {terminal.name}
+            </option>
+          ))}
+        </select>
+        <select
+          value={staffId}
+          onChange={(e) => {
+            setStaffId(e.target.value);
+            setPage(1);
+          }}
+          className="bg-[#161b27] border border-[#1e2536] rounded-lg px-3 py-2 text-xs text-slate-300 outline-none"
+        >
+          <option value="all">All operators</option>
+          {staff.map((member) => (
+            <option key={member.id} value={member.id}>
+              {member.firstName} {member.lastName}
+            </option>
+          ))}
+        </select>
+        {hasActiveFilters && (
+          <button
+            onClick={() => {
+              setSearch('');
+              setBilling('all');
+              setTerminalId('all');
+              setStaffId('all');
+              setPage(1);
+            }}
+            className="rounded-lg border border-[#1e2536] bg-[#161b27] px-3 py-2 text-xs text-slate-400 transition-colors hover:text-white"
+          >
+            Clear filters
+          </button>
+        )}
         {isFetching && !isLoading && <Loader2 size={14} className="animate-spin text-slate-500" />}
+      </div>
+
+      {hasActiveFilters && (
+        <div className="flex flex-wrap gap-2 text-[11px] text-slate-400">
+          {search.trim() && (
+            <span className="rounded-full border border-[#1e2536] bg-[#161b27] px-3 py-1">
+              Search: {search.trim()}
+            </span>
+          )}
+          {billing !== 'all' && (
+            <span className="rounded-full border border-[#1e2536] bg-[#161b27] px-3 py-1">
+              Billing: {billing === 'walk_in' ? 'Walk-ins' : 'Room charges'}
+            </span>
+          )}
+          {terminalId !== 'all' && (
+            <span className="rounded-full border border-[#1e2536] bg-[#161b27] px-3 py-1">
+              Terminal: {terminals.find((terminal) => terminal.id === terminalId)?.name ?? 'Selected'}
+            </span>
+          )}
+          {staffId !== 'all' && (
+            <span className="rounded-full border border-[#1e2536] bg-[#161b27] px-3 py-1">
+              Operator: {staff.find((member) => member.id === staffId)?.firstName ?? 'Selected'}
+            </span>
+          )}
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-2">
+        {[
+          { key: 'all', label: 'All Sales', count: orders.length },
+          { key: 'ready', label: 'Ready to Deliver', count: readyCount },
+          { key: 'awaitingPayment', label: 'Awaiting Payment', count: awaitingPaymentCount },
+        ].map((item) => (
+          <button
+            key={item.key}
+            onClick={() => {
+              setQuickFilter(item.key as 'all' | 'ready' | 'awaitingPayment');
+              setPage(1);
+            }}
+            className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+              quickFilter === item.key
+                ? 'border-blue-500/40 bg-blue-600/20 text-blue-300'
+                : 'border-[#1e2536] bg-[#161b27] text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            {item.label} {item.count > 0 ? `(${item.count})` : ''}
+          </button>
+        ))}
       </div>
 
       {/* Orders table */}
@@ -167,9 +484,11 @@ function SalesTab() {
                     'Terminal',
                     'Table/Room',
                     'Items',
+                    'Prep',
                     'Total',
                     'Method',
                     'Status',
+                    'Action',
                   ].map((h) => (
                     <th
                       key={h}
@@ -181,7 +500,7 @@ function SalesTab() {
                 </tr>
               </thead>
               <tbody>
-                {orders.map((order) => (
+                {filteredOrders.map((order) => (
                   <tr
                     key={order.id}
                     className="border-b border-[#1e2536] last:border-0 hover:bg-white/[0.02] transition-colors"
@@ -200,6 +519,35 @@ function SalesTab() {
                         (order.reservation ? `Res ${order.reservation.reservationNo}` : '—')}
                     </td>
                     <td className="px-4 py-3 text-xs text-slate-400">{order.items.length}</td>
+                    <td className="px-4 py-3">
+                      {order.prepSummary.totalRoutedItems > 0 ? (
+                        <div className="space-y-1">
+                          <p className="text-xs text-slate-300">
+                            {order.prepSummary.ready + order.prepSummary.fulfilled}/
+                            {order.prepSummary.totalRoutedItems} ready
+                          </p>
+                          <div className="flex flex-wrap gap-1 text-[10px]">
+                            {order.prepSummary.queued > 0 && (
+                              <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-amber-400">
+                                {order.prepSummary.queued} queued
+                              </span>
+                            )}
+                            {order.prepSummary.inProgress > 0 && (
+                              <span className="rounded-full bg-blue-500/15 px-2 py-0.5 text-blue-400">
+                                {order.prepSummary.inProgress} preparing
+                              </span>
+                            )}
+                            {ageMinutes(order.createdAt) >= 20 && !order.prepSummary.isPrepComplete && (
+                              <span className="rounded-full bg-rose-500/15 px-2 py-0.5 text-rose-400">
+                                delayed
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-slate-600">No prep routing</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-sm font-semibold text-slate-200">
                       {fmtMoney(Number(order.total))}
                     </td>
@@ -219,13 +567,42 @@ function SalesTab() {
                         {order.status}
                       </span>
                     </td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-wrap gap-2">
+                        {order.status === 'READY' && (
+                          <button
+                            onClick={() => deliverOrder.mutateAsync({ orderId: order.id })}
+                            disabled={deliverOrder.isPending}
+                            className="rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-violet-500 disabled:opacity-50"
+                          >
+                            Mark delivered
+                          </button>
+                        )}
+                        {(order.status === 'READY' || order.status === 'DELIVERED') &&
+                        !order.isPaid &&
+                        !order.reservationId ? (
+                          <button
+                            onClick={() => setContinueOrder(order)}
+                            className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-500"
+                          >
+                            Continue payment
+                          </button>
+                        ) : order.status !== 'READY' ? (
+                          <span className="text-xs text-slate-600">—</span>
+                        ) : null}
+                      </div>
+                    </td>
                   </tr>
                 ))}
-                {orders.length === 0 && (
+                {filteredOrders.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="py-16 text-center">
+                    <td colSpan={10} className="py-16 text-center">
                       <ShoppingCart size={28} className="text-slate-700 mx-auto mb-2" />
-                      <p className="text-slate-500 text-sm">No orders in this range</p>
+                      <p className="text-slate-500 text-sm">
+                        {quickFilter === 'all'
+                          ? 'No orders in this range'
+                          : 'No orders match this quick filter'}
+                      </p>
                     </td>
                   </tr>
                 )}
@@ -234,10 +611,174 @@ function SalesTab() {
           </div>
         )}
 
-        {data?.meta && orders.length > 0 && (
+        {data?.meta && filteredOrders.length > 0 && (
           <Pagination meta={data.meta} currentPage={page} handlePageChange={setPage} />
         )}
       </div>
+
+      {continueOrder && (
+        <ContinuePaymentModal order={continueOrder} onClose={() => setContinueOrder(null)} />
+      )}
+    </div>
+  );
+}
+
+function AuditTab() {
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [actorUserId, setActorUserId] = useState('all');
+  const [actionFilter, setActionFilter] = useState<'all' | 'orders' | 'payments' | 'terminals'>('all');
+  const { data: users = [] } = useAllUserAccounts();
+
+  const action =
+    actionFilter === 'all'
+      ? 'pos.'
+      : actionFilter === 'orders'
+        ? 'pos.order.'
+        : actionFilter === 'payments'
+          ? 'payment_recorded'
+          : 'pos.terminal.';
+
+  const { data, isLoading, isFetching } = useAuditLogs({
+    page,
+    limit: 20,
+    search: search.trim() || undefined,
+    actorUserId: actorUserId === 'all' ? undefined : actorUserId,
+    action,
+  });
+
+  const logs = data?.logs ?? [];
+  const posActionsToday = logs.filter((log) => {
+    const createdAt = new Date(log.createdAt);
+    const today = new Date();
+    return (
+      createdAt.getFullYear() === today.getFullYear() &&
+      createdAt.getMonth() === today.getMonth() &&
+      createdAt.getDate() === today.getDate()
+    );
+  }).length;
+
+  return (
+    <div className="space-y-5">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-[#161b27] border border-[#1e2536] rounded-xl p-5">
+          <p className="text-xs text-slate-500 uppercase tracking-widest">POS Audit Events</p>
+          <p className="text-2xl font-bold text-white mt-2">{data?.total ?? 0}</p>
+          <p className="text-xs text-slate-500 mt-1">Filtered POS actions in audit history</p>
+        </div>
+        <div className="bg-[#161b27] border border-[#1e2536] rounded-xl p-5">
+          <p className="text-xs text-slate-500 uppercase tracking-widest">Visible Today</p>
+          <p className="text-2xl font-bold text-emerald-400 mt-2">{posActionsToday}</p>
+          <p className="text-xs text-slate-500 mt-1">From the current filtered result set</p>
+        </div>
+        <div className="bg-[#161b27] border border-[#1e2536] rounded-xl p-5">
+          <p className="text-xs text-slate-500 uppercase tracking-widest">Coverage</p>
+          <p className="text-sm font-semibold text-slate-200 mt-2">Orders, payments, terminals</p>
+          <p className="text-xs text-slate-500 mt-1">
+            Includes delivery, payment continuation, device deregistration, and terminal changes
+          </p>
+        </div>
+      </div>
+
+      <div className="bg-[#161b27] border border-[#1e2536] rounded-xl p-4 flex flex-col gap-3">
+        <div className="flex flex-wrap gap-3 items-center">
+          <div className="flex items-center gap-2 bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-2 flex-1 min-w-48">
+            <Search size={14} className="text-slate-500" />
+            <input
+              value={search}
+              onChange={(e) => {
+                setPage(1);
+                setSearch(e.target.value);
+              }}
+              placeholder="Search order no, terminal name, actor..."
+              className="bg-transparent text-sm text-slate-300 placeholder:text-slate-600 outline-none flex-1"
+            />
+          </div>
+          <select
+            value={actorUserId}
+            onChange={(e) => {
+              setPage(1);
+              setActorUserId(e.target.value);
+            }}
+            className="bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-2 text-xs text-slate-300 outline-none"
+          >
+            <option value="all">All actors</option>
+            {users.map((user) => (
+              <option key={user.id} value={user.id}>
+                {user.staffName || user.email}
+              </option>
+            ))}
+          </select>
+          {isFetching && !isLoading && <Loader2 size={14} className="animate-spin text-slate-500" />}
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {[
+            { key: 'all', label: 'All POS Activity' },
+            { key: 'orders', label: 'Order Actions' },
+            { key: 'payments', label: 'Payments' },
+            { key: 'terminals', label: 'Terminal Changes' },
+          ].map((item) => (
+            <button
+              key={item.key}
+              onClick={() => {
+                setPage(1);
+                setActionFilter(item.key as 'all' | 'orders' | 'payments' | 'terminals');
+              }}
+              className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                actionFilter === item.key
+                  ? 'border-blue-500/40 bg-blue-600/20 text-blue-300'
+                  : 'border-[#1e2536] bg-[#0f1117] text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="bg-[#161b27] border border-[#1e2536] rounded-xl overflow-hidden">
+        {isLoading ? (
+          <div className="flex items-center justify-center h-40">
+            <Loader2 size={18} className="animate-spin text-slate-500" />
+          </div>
+        ) : logs.length === 0 ? (
+          <div className="py-16 text-center">
+            <ShieldCheck size={26} className="text-slate-700 mx-auto mb-2" />
+            <p className="text-slate-500 text-sm">No POS audit entries match these filters</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-[#1e2536]">
+            {logs.map((log) => (
+              <div key={log.id} className="px-5 py-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full bg-blue-600/15 px-2.5 py-1 text-[11px] font-medium text-blue-300">
+                        {prettifyAuditAction(log.action)}
+                      </span>
+                      <span className="text-[11px] text-slate-500">{fmtDateTime(log.createdAt)}</span>
+                    </div>
+                    <p className="text-sm text-slate-200">{formatAuditSummary(log.metadata)}</p>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+                      <span>Actor: {log.actor.name}</span>
+                      <span>IP: {log.ipAddress ?? '—'}</span>
+                      <span>Target: {log.targetId ?? '—'}</span>
+                    </div>
+                  </div>
+                  <div className="max-w-md text-right text-xs text-slate-500">
+                    {log.userAgent ?? '—'}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {data?.meta && logs.length > 0 && (
+        <Pagination meta={data.meta} currentPage={page} handlePageChange={setPage} />
+      )}
     </div>
   );
 }
@@ -451,6 +992,7 @@ function ConfigTab() {
   // const { data: terminalGroups = [], isLoading: groupsLoading } = usePosTerminalGroups();
   const { data: terminals = [], isLoading: terminalsLoading } = usePosTerminals();
   const updateTerminal = useUpdatePosTerminal(assignTarget?.id ?? '');
+  const deregisterDevice = useDeregisterPosTerminalDevice();
 
   const grouped = useMemo(() => {
     const map: Record<string, typeof terminals> = {};
@@ -543,10 +1085,37 @@ function ConfigTab() {
                           <span className="text-slate-200">{terminal.device}</span>
                         </div>
                         <div className="flex justify-between">
+                          <span>Registered</span>
+                          <span className="text-slate-200">
+                            {terminal.registeredDeviceName ?? 'Not registered'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>IP</span>
+                          <span className="text-slate-200">{terminal.registeredIpAddress ?? '—'}</span>
+                        </div>
+                        <div className="flex justify-between">
                           <span>Staff</span>
                           <span className="text-slate-200">{terminal.staffName ?? '—'}</span>
                         </div>
+                        <div className="flex justify-between">
+                          <span>Active operator</span>
+                          <span className="text-slate-200">{terminal.currentStaffName ?? '—'}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Last activity</span>
+                          <span className="text-slate-200">
+                            {terminal.lastActivityAt ? fmtTime(terminal.lastActivityAt) : '—'}
+                          </span>
+                        </div>
                       </div>
+                      <button
+                        onClick={() => deregisterDevice.mutateAsync(terminal.id)}
+                        disabled={!terminal.registeredDeviceName || deregisterDevice.isPending}
+                        className="mt-3 text-xs text-amber-400 hover:text-amber-300 flex items-center gap-1 transition-colors disabled:opacity-40"
+                      >
+                        Deregister device <ArrowUpRight size={11} />
+                      </button>
                       <button
                         onClick={() => {
                           setAssignTarget(terminal);
@@ -597,7 +1166,7 @@ function ConfigTab() {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function PosPage() {
-  const { can } = usePermissions();
+  const { can, isAdmin } = usePermissions();
 
   return (
     <div className="space-y-6">
@@ -624,6 +1193,7 @@ export default function PosPage() {
             { value: 'sales', label: 'Sales' },
             { value: 'reports', label: 'Reports' },
             { value: 'inventory', label: 'Inventory' },
+            ...(isAdmin ? [{ value: 'history', label: 'History' }] : []),
             ...(can('manage:pos') ? [{ value: 'config', label: 'Configuration' }] : []),
           ].map((tab) => (
             <TabsTrigger
@@ -647,6 +1217,11 @@ export default function PosPage() {
         <TabsContent value="inventory">
           <InventoryTab />
         </TabsContent>
+        {isAdmin && (
+          <TabsContent value="history">
+            <AuditTab />
+          </TabsContent>
+        )}
         {can('manage:pos') && (
           <TabsContent value="config">
             <ConfigTab />

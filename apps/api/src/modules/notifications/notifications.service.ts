@@ -92,7 +92,7 @@ export class NotificationsService {
   private publishNotificationsSync(
     userIds: string[],
     hotelId: string | null,
-    reason: 'created' | 'read' | 'read-all',
+    reason: 'created' | 'read' | 'read-all' | 'updated',
     event?: NotificationEvent,
   ) {
     const uniqueUserIds = [...new Set(userIds.filter(Boolean))];
@@ -102,6 +102,31 @@ export class NotificationsService {
       event,
       timestamp: new Date().toISOString(),
     });
+  }
+
+  private async updateNotificationState(
+    userId: string,
+    hotelId: string | null,
+    notificationId: string,
+    patch: Prisma.NotificationUpdateInput,
+  ) {
+    if (!hotelId) {
+      throw new NotFoundException('Notification not found.');
+    }
+
+    const existing = await this.prisma.notification.findFirst({
+      where: { id: notificationId, userId, hotelId },
+    });
+    if (!existing) {
+      throw new NotFoundException('Notification not found.');
+    }
+
+    const updated = await this.prisma.notification.update({
+      where: { id: notificationId },
+      data: patch,
+    });
+    this.publishNotificationsSync([userId], hotelId, 'updated', existing.event as NotificationEvent);
+    return updated;
   }
 
   private async getRolePermissions(hotelId: string | null, role: Role): Promise<string[]> {
@@ -352,6 +377,14 @@ export class NotificationsService {
   async removePushSubscription(userId: string, endpoint: string) {
     const result = await this.prisma.pushSubscription.deleteMany({
       where: { userId, endpoint },
+    });
+
+    return { removed: result.count };
+  }
+
+  async removePushSubscriptionById(userId: string, id: string) {
+    const result = await this.prisma.pushSubscription.deleteMany({
+      where: { id, userId },
     });
 
     return { removed: result.count };
@@ -792,6 +825,8 @@ export class NotificationsService {
       page?: number;
       unreadOnly?: boolean;
       event?: NotificationEvent;
+      includeArchived?: boolean;
+      pinnedOnly?: boolean;
     } = {},
   ) {
     if (!hotelId) {
@@ -834,18 +869,32 @@ export class NotificationsService {
       ...(options.unreadOnly ? { readAt: null } : {}),
     };
 
-    const [items, unreadCount, total] = await Promise.all([
+    const [rows, unreadCount] = await Promise.all([
       this.prisma.notification.findMany({
-        where,
+        where: {
+          ...where,
+          ...(options.includeArchived ? { archivedAt: { not: null } } : { archivedAt: null }),
+          ...(options.pinnedOnly ? { pinnedAt: { not: null } } : {}),
+        },
         orderBy: { createdAt: 'desc' },
-        skip,
-        take: limit,
       }),
       this.prisma.notification.count({
         where: { userId, hotelId, readAt: null },
       }),
-      this.prisma.notification.count({ where }),
     ]);
+
+    const filtered = rows
+      .sort((a, b) => {
+        if (a.pinnedAt && !b.pinnedAt) return -1;
+        if (!a.pinnedAt && b.pinnedAt) return 1;
+        if (a.pinnedAt && b.pinnedAt) {
+          return b.pinnedAt.getTime() - a.pinnedAt.getTime();
+        }
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      });
+
+    const total = filtered.length;
+    const items = filtered.slice(skip, skip + limit);
 
     const lastPage = Math.max(1, Math.ceil(total / limit));
     const from = total === 0 ? 0 : skip + 1;
@@ -903,5 +952,79 @@ export class NotificationsService {
     }
 
     return { updated: result.count };
+  }
+
+  async archive(userId: string, hotelId: string | null, notificationId: string) {
+    return this.updateNotificationState(userId, hotelId, notificationId, {
+      archivedAt: new Date(),
+    });
+  }
+
+  async unarchive(userId: string, hotelId: string | null, notificationId: string) {
+    return this.updateNotificationState(userId, hotelId, notificationId, { archivedAt: null });
+  }
+
+  async pin(userId: string, hotelId: string | null, notificationId: string) {
+    return this.updateNotificationState(userId, hotelId, notificationId, {
+      pinnedAt: new Date(),
+    });
+  }
+
+  async unpin(userId: string, hotelId: string | null, notificationId: string) {
+    return this.updateNotificationState(userId, hotelId, notificationId, { pinnedAt: null });
+  }
+
+  async bulkAction(
+    userId: string,
+    hotelId: string | null,
+    action: 'read' | 'archive' | 'unarchive' | 'pin' | 'unpin',
+    ids: string[],
+  ) {
+    if (!hotelId || !ids.length) return { updated: 0 };
+
+    const rows = await this.prisma.notification.findMany({
+      where: {
+        userId,
+        hotelId,
+        id: { in: ids },
+      },
+    });
+
+    if (!rows.length) return { updated: 0 };
+
+    if (action === 'read') {
+      const result = await this.prisma.notification.updateMany({
+        where: {
+          userId,
+          hotelId,
+          id: { in: rows.map((row) => row.id) },
+          readAt: null,
+        },
+        data: { readAt: new Date() },
+      });
+      if (result.count > 0) {
+        this.publishNotificationsSync([userId], hotelId, 'read-all');
+      }
+      return { updated: result.count };
+    }
+
+    const patchMap: Record<'archive' | 'unarchive' | 'pin' | 'unpin', Prisma.NotificationUpdateManyMutationInput> = {
+      archive: { archivedAt: new Date() },
+      unarchive: { archivedAt: null },
+      pin: { pinnedAt: new Date() },
+      unpin: { pinnedAt: null },
+    };
+
+    await this.prisma.notification.updateMany({
+      where: {
+        userId,
+        hotelId,
+        id: { in: rows.map((row) => row.id) },
+      },
+      data: patchMap[action as 'archive' | 'unarchive' | 'pin' | 'unpin'],
+    });
+
+    this.publishNotificationsSync([userId], hotelId, 'updated');
+    return { updated: rows.length };
   }
 }

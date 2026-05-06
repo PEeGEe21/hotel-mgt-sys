@@ -272,7 +272,7 @@ export default function PosTerminalPage() {
     search: debouncedSearch || undefined,
     category: category || undefined,
     isAvailable: 'true',
-    limit: 200,
+    limit: 100,
   });
   const { data: ordersData, isLoading: ordersLoading } = usePosOrders({
     status: 'DELIVERED',

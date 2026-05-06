@@ -3,10 +3,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   PosTerminal,
+  useDeregisterPosTerminalDevice,
   usePosTerminalGroups,
   useUpdatePosTerminal,
 } from '@/hooks/pos/usePosTerminals';
-import { useAllUserAccounts, useUserAccounts } from '@/hooks/useUserAccounts';
+import { useAllUserAccounts } from '@/hooks/useUserAccounts';
 import {
   Dialog,
   DialogContent,
@@ -25,7 +26,6 @@ export default function EditPosTerminal({
   onClose: () => void;
   terminal: PosTerminal | null;
 }) {
-  console.log(terminal, 'terminal');
   const { data: terminalGroups = [], isLoading: terminalGroupsLoading } = usePosTerminalGroups();
   const [assignForm, setAssignForm] = useState({
     device: terminal?.device,
@@ -34,6 +34,7 @@ export default function EditPosTerminal({
     terminalGroupId: terminal?.terminalGroupId ?? '',
   });
   const updateTerminal = useUpdatePosTerminal(terminal?.id ?? '');
+  const deregisterDevice = useDeregisterPosTerminalDevice();
   const { data: users = [] } = useAllUserAccounts();
 
   useEffect(() => {
@@ -76,6 +77,32 @@ export default function EditPosTerminal({
             </button>
           </DialogHeader>
           <div className="py-3 space-y-4">
+            <div className="rounded-xl border border-[#1e2536] bg-[#0f1117] p-4 text-xs text-slate-400 space-y-2">
+              <div className="flex justify-between gap-3">
+                <span>Registered device</span>
+                <span className="text-slate-200">{terminal?.registeredDeviceName ?? 'Not registered'}</span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span>IP address</span>
+                <span className="text-slate-200">{terminal?.registeredIpAddress ?? '—'}</span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span>Current operator</span>
+                <span className="text-slate-200">{terminal?.currentStaffName ?? '—'}</span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span>Registered at</span>
+                <span className="text-slate-200">
+                  {terminal?.registeredAt ? new Date(terminal.registeredAt).toLocaleString('en-NG') : '—'}
+                </span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span>Last activity</span>
+                <span className="text-slate-200">
+                  {terminal?.lastActivityAt ? new Date(terminal.lastActivityAt).toLocaleString('en-NG') : '—'}
+                </span>
+              </div>
+            </div>
             <div>
               <label className="text-xs text-slate-500 uppercase tracking-widest">Group</label>
               <select
@@ -147,17 +174,16 @@ export default function EditPosTerminal({
             >
               Cancel
             </button>
-            {/* <button
+            <button
               onClick={async () => {
-                if (!terminal) return;
-                if (!confirm('Delete this terminal?')) return;
-                await deleteTerminal.mutateAsync(terminal?.id);
-                onClose();
+                if (!terminal?.id) return;
+                await deregisterDevice.mutateAsync(terminal.id);
               }}
-              className="flex-1 bg-white/5 hover:bg-red-500/10 text-red-400 rounded-lg py-2.5 text-sm font-medium transition-colors border border-transparent hover:border-red-500/40"
+              disabled={!terminal?.registeredDeviceName || deregisterDevice.isPending}
+              className="flex-1 bg-white/5 hover:bg-amber-500/10 text-amber-400 rounded-lg py-2.5 text-sm font-medium transition-colors border border-transparent hover:border-amber-500/40 disabled:opacity-40"
             >
-              Delete
-            </button> */}
+              Deregister Device
+            </button>
             <button
               onClick={async () => {
                 await updateTerminal.mutateAsync({

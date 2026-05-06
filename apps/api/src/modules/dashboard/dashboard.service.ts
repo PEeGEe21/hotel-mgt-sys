@@ -7,6 +7,8 @@ import {
 import {
   OrderStatus,
   PaymentStatus,
+  PrepStation,
+  PrepStatus,
   ReservationStatus,
   Role,
   TaskStatus,
@@ -31,6 +33,7 @@ const DASHBOARD_ROLES = [
   Role.RECEPTIONIST,
   Role.HOUSEKEEPING,
   Role.CASHIER,
+  Role.COOK,
   Role.BARTENDER,
   Role.STAFF,
 ];
@@ -508,24 +511,57 @@ export class DashboardService {
       },
       select: {
         id: true,
+        orderNo: true,
         tableNo: true,
         roomNo: true,
+        createdAt: true,
         total: true,
         status: true,
-        _count: { select: { items: true } },
+        items: {
+          select: {
+            prepStation: true,
+            prepStatus: true,
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
       take: 6,
     });
 
+    const stationSummary = orders.reduce(
+      (acc, order) => {
+        order.items.forEach((item) => {
+          if (item.prepStatus !== PrepStatus.QUEUED) return;
+          if (item.prepStation === PrepStation.KITCHEN) acc.kitchenQueued += 1;
+          if (item.prepStation === PrepStation.BAR) acc.barQueued += 1;
+        });
+        return acc;
+      },
+      { kitchenQueued: 0, barQueued: 0 },
+    );
+
     return {
       items: orders.map((order) => ({
         id: order.id,
+        orderNo: order.orderNo,
         label: order.tableNo || order.roomNo || 'Walk-in',
-        itemCount: order._count.items,
+        itemCount: order.items.length,
         total: Number(order.total),
         status: order.status,
+        delayed: dayjs().diff(order.createdAt, 'minute') >= 20,
+        prepSummary: {
+          totalRoutedItems: order.items.filter((item) => item.prepStation !== PrepStation.NONE).length,
+          queued: order.items.filter((item) => item.prepStatus === PrepStatus.QUEUED).length,
+          inProgress: order.items.filter((item) => item.prepStatus === PrepStatus.IN_PROGRESS).length,
+          ready: order.items.filter((item) => item.prepStatus === PrepStatus.READY).length,
+          isPrepComplete: order.items
+            .filter((item) => item.prepStation !== PrepStation.NONE && item.prepStatus !== PrepStatus.CANCELLED)
+            .every((item) =>
+              item.prepStatus === PrepStatus.READY || item.prepStatus === PrepStatus.FULFILLED,
+            ),
+        },
       })),
+      stationSummary,
     };
   }
 

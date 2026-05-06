@@ -17,6 +17,7 @@ const roles: { key: Role; label: string; locked?: boolean }[] = [
   { key: 'RECEPTIONIST', label: 'Receptionist' },
   { key: 'HOUSEKEEPING', label: 'Housekeeping' },
   { key: 'CASHIER', label: 'Cashier' },
+  { key: 'COOK', label: 'Cook' },
   { key: 'BARTENDER', label: 'Bartender' },
   { key: 'STAFF', label: 'Staff' },
 ];
@@ -28,6 +29,7 @@ const roleColors: Record<Role, string> = {
   RECEPTIONIST: 'text-emerald-400',
   HOUSEKEEPING: 'text-amber-400',
   CASHIER: 'text-orange-400',
+  COOK: 'text-rose-400',
   BARTENDER: 'text-pink-400',
   STAFF: 'text-slate-400',
 };

@@ -25,6 +25,7 @@ export class CreateOrderDto {
   @ApiPropertyOptional() @IsString() @IsOptional() roomNo?: string;
   @ApiPropertyOptional() @IsString() @IsOptional() reservationId?: string;
   @ApiPropertyOptional() @IsString() @IsOptional() posTerminalId?: string;
+  @ApiPropertyOptional() @IsString() @IsOptional() terminalDeviceKey?: string;
   @ApiPropertyOptional() @IsString() @IsOptional() staffId?: string;
   @ApiPropertyOptional() @IsNumber() @IsOptional() discount?: number;
   @ApiPropertyOptional() @IsString() @IsOptional() note?: string;

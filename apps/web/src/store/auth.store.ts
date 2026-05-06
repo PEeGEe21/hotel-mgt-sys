@@ -91,9 +91,9 @@ export const useAuthStore = create<AuthState>()(
     {
       name: 'hotel-auth',
       storage: {
-        getItem: (key) => JSON.parse(sessionStorage.getItem(key) ?? 'null'),
-        setItem: (key, val) => sessionStorage.setItem(key, JSON.stringify(val)),
-        removeItem: (key) => sessionStorage.removeItem(key),
+        getItem: (key) => JSON.parse(localStorage.getItem(key) ?? 'null'),
+        setItem: (key, val) => localStorage.setItem(key, JSON.stringify(val)),
+        removeItem: (key) => localStorage.removeItem(key),
       },
       partialize: (state) =>
         ({

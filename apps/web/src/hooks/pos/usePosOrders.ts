@@ -7,6 +7,8 @@ import openToast from '@/components/ToastComponent';
 // ─── Types ────────────────────────────────────────────────────────────────────
 export type OrderStatus = 'PENDING' | 'PREPARING' | 'READY' | 'DELIVERED' | 'CANCELLED';
 export type OrderType = 'DINE_IN' | 'ROOM_SERVICE' | 'TAKEAWAY' | 'RETAIL';
+export type PrepStation = 'NONE' | 'KITCHEN' | 'BAR';
+export type PrepStatus = 'QUEUED' | 'IN_PROGRESS' | 'READY' | 'FULFILLED' | 'CANCELLED';
 
 export type OrderItem = {
   id: string;
@@ -17,7 +19,20 @@ export type OrderItem = {
   quantity: number;
   total: number;
   note: string | null;
-  product?: { id: string; name: string; type: string; category: string; unit: string };
+  prepStation: PrepStation;
+  prepStatus: PrepStatus;
+  prepStartedAt?: string | null;
+  prepCompletedAt?: string | null;
+  bumpedAt?: string | null;
+  bumpedByStaffId?: string | null;
+  product?: {
+    id: string;
+    name: string;
+    type: string;
+    prepStation: PrepStation;
+    unit: string;
+    category: { id: string; name: string };
+  };
 };
 
 export type ApiOrder = {
@@ -49,6 +64,18 @@ export type ApiOrder = {
   } | null;
   staff?: { id: string; firstName: string; lastName: string } | null;
   invoices?: any[];
+  prepSummary: {
+    totalRoutedItems: number;
+    queued: number;
+    inProgress: number;
+    ready: number;
+    fulfilled: number;
+    cancelled: number;
+    isPrepComplete: boolean;
+    hasQueuedPrepItems: boolean;
+    hasInProgressPrepItems: boolean;
+    hasReadyPrepItems: boolean;
+  };
 };
 
 export type CreateOrderInput = {
@@ -58,6 +85,7 @@ export type CreateOrderInput = {
   roomNo?: string;
   reservationId?: string;
   posTerminalId?: string;
+  terminalDeviceKey?: string;
   staffId?: string;
   discount?: number;
   note?: string;
@@ -66,6 +94,7 @@ export type CreateOrderInput = {
 export type OrderFilters = {
   status?: string;
   type?: string;
+  billing?: string;
   posTerminalId?: string;
   staffId?: string;
   tableNo?: string;
@@ -87,6 +116,12 @@ export type OrdersResponse = {
     todayCount: number;
     activeOrders: number;
     paymentMix: Record<string, number>;
+    prepReadyOrders: number;
+    delayedOrders: number;
+    stationQueues: {
+      kitchen: number;
+      bar: number;
+    };
   };
 };
 
@@ -106,14 +141,19 @@ export type ZReport = {
   openTables: (string | null)[];
 };
 
+type PosOrdersQueryOptions = {
+  refetchInterval?: number | false;
+};
+
 // ─── Hooks ────────────────────────────────────────────────────────────────────
-export function usePosOrders(filters: OrderFilters = {}) {
+export function usePosOrders(filters: OrderFilters = {}, options: PosOrdersQueryOptions = {}) {
   return useQuery<OrdersResponse>({
     queryKey: ['pos-orders', filters],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (filters.status) params.set('status', filters.status);
       if (filters.type) params.set('type', filters.type);
+      if (filters.billing) params.set('billing', filters.billing);
       if (filters.posTerminalId) params.set('posTerminalId', filters.posTerminalId);
       if (filters.staffId) params.set('staffId', filters.staffId);
       if (filters.tableNo) params.set('tableNo', filters.tableNo);
@@ -127,7 +167,7 @@ export function usePosOrders(filters: OrderFilters = {}) {
     },
     staleTime: 15_000,
     placeholderData: keepPreviousData,
-    refetchInterval: 30_000, // auto-refresh for live kitchen view
+    refetchInterval: options.refetchInterval ?? 60_000, // fallback if websocket sync is unavailable
   });
 }
 
@@ -252,8 +292,22 @@ export function useCancelOrder(orderId: string) {
 export function useDeliverOrder() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (orderId: string) =>
-      api.patch(`/pos/orders/${orderId}/status`, { status: 'DELIVERED' }).then((r) => r.data),
+    mutationFn: ({
+      orderId,
+      posTerminalId,
+      terminalDeviceKey,
+    }: {
+      orderId: string;
+      posTerminalId?: string;
+      terminalDeviceKey?: string;
+    }) =>
+      api
+        .patch(`/pos/orders/${orderId}/status`, {
+          status: 'DELIVERED',
+          posTerminalId,
+          terminalDeviceKey,
+        })
+        .then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['pos-orders'] });
       qc.invalidateQueries({ queryKey: ['reservations'] });
@@ -271,15 +325,26 @@ export function usePayOrderById() {
       amountTendered,
       reference,
       note,
+      posTerminalId,
+      terminalDeviceKey,
     }: {
       orderId: string;
       method: string;
       amountTendered?: number;
       reference?: string;
       note?: string;
+      posTerminalId?: string;
+      terminalDeviceKey?: string;
     }) =>
       api
-        .post(`/pos/orders/${orderId}/pay`, { method, amountTendered, reference, note })
+        .post(`/pos/orders/${orderId}/pay`, {
+          method,
+          amountTendered,
+          reference,
+          note,
+          posTerminalId,
+          terminalDeviceKey,
+        })
         .then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['pos-orders'] });

@@ -329,6 +329,7 @@ export default function HotelProfilePage() {
     defaultCheckoutMinute: '0',
     guestCheckoutReminderEnabled: false,
     guestCheckoutReminderLeadDays: '1, 0',
+    emailAutoRetryEnabled: false,
     checkoutDueScanEnabled: true,
     checkoutDueScanHour: '11',
     checkoutDueScanMinute: '0',
@@ -392,6 +393,7 @@ export default function HotelProfilePage() {
       defaultCheckoutMinute: String(data.defaultCheckoutMinute ?? 0),
       guestCheckoutReminderEnabled: Boolean(data.guestCheckoutReminderEnabled ?? false),
       guestCheckoutReminderLeadDays: (data.guestCheckoutReminderLeadDays ?? [1, 0]).join(', '),
+      emailAutoRetryEnabled: Boolean(data.emailAutoRetryEnabled ?? false),
       checkoutDueScanEnabled: Boolean(data.cronSettings?.checkoutDueScanEnabled ?? true),
       checkoutDueScanHour: String(data.cronSettings?.checkoutDueScanHour ?? 11),
       checkoutDueScanMinute: String(data.cronSettings?.checkoutDueScanMinute ?? 0),
@@ -739,6 +741,7 @@ export default function HotelProfilePage() {
 
     if (section === 'operations') {
       payload = {
+        emailAutoRetryEnabled: form.emailAutoRetryEnabled,
         autoCreateCheckoutHousekeepingTasks: form.autoCreateCheckoutHousekeepingTasks,
         housekeepingFollowUpEnabled: form.housekeepingFollowUpEnabled,
         housekeepingFollowUpGraceHours: Number(form.housekeepingFollowUpGraceHours || 2),
@@ -1246,6 +1249,12 @@ export default function HotelProfilePage() {
                   description="Alert staff when checked-in reservations are due out today or overdue."
                   enabled={form.checkoutDueScanEnabled}
                   onToggle={() => set('checkoutDueScanEnabled', !form.checkoutDueScanEnabled)}
+                />
+                <ToggleRow
+                  title="Auto-retry outbound email delivery"
+                  description="Retry transient email provider failures automatically. Leave this off if you want staff to decide when to retry."
+                  enabled={form.emailAutoRetryEnabled}
+                  onToggle={() => set('emailAutoRetryEnabled', !form.emailAutoRetryEnabled)}
                 />
                 <ToggleRow
                   title="Auto-create checkout housekeeping tasks"

@@ -6,6 +6,7 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 export class OrderFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsString() status?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() type?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() billing?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() posTerminalId?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() staffId?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() tableNo?: string;

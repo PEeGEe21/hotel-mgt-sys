@@ -12,10 +12,16 @@ import { Server, Socket } from 'socket.io';
 import { RealtimeAuthService, RealtimeUser } from './realtime-auth.service';
 import { NotificationEvent } from '../notifications/notifications.constants';
 import { PresenceUpdateEvent, RealtimePresenceService } from './realtime-presence.service';
+import {
+  POS_ORDERS_SYNC_EVENT,
+  POS_PREP_SYNC_EVENT,
+  PosOrderSyncPayload,
+  PosPrepSyncPayload,
+} from './realtime.events';
 
 type NotificationSyncPayload = {
   hotelId: string | null;
-  reason: 'created' | 'read' | 'read-all';
+  reason: 'created' | 'read' | 'read-all' | 'updated';
   event?: NotificationEvent;
   timestamp: string;
 };
@@ -115,5 +121,13 @@ export class RealtimeGateway
       this.server.to(this.getHotelRoom(payload.hotelId)).emit('presence.sync', payload);
     }
     this.server.to(this.getUserRoom(payload.userId)).emit('presence.sync', payload);
+  }
+
+  emitPosOrderSync(payload: PosOrderSyncPayload) {
+    this.server.to(this.getHotelRoom(payload.hotelId)).emit(POS_ORDERS_SYNC_EVENT, payload);
+  }
+
+  emitPosPrepSync(payload: PosPrepSyncPayload) {
+    this.server.to(this.getHotelRoom(payload.hotelId)).emit(POS_PREP_SYNC_EVENT, payload);
   }
 }

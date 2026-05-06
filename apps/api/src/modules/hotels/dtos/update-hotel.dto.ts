@@ -66,6 +66,7 @@ export class UpdateHotelDto {
   @ApiPropertyOptional() @IsInt() @Min(0) @Max(59) @IsOptional() defaultCheckoutMinute?: number;
   @ApiPropertyOptional() @IsBoolean() @IsOptional() guestCheckoutReminderEnabled?: boolean;
   @ApiPropertyOptional({ type: [Number] }) @IsArray() @ArrayMinSize(1) @IsInt({ each: true }) @Min(0, { each: true }) @Max(30, { each: true }) @IsOptional() guestCheckoutReminderLeadDays?: number[];
+  @ApiPropertyOptional() @IsBoolean() @IsOptional() emailAutoRetryEnabled?: boolean;
   @ApiPropertyOptional() @IsBoolean() @IsOptional() autoCreateCheckoutHousekeepingTasks?: boolean;
   @ApiPropertyOptional() @IsBoolean() @IsOptional() housekeepingFollowUpEnabled?: boolean;
   @ApiPropertyOptional() @IsInt() @Min(1) @Max(168) @IsOptional() housekeepingFollowUpGraceHours?: number;

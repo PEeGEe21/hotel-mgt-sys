@@ -175,3 +175,16 @@ export function useDisablePushNotifications() {
       openToast('error', error?.message ?? 'Failed to disable browser push notifications'),
   });
 }
+
+export function useRemovePushSubscriptionEntry() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete(`/notifications/push/subscriptions/${id}`).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['notifications', 'push-status'] });
+      openToast('success', 'Push subscription removed');
+    },
+    onError: (error: any) =>
+      openToast('error', error?.response?.data?.message ?? 'Failed to remove push subscription'),
+  });
+}

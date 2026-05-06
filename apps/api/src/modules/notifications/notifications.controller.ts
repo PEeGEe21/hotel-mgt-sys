@@ -6,6 +6,7 @@ import { UpdateNotificationPreferencesDto } from './dtos/update-notification-pre
 import { UpsertPushSubscriptionDto } from './dtos/upsert-push-subscription.dto';
 import { RemovePushSubscriptionDto } from './dtos/remove-push-subscription.dto';
 import { SendTestNotificationDto } from './dtos/send-test-notification.dto';
+import { BulkNotificationActionDto } from './dtos/bulk-notification-action.dto';
 
 @ApiTags('Notifications')
 @Controller('notifications')
@@ -22,12 +23,16 @@ export class NotificationsController {
     @Query('page') page?: string,
     @Query('unreadOnly') unreadOnly?: string,
     @Query('event') event?: string,
+    @Query('includeArchived') includeArchived?: string,
+    @Query('pinnedOnly') pinnedOnly?: string,
   ) {
     return this.notificationsService.listInbox(req.user.sub, req.user.hotelId ?? null, {
       limit: limit ? Number(limit) : undefined,
       page: page ? Number(page) : undefined,
       unreadOnly: unreadOnly === 'true',
       event: event as any,
+      includeArchived: includeArchived === 'true',
+      pinnedOnly: pinnedOnly === 'true',
     });
   }
 
@@ -61,10 +66,55 @@ export class NotificationsController {
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
+  @Patch('bulk')
+  @ApiOperation({ summary: 'Apply bulk inbox actions for current user' })
+  bulkAction(@Request() req: any, @Body() dto: BulkNotificationActionDto) {
+    return this.notificationsService.bulkAction(
+      req.user.sub,
+      req.user.hotelId ?? null,
+      dto.action,
+      dto.ids ?? [],
+    );
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
   @Patch(':id/read')
   @ApiOperation({ summary: 'Mark a notification as read for current user' })
   markAsRead(@Request() req: any, @Param('id') id: string) {
     return this.notificationsService.markAsRead(req.user.sub, req.user.hotelId ?? null, id);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Patch(':id/archive')
+  @ApiOperation({ summary: 'Archive a notification for current user' })
+  archive(@Request() req: any, @Param('id') id: string) {
+    return this.notificationsService.archive(req.user.sub, req.user.hotelId ?? null, id);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Patch(':id/unarchive')
+  @ApiOperation({ summary: 'Restore an archived notification for current user' })
+  unarchive(@Request() req: any, @Param('id') id: string) {
+    return this.notificationsService.unarchive(req.user.sub, req.user.hotelId ?? null, id);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Patch(':id/pin')
+  @ApiOperation({ summary: 'Pin a notification for current user' })
+  pin(@Request() req: any, @Param('id') id: string) {
+    return this.notificationsService.pin(req.user.sub, req.user.hotelId ?? null, id);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Patch(':id/unpin')
+  @ApiOperation({ summary: 'Unpin a notification for current user' })
+  unpin(@Request() req: any, @Param('id') id: string) {
+    return this.notificationsService.unpin(req.user.sub, req.user.hotelId ?? null, id);
   }
 
   @ApiBearerAuth()
@@ -119,5 +169,13 @@ export class NotificationsController {
   @ApiOperation({ summary: 'Remove a browser push subscription for current user' })
   removePushSubscription(@Request() req: any, @Body() dto: RemovePushSubscriptionDto) {
     return this.notificationsService.removePushSubscription(req.user.sub, dto.endpoint);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Delete('push/subscriptions/:id')
+  @ApiOperation({ summary: 'Remove a specific push subscription for current user' })
+  removePushSubscriptionById(@Request() req: any, @Param('id') id: string) {
+    return this.notificationsService.removePushSubscriptionById(req.user.sub, id);
   }
 }

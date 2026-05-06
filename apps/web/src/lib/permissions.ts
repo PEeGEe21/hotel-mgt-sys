@@ -12,6 +12,7 @@ export type Role =
   | 'RECEPTIONIST'
   | 'HOUSEKEEPING'
   | 'CASHIER'
+  | 'COOK'
   | 'BARTENDER'
   | 'STAFF';
 
@@ -50,6 +51,10 @@ export type Permission =
   | 'void:pos'
   | 'discount:pos'
   | 'manage:pos'
+  | 'view:pos-kitchen-board'
+  | 'update:pos-kitchen-board'
+  | 'view:pos-bar-board'
+  | 'update:pos-bar-board'
   // Inventory
   | 'view:inventory'
   | 'create:inventory'
@@ -135,6 +140,26 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: 'create:pos', label: 'Create Orders', description: 'Place new POS orders' },
       { key: 'void:pos', label: 'Void Orders', description: 'Cancel or void orders' },
       { key: 'discount:pos', label: 'Apply Discounts', description: 'Apply discounts to orders' },
+      {
+        key: 'view:pos-kitchen-board',
+        label: 'View Kitchen Board',
+        description: 'Access the kitchen production board',
+      },
+      {
+        key: 'update:pos-kitchen-board',
+        label: 'Update Kitchen Board',
+        description: 'Move kitchen tickets through prep states',
+      },
+      {
+        key: 'view:pos-bar-board',
+        label: 'View Bar Board',
+        description: 'Access the bar production board',
+      },
+      {
+        key: 'update:pos-bar-board',
+        label: 'Update Bar Board',
+        description: 'Move bar tickets through prep states',
+      },
     ],
   },
   {
@@ -275,7 +300,11 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'view:hr',
     'manage:hr',
     'manage:permissions',
-    'manage:pos'
+    'manage:pos',
+    'view:pos-kitchen-board',
+    'update:pos-kitchen-board',
+    'view:pos-bar-board',
+    'update:pos-bar-board',
   ],
 
   ADMIN: [
@@ -327,7 +356,11 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'view:hr',
     'manage:hr',
     'manage:permissions',
-    'manage:pos'
+    'manage:pos',
+    'view:pos-kitchen-board',
+    'update:pos-kitchen-board',
+    'view:pos-bar-board',
+    'update:pos-bar-board',
   ],
 
   MANAGER: [
@@ -370,6 +403,10 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'manage:hr',
     'manage:pos',
     'view:mailing',
+    'view:pos-kitchen-board',
+    'update:pos-kitchen-board',
+    'view:pos-bar-board',
+    'update:pos-bar-board',
   ],
 
   RECEPTIONIST: [
@@ -409,9 +446,28 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'view:facilities',
     'create:facilities',
     'clock:self',
+    'view:pos-kitchen-board',
   ],
 
-  BARTENDER: ['view:dashboard', 'view:pos', 'create:pos', 'view:inventory', 'clock:self', 'manage:pos'],
+  COOK: [
+    'view:dashboard',
+    'view:pos',
+    'view:inventory',
+    'clock:self',
+    'view:pos-kitchen-board',
+    'update:pos-kitchen-board',
+  ],
+
+  BARTENDER: [
+    'view:dashboard',
+    'view:pos',
+    'create:pos',
+    'view:inventory',
+    'clock:self',
+    'manage:pos',
+    'view:pos-bar-board',
+    'update:pos-bar-board',
+  ],
 
   STAFF: ['view:dashboard', 'clock:self'],
 };

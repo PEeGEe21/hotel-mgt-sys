@@ -55,6 +55,7 @@ const toRole = (value: string): Role =>
       'RECEPTIONIST',
       'HOUSEKEEPING',
       'CASHIER',
+      'COOK',
       'BARTENDER',
       'STAFF',
     ] as Role[]
@@ -69,6 +70,7 @@ const ROLE_COLORS: Record<Role, string> = {
   RECEPTIONIST: 'text-sky-400 bg-sky-500/15 border-sky-500/30',
   HOUSEKEEPING: 'text-emerald-400 bg-emerald-500/15 border-emerald-500/30',
   CASHIER: 'text-amber-400 bg-amber-500/15 border-amber-500/30',
+  COOK: 'text-rose-400 bg-rose-500/15 border-rose-500/30',
   BARTENDER: 'text-orange-400 bg-orange-500/15 border-orange-500/30',
   STAFF: 'text-slate-400 bg-slate-500/15 border-slate-500/30',
 };

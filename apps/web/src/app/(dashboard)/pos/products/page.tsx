@@ -32,6 +32,7 @@ import {
   type CreateProductInput,
   type ProductType,
   type ProductIngredient,
+  type PrepStation,
 } from '@/hooks/pos/usePosProducts';
 import openToast from '@/components/ToastComponent';
 import { useDebounce } from '@/hooks/useDebounce';
@@ -73,6 +74,14 @@ const TYPE_CONFIG: Record<
     desc: 'Multiple ingredients — cocktails, meal combos',
   },
 };
+
+const PREP_STATION_OPTIONS: { value: PrepStation; label: string; desc: string }[] = [
+  { value: 'NONE', label: 'No Station', desc: 'Does not appear on kitchen or bar boards' },
+  { value: 'KITCHEN', label: 'Kitchen', desc: 'Routes to the kitchen prep board' },
+  { value: 'BAR', label: 'Bar', desc: 'Routes to the bar prep board' },
+];
+
+type InventoryTrackingMode = 'RECIPE' | 'DIRECT' | 'NONE';
 
 // ─── Ingredient Row ───────────────────────────────────────────────────────────
 function IngredientRow({
@@ -190,8 +199,20 @@ function ProductModal({ product, onClose }: { product?: ApiProduct | null; onClo
     description: product?.description ?? '',
     unit: product?.unit ?? 'item',
     isAvailable: product?.isAvailable ?? true,
+    stock:
+      typeof product?.stock === 'number' || product?.stock === null
+        ? product?.stock
+        : null,
     type: (product?.type ?? 'PHYSICAL') as ProductType,
+    prepStation: (product?.prepStation ?? 'NONE') as PrepStation,
   });
+  const [trackingMode, setTrackingMode] = useState<InventoryTrackingMode>(
+    product?.ingredients?.length
+      ? 'RECIPE'
+      : product?.stock !== null && product?.stock !== undefined
+        ? 'DIRECT'
+        : 'NONE',
+  );
 
   const [ingredients, setIngredients] = useState<
     {
@@ -244,26 +265,40 @@ function ProductModal({ product, onClose }: { product?: ApiProduct | null; onClo
 
   const handleSave = async () => {
     if (!form.name.trim()) return setError('Name is required.');
-    if (!form.price || form.price <= 0) return setError('Price must be greater than 0.');
+    const normalizedPrice = Number(form.price);
+    if (!Number.isFinite(normalizedPrice) || normalizedPrice <= 0) {
+      return setError('Price must be greater than 0.');
+    }
     if (!form.categoryId) return setError('Category is required.');
-    if (form.type !== 'SERVICE') {
+    if (form.type !== 'SERVICE' && trackingMode === 'RECIPE') {
       if (ingredients.length === 0) return setError('Add at least one ingredient from inventory.');
       const incomplete = ingredients.find((i) => !i.inventoryItemId || i.quantity <= 0);
       if (incomplete) return setError('All ingredients must have an inventory item and quantity.');
+    }
+    if (form.type !== 'SERVICE' && trackingMode === 'DIRECT') {
+      const normalizedStock = Number(form.stock);
+      if (!Number.isFinite(normalizedStock) || normalizedStock < 0) {
+        return setError('Direct stock must be 0 or greater.');
+      }
     }
     setError('');
 
     const payload: CreateProductInput = {
       name: form.name,
-      price: form.price,
+      price: normalizedPrice,
       categoryId: form.categoryId,
       type: form.type,
       sku: form.sku || undefined,
       description: form.description || undefined,
       unit: form.unit,
       isAvailable: form.isAvailable,
+      stock:
+        form.type !== 'SERVICE' && trackingMode === 'DIRECT'
+          ? Number(form.stock)
+          : undefined,
+      prepStation: form.prepStation,
       ingredients:
-        form.type !== 'SERVICE'
+        form.type !== 'SERVICE' && trackingMode === 'RECIPE'
           ? ingredients.map((i) => ({
               inventoryItemId: i.inventoryItemId,
               quantity: i.quantity,
@@ -329,7 +364,11 @@ function ProductModal({ product, onClose }: { product?: ApiProduct | null; onClo
                   type="button"
                   onClick={() => {
                     set('type', t);
-                    if (t === 'SERVICE') setIngredients([]);
+                    if (t === 'SERVICE') {
+                      setIngredients([]);
+                      setTrackingMode('NONE');
+                      set('stock', null);
+                    }
                   }}
                   className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border text-center transition-all ${form.type === t ? `${cfg.bg} ${cfg.color}` : 'bg-[#0f1117] border-[#1e2536] text-slate-500 hover:text-slate-300'}`}
                 >
@@ -359,7 +398,9 @@ function ProductModal({ product, onClose }: { product?: ApiProduct | null; onClo
                 type="number"
                 min={0}
                 value={form.price}
-                onChange={(e) => set('price', Number(e.target.value))}
+                onChange={(e) =>
+                  set('price', e.target.value === '' ? '' : Number(e.target.value))
+                }
                 placeholder="1200"
                 className={inputCls}
               />
@@ -422,6 +463,87 @@ function ProductModal({ product, onClose }: { product?: ApiProduct | null; onClo
             </div>
           </div>
 
+          <div>
+            <Label>Prep Station</Label>
+            <select
+              value={form.prepStation}
+              onChange={(e) => set('prepStation', e.target.value as PrepStation)}
+              className={inputCls}
+            >
+              {PREP_STATION_OPTIONS.map((station) => (
+                <option key={station.value} value={station.value}>
+                  {station.label}
+                </option>
+              ))}
+            </select>
+            <p className="mt-2 text-xs text-slate-600">
+              {PREP_STATION_OPTIONS.find((station) => station.value === form.prepStation)?.desc}
+            </p>
+          </div>
+
+          {form.type !== 'SERVICE' && (
+            <div>
+              <Label>Inventory Tracking</Label>
+              <div className="grid gap-2 md:grid-cols-3">
+                {[
+                  {
+                    value: 'RECIPE',
+                    label: 'Recipe',
+                    desc: 'Deduct linked ingredients when sold',
+                  },
+                  {
+                    value: 'DIRECT',
+                    label: 'Direct Stock',
+                    desc: 'Deduct stock directly from this product',
+                  },
+                  {
+                    value: 'NONE',
+                    label: 'Untracked',
+                    desc: 'Sell without inventory deduction',
+                  },
+                ].map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => {
+                      setTrackingMode(option.value as InventoryTrackingMode);
+                      if (option.value !== 'RECIPE') setIngredients([]);
+                      if (option.value !== 'DIRECT') set('stock', null);
+                      if (option.value === 'DIRECT' && (form.stock === null || form.stock === undefined)) {
+                        set('stock', 0);
+                      }
+                    }}
+                    className={`rounded-xl border p-3 text-left transition-all ${
+                      trackingMode === option.value
+                        ? 'border-blue-500/40 bg-blue-500/10 text-blue-300'
+                        : 'border-[#1e2536] bg-[#0f1117] text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <p className="text-sm font-semibold">{option.label}</p>
+                    <p className="mt-1 text-xs text-slate-500">{option.desc}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {form.type !== 'SERVICE' && trackingMode === 'DIRECT' && (
+            <div>
+              <Label>Opening Stock</Label>
+              <input
+                type="number"
+                min={0}
+                value={form.stock ?? ''}
+                onChange={(e) => set('stock', e.target.value === '' ? null : Number(e.target.value))}
+                placeholder="0"
+                className={inputCls}
+              />
+              <p className="mt-2 text-xs text-slate-600">
+                Stock will be deducted directly from this product when sold.
+              </p>
+            </div>
+          )}
+
           {/* Description */}
           <div>
             <Label>Description (optional)</Label>
@@ -448,7 +570,7 @@ function ProductModal({ product, onClose }: { product?: ApiProduct | null; onClo
           </label>
 
           {/* ── Ingredients Section ── */}
-          {form.type !== 'SERVICE' && (
+          {form.type !== 'SERVICE' && trackingMode === 'RECIPE' && (
             <div>
               <div className="flex items-center justify-between mb-3">
                 <div>
@@ -694,6 +816,13 @@ export default function PosProductsPage() {
                           )}
                         </div>
                         <p className="text-xs text-slate-500 mt-0.5">{product?.category?.name}</p>
+                        <div className="mt-2">
+                          <span className="rounded-full border border-[#2a3349] bg-[#111827] px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-300">
+                            {product.prepStation === 'NONE'
+                              ? 'No station'
+                              : `${product.prepStation.toLowerCase()} board`}
+                          </span>
+                        </div>
                       </div>
                       <span
                         className={`text-[10px] px-2 py-0.5 rounded-full font-medium border ${tc.bg} ${tc.color} shrink-0`}

@@ -2,16 +2,30 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Bell, CheckCheck, ExternalLink, Mail } from 'lucide-react';
+import {
+  ArchiveRestore,
+  ArchiveX,
+  Bell,
+  CheckCheck,
+  ExternalLink,
+  Mail,
+  Pin,
+  PinOff,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import Pagination from '@/components/ui/pagination';
 import {
   type AppNotificationEvent,
+  useArchiveNotification,
+  useBulkNotificationAction,
   useMarkAllNotificationsAsRead,
   useMarkNotificationAsRead,
   useNotifications,
+  usePinNotification,
+  useUnarchiveNotification,
+  useUnpinNotification,
 } from '@/hooks/useNotifications';
 import { usePermissions } from '@/hooks/usePermissions';
 import { getNotificationHref, getNotificationMailingHref } from '@/lib/notification-links';
@@ -19,9 +33,9 @@ import {
   formatNotificationEventLabel,
   getNotificationContextSummary,
   getNotificationSecondaryMessage,
-  getNotificationSeverity,
   hasLinkedEmailDelivery,
   NOTIFICATION_EVENT_LABELS,
+  resolveNotificationSeverity,
 } from '@/lib/notification-presenter';
 import { cn } from '@/lib/utils';
 
@@ -40,15 +54,24 @@ export default function NotificationsPage() {
   const [page, setPage] = useState(1);
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [eventFilter, setEventFilter] = useState<'all' | AppNotificationEvent>('all');
+  const [view, setView] = useState<'active' | 'archived' | 'pinned'>('active');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const { can } = usePermissions();
   const { data, isLoading } = useNotifications({
     limit: 8,
     page,
     unreadOnly,
     event: eventFilter === 'all' ? undefined : eventFilter,
+    includeArchived: view === 'archived',
+    pinnedOnly: view === 'pinned',
   });
   const markAsRead = useMarkNotificationAsRead();
   const markAllAsRead = useMarkAllNotificationsAsRead();
+  const archiveNotification = useArchiveNotification();
+  const unarchiveNotification = useUnarchiveNotification();
+  const pinNotification = usePinNotification();
+  const unpinNotification = useUnpinNotification();
+  const bulkAction = useBulkNotificationAction();
 
   const items = data?.items ?? [];
   const unreadCount = data?.unreadCount ?? 0;
@@ -58,6 +81,22 @@ export default function NotificationsPage() {
     () => ['all', ...Object.keys(NOTIFICATION_EVENT_LABELS)] as Array<'all' | AppNotificationEvent>,
     [],
   );
+  const selectedCount = selectedIds.length;
+  const allVisibleSelected = items.length > 0 && items.every((item) => selectedIds.includes(item.id));
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds((current) =>
+      current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id],
+    );
+  };
+
+  const toggleSelectAllVisible = () => {
+    setSelectedIds((current) =>
+      allVisibleSelected
+        ? current.filter((id) => !items.some((item) => item.id === id))
+        : [...new Set([...current, ...items.map((item) => item.id)])],
+    );
+  };
 
   const openNotification = (id: string, href: string | null, readAt: string | null) => {
     if (!readAt) markAsRead.mutate(id);
@@ -93,16 +132,69 @@ export default function NotificationsPage() {
         </div>
       </div>
 
+      {selectedCount > 0 && (
+        <Card className="border-[#1e2536] bg-[#161b27] text-white shadow-none">
+          <CardContent className="flex flex-wrap items-center gap-2 p-4">
+            <span className="text-sm text-slate-300">{selectedCount} selected</span>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => bulkAction.mutate({ action: 'read', ids: selectedIds })}
+              className="!border-[#1e2536] bg-[#0f1117] text-slate-200 hover:bg-white/5 hover:text-white"
+            >
+              <CheckCheck className="mr-2 h-4 w-4" />
+              Mark selected as read
+            </Button>
+            {view === 'archived' ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => bulkAction.mutate({ action: 'unarchive', ids: selectedIds })}
+                className="!border-[#1e2536] bg-[#0f1117] text-slate-200 hover:bg-white/5 hover:text-white"
+              >
+                <ArchiveRestore className="mr-2 h-4 w-4" />
+                Restore selected
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => bulkAction.mutate({ action: 'archive', ids: selectedIds })}
+                className="!border-[#1e2536] bg-[#0f1117] text-slate-200 hover:bg-white/5 hover:text-white"
+              >
+                <ArchiveX className="mr-2 h-4 w-4" />
+                Archive selected
+              </Button>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() =>
+                bulkAction.mutate({
+                  action: view === 'pinned' ? 'unpin' : 'pin',
+                  ids: selectedIds,
+                })
+              }
+              className="!border-[#1e2536] bg-[#0f1117] text-slate-200 hover:bg-white/5 hover:text-white"
+            >
+              {view === 'pinned' ? <PinOff className="mr-2 h-4 w-4" /> : <Pin className="mr-2 h-4 w-4" />}
+              {view === 'pinned' ? 'Unpin selected' : 'Pin selected'}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       <Card className="border-[#1e2536] bg-[#161b27] text-white shadow-none pb-0">
         <CardHeader className="border-b border-[#1e2536]">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <CardTitle className="text-base font-semibold">Recent activity</CardTitle>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <div className="flex items-center gap-2">
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={() => {
                     setPage(1);
+                    setSelectedIds([]);
                     setUnreadOnly(false);
                   }}
                   className={cn(
@@ -118,6 +210,7 @@ export default function NotificationsPage() {
                   type="button"
                   onClick={() => {
                     setPage(1);
+                    setSelectedIds([]);
                     setUnreadOnly(true);
                   }}
                   className={cn(
@@ -129,11 +222,35 @@ export default function NotificationsPage() {
                 >
                   Unread only
                 </button>
+                {[
+                  { key: 'active', label: 'Active' },
+                  { key: 'pinned', label: 'Pinned' },
+                  { key: 'archived', label: 'Archived' },
+                ].map((item) => (
+                  <button
+                    key={item.key}
+                    type="button"
+                    onClick={() => {
+                      setPage(1);
+                      setSelectedIds([]);
+                      setView(item.key as 'active' | 'archived' | 'pinned');
+                    }}
+                    className={cn(
+                      'rounded-full border px-3 py-1.5 text-xs transition-colors',
+                      view === item.key
+                        ? 'border-blue-500/30 bg-blue-500/10 text-blue-200'
+                        : 'border-[#1e2536] bg-[#0f1117] text-slate-400 hover:text-slate-200',
+                    )}
+                  >
+                    {item.label}
+                  </button>
+                ))}
               </div>
               <select
                 value={eventFilter}
                 onChange={(e) => {
                   setPage(1);
+                  setSelectedIds([]);
                   setEventFilter(e.target.value as 'all' | AppNotificationEvent);
                 }}
                 className="rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-2 text-sm text-slate-300 outline-none"
@@ -170,6 +287,18 @@ export default function NotificationsPage() {
 
           {!isLoading && items.length > 0 && (
             <div className="divide-y divide-[#1e2536]">
+              <div className="flex items-center justify-between border-b border-[#1e2536] bg-[#0f1117]/40 px-6 py-3 text-xs text-slate-500">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={allVisibleSelected}
+                    onChange={toggleSelectAllVisible}
+                    className="h-4 w-4 rounded border-[#2a3448] bg-[#0f1117] text-blue-500"
+                  />
+                  Select visible
+                </label>
+                <span>{items.length} item{items.length === 1 ? '' : 's'} on this page</span>
+              </div>
               {items.map((item) => {
                 const unread = !item.readAt;
                 const href = getNotificationHref(item.metadata);
@@ -177,7 +306,9 @@ export default function NotificationsPage() {
                 const contextSummary = getNotificationContextSummary(item);
                 const secondaryMessage = getNotificationSecondaryMessage(item);
                 const linkedEmail = hasLinkedEmailDelivery(item.metadata);
-                const severity = getNotificationSeverity(item.metadata);
+                const severity = resolveNotificationSeverity(item);
+                const pinned = Boolean(item.pinnedAt);
+
                 return (
                   <div
                     key={item.id}
@@ -188,6 +319,14 @@ export default function NotificationsPage() {
                   >
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
+                        <label className="mr-1 inline-flex items-center">
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.includes(item.id)}
+                            onChange={() => toggleSelected(item.id)}
+                            className="h-4 w-4 rounded border-[#2a3448] bg-[#0f1117] text-blue-500"
+                          />
+                        </label>
                         <h3 className="text-sm font-semibold text-slate-100">{item.title}</h3>
                         <Badge
                           variant="outline"
@@ -195,6 +334,11 @@ export default function NotificationsPage() {
                         >
                           {formatNotificationEventLabel(item.event)}
                         </Badge>
+                        {pinned && (
+                          <Badge className="rounded-full bg-violet-500/15 px-2 text-[11px] text-violet-200 hover:bg-violet-500/15">
+                            Pinned
+                          </Badge>
+                        )}
                         {unread && (
                           <Badge className="rounded-full bg-blue-500/15 px-2 text-[11px] text-blue-200 hover:bg-blue-500/15">
                             New
@@ -243,7 +387,53 @@ export default function NotificationsPage() {
                       <p className="mt-3 text-xs text-slate-500">{formatFullDate(item.createdAt)}</p>
                     </div>
 
-                    <div className="flex shrink-0 items-center gap-3">
+                    <div className="flex shrink-0 flex-wrap items-center gap-3">
+                      {pinned ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => unpinNotification.mutate(item.id)}
+                          className="text-slate-300 hover:bg-white/5 hover:text-white"
+                        >
+                          <PinOff className="mr-2 h-4 w-4" />
+                          Unpin
+                        </Button>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => pinNotification.mutate(item.id)}
+                          className="text-slate-300 hover:bg-white/5 hover:text-white"
+                        >
+                          <Pin className="mr-2 h-4 w-4" />
+                          Pin
+                        </Button>
+                      )}
+                      {view === 'archived' ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => unarchiveNotification.mutate(item.id)}
+                          className="text-slate-300 hover:bg-white/5 hover:text-white"
+                        >
+                          <ArchiveRestore className="mr-2 h-4 w-4" />
+                          Restore
+                        </Button>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => archiveNotification.mutate(item.id)}
+                          className="text-slate-300 hover:bg-white/5 hover:text-white"
+                        >
+                          <ArchiveX className="mr-2 h-4 w-4" />
+                          Archive
+                        </Button>
+                      )}
                       {href && (
                         <Button
                           type="button"

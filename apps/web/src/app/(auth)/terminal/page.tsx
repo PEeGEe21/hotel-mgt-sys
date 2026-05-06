@@ -37,6 +37,7 @@ import {
   useDeliverOrder,
   usePayOrderById,
   usePosOrders,
+  type ApiOrder,
 } from '@/hooks/pos/usePosOrders';
 import {
   useAuthenticateTerminal,
@@ -48,6 +49,7 @@ import openToast from '@/components/ToastComponent';
 import { useDebounce } from '@/hooks/useDebounce';
 import { usePosProductCategories } from '@/hooks/pos/usePosProductCategories';
 import { useAppStore } from '@/store/app.store';
+import { usePosOrdersRealtime } from '@/hooks/pos/usePosOrdersRealtime';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmtMoney(n: number) {
@@ -81,7 +83,13 @@ function TerminalSetupScreen() {
     if (code.trim().length < 4) return setError('Enter the setup code from terminal settings.');
     setError('');
     try {
-      await authenticate.mutateAsync(code.trim().toUpperCase());
+      await authenticate.mutateAsync({
+        setupCode: code.trim().toUpperCase(),
+        deviceName:
+          typeof window !== 'undefined'
+            ? `${window.navigator.platform} · ${window.navigator.userAgent}`
+            : undefined,
+      });
     } catch (e: any) {
       setError(e?.response?.data?.message ?? 'Invalid setup code. Try again.');
     }
@@ -153,14 +161,20 @@ function TerminalSetupScreen() {
 // ─────────────────────────────────────────────────────────────────────────────
 // SCREEN 2 — Staff PIN Login
 // ─────────────────────────────────────────────────────────────────────────────
-function StaffPinScreen({ terminalId }: { terminalId: string }) {
+function StaffPinScreen({
+  terminalId,
+  terminalDeviceKey,
+}: {
+  terminalId: string;
+  terminalDeviceKey: string;
+}) {
   const [employeeCode, setEmployeeCode] = useState('');
   const [pin, setPin] = useState('');
   const [step, setStep] = useState<'code' | 'pin'>('code');
   const [error, setError] = useState('');
-  const pinLogin = useStaffPinLogin(terminalId);
+  const pinLogin = useStaffPinLogin(terminalId, terminalDeviceKey);
   const { resetTerminal } = usePosStore();
-  const { data: status } = useTerminalStatus(terminalId);
+  const { data: status } = useTerminalStatus(terminalId, terminalDeviceKey);
 
   // PIN pad digits
   const digits = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '⌫'];
@@ -203,7 +217,7 @@ function StaffPinScreen({ terminalId }: { terminalId: string }) {
               <User size={20} className="text-slate-400" />
             </div>
             <h2 className="text-base font-bold text-white">Staff Login</h2>
-            <p className="text-xs text-slate-500 mt-0.5">Enter your employee code and PIN</p>
+            <p className="text-xs text-slate-500 mt-0.5">Enter your employee code and 4-6 digit PIN</p>
           </div>
 
           {/* Employee code */}
@@ -492,6 +506,7 @@ function PaymentModal({
 function OrderScreen({ terminalId, staff }: { terminalId: string; staff: TerminalStaff }) {
   const router = useRouter();
   const { hotel } = useAppStore();
+  usePosOrdersRealtime({ enabled: true });
 
   // ── Store ──────────────────────────────────────────────────────────────────
   const {
@@ -507,7 +522,8 @@ function OrderScreen({ terminalId, staff }: { terminalId: string; staff: Termina
   } = usePersistedCart();
 
   const { discount, setDiscount } = usePosStore();
-  const staffLogout = useStaffLogout(terminalId);
+  const { terminalDeviceKey } = usePosStore();
+  const staffLogout = useStaffLogout(terminalId, terminalDeviceKey ?? '');
 
   // ── UI state ───────────────────────────────────────────────────────────────
   const [search, setSearch] = useState('');
@@ -515,6 +531,7 @@ function OrderScreen({ terminalId, staff }: { terminalId: string; staff: Termina
   const [view, setView] = useState<'order' | 'receipts'>('order');
   const [showPay, setShowPay] = useState(false);
   const [showRoom, setShowRoom] = useState(false);
+  const [continueOrder, setContinueOrder] = useState<ApiOrder | null>(null);
 
   // ── Data ───────────────────────────────────────────────────────────────────
   const debouncedSearch = useDebounce(search, 300);
@@ -523,7 +540,7 @@ function OrderScreen({ terminalId, staff }: { terminalId: string; staff: Termina
     search: debouncedSearch || undefined,
     category: category || undefined,
     isAvailable: 'true',
-    limit: 200,
+    limit: 100,
   });
   const { data: categories = [], isLoading: categoriesLoading } = usePosProductCategories();
 
@@ -533,12 +550,16 @@ function OrderScreen({ terminalId, staff }: { terminalId: string; staff: Termina
     posTerminalId: terminalId,
     status: 'DELIVERED',
     limit: 30,
+  }, {
+    refetchInterval: false,
   });
 
   const products = productsData?.products ?? [];
   // const categories = productsData?.categories ?? [];
   const tableSections = tablesData?.sections ?? [];
   const recentOrders = ordersData?.orders ?? [];
+  const unpaidOrders = recentOrders.filter((order) => !order.isPaid && !order.reservationId);
+  const settledOrders = recentOrders.filter((order) => order.isPaid || order.reservationId);
 
   // ── Mutations ──────────────────────────────────────────────────────────────
   const createOrder = useCreateOrder();
@@ -582,17 +603,24 @@ function OrderScreen({ terminalId, staff }: { terminalId: string; staff: Termina
         type: isWalkup ? 'TAKEAWAY' : 'DINE_IN',
         tableNo: activeTable,
         posTerminalId: terminalId,
+        terminalDeviceKey: terminalDeviceKey ?? undefined,
         staffId: staff.id,
         discount: discountAmt,
         items: items.map((i) => ({ productId: i.productId, quantity: i.qty })),
       });
 
-      await deliverOrder.mutateAsync(order.id);
+      await deliverOrder.mutateAsync({
+        orderId: order.id,
+        posTerminalId: terminalId,
+        terminalDeviceKey: terminalDeviceKey ?? undefined,
+      });
 
       const result = await payOrderById.mutateAsync({
         orderId: order.id,
         method,
         amountTendered,
+        posTerminalId: terminalId,
+        terminalDeviceKey: terminalDeviceKey ?? undefined,
       });
 
       clearCart();
@@ -616,6 +644,7 @@ function OrderScreen({ terminalId, staff }: { terminalId: string; staff: Termina
         type: 'ROOM_SERVICE',
         roomNo,
         posTerminalId: terminalId,
+        terminalDeviceKey: terminalDeviceKey ?? undefined,
         staffId: staff.id,
         discount: discountAmt,
         items: items.map((i) => ({ productId: i.productId, quantity: i.qty })),
@@ -626,6 +655,32 @@ function OrderScreen({ terminalId, staff }: { terminalId: string; staff: Termina
       openToast('success', `Charged to Room ${roomNo}`);
     } catch (e: any) {
       openToast('error', e?.response?.data?.message ?? 'Room charge failed');
+    }
+  };
+
+  const handleContinuePayment = async (
+    order: ApiOrder,
+    method: PayMethod,
+    amountTendered?: number,
+  ) => {
+    try {
+      const result = await payOrderById.mutateAsync({
+        orderId: order.id,
+        method,
+        amountTendered,
+        posTerminalId: terminalId,
+        terminalDeviceKey: terminalDeviceKey ?? undefined,
+      });
+
+      setContinueOrder(null);
+
+      if (method === 'CASH' && result.change > 0) {
+        openToast('success', `Payment completed. Change: ${fmtMoney(result.change)}`);
+      } else {
+        openToast('success', `Payment completed for ${order.orderNo}`);
+      }
+    } catch (e: any) {
+      openToast('error', e?.response?.data?.message ?? 'Could not continue payment');
     }
   };
 
@@ -987,54 +1042,123 @@ function OrderScreen({ terminalId, staff }: { terminalId: string; staff: Termina
               <p className="text-slate-500 text-sm">No orders yet</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {recentOrders.map((order) => (
-                <div
-                  key={order.id}
-                  className="bg-[#161b27] border border-[#1e2536] rounded-xl p-4 space-y-3"
-                >
+            <>
+              {unpaidOrders.length > 0 && (
+                <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Table2 size={13} className="text-slate-500" />
-                      <span className="text-sm font-bold text-white">
-                        {order.tableNo ?? order.roomNo ?? '—'}
-                      </span>
-                      <span className="text-xs font-mono text-slate-600">{order.orderNo}</span>
-                    </div>
-                    <span
-                      className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${
-                        order.isPaid
-                          ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
-                          : order.reservationId
-                            ? 'bg-violet-500/10 border-violet-500/20 text-violet-400'
-                            : 'bg-amber-500/10 border-amber-500/20 text-amber-400'
-                      }`}
-                    >
-                      {order.isPaid ? order.paymentMethod : order.reservationId ? 'Room' : 'Unpaid'}
-                    </span>
+                    <p className="text-sm font-semibold text-amber-300">Pending payments</p>
+                    <p className="text-xs text-slate-500">
+                      {unpaidOrders.length} order{unpaidOrders.length === 1 ? '' : 's'} to continue
+                    </p>
                   </div>
-                  <div className="space-y-1">
-                    {order.items.slice(0, 3).map((item) => (
-                      <div key={item.id} className="flex justify-between text-xs">
-                        <span className="text-slate-400">
-                          {item.name} ×{item.quantity}
-                        </span>
-                        <span className="text-slate-500">{fmtMoney(Number(item.total))}</span>
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                    {unpaidOrders.map((order) => (
+                      <div
+                        key={order.id}
+                        className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 space-y-3"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Table2 size={13} className="text-amber-300" />
+                            <span className="text-sm font-bold text-white">
+                              {order.tableNo ?? order.roomNo ?? '—'}
+                            </span>
+                            <span className="text-xs font-mono text-amber-200/70">
+                              {order.orderNo}
+                            </span>
+                          </div>
+                          <span className="text-[10px] px-2 py-0.5 rounded-full border font-medium bg-amber-500/10 border-amber-500/20 text-amber-300">
+                            Awaiting payment
+                          </span>
+                        </div>
+                        <div className="space-y-1">
+                          {order.items.slice(0, 3).map((item) => (
+                            <div key={item.id} className="flex justify-between text-xs">
+                              <span className="text-slate-300">
+                                {item.name} ×{item.quantity}
+                              </span>
+                              <span className="text-slate-400">{fmtMoney(Number(item.total))}</span>
+                            </div>
+                          ))}
+                          {order.items.length > 3 && (
+                            <p className="text-xs text-slate-500">+{order.items.length - 3} more</p>
+                          )}
+                        </div>
+                        <div className="border-t border-amber-500/10 pt-2 flex justify-between">
+                          <span className="text-xs text-slate-400">Total</span>
+                          <span className="text-sm font-bold text-white">
+                            {fmtMoney(Number(order.total))}
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => setContinueOrder(order)}
+                          disabled={isBusy}
+                          className="w-full flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white py-2.5 text-sm font-semibold transition-colors"
+                        >
+                          <CreditCard size={14} />
+                          Continue payment
+                        </button>
                       </div>
                     ))}
-                    {order.items.length > 3 && (
-                      <p className="text-xs text-slate-700">+{order.items.length - 3} more</p>
-                    )}
-                  </div>
-                  <div className="border-t border-[#1e2536] pt-2 flex justify-between">
-                    <span className="text-xs text-slate-500">Total</span>
-                    <span className="text-sm font-bold text-white">
-                      {fmtMoney(Number(order.total))}
-                    </span>
                   </div>
                 </div>
-              ))}
-            </div>
+              )}
+
+              {settledOrders.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold text-white">Completed and room orders</p>
+                    <p className="text-xs text-slate-500">{settledOrders.length} orders</p>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                    {settledOrders.map((order) => (
+                      <div
+                        key={order.id}
+                        className="bg-[#161b27] border border-[#1e2536] rounded-xl p-4 space-y-3"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Table2 size={13} className="text-slate-500" />
+                            <span className="text-sm font-bold text-white">
+                              {order.tableNo ?? order.roomNo ?? '—'}
+                            </span>
+                            <span className="text-xs font-mono text-slate-600">{order.orderNo}</span>
+                          </div>
+                          <span
+                            className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${
+                              order.isPaid
+                                ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                                : 'bg-violet-500/10 border-violet-500/20 text-violet-400'
+                            }`}
+                          >
+                            {order.isPaid ? order.paymentMethod : 'Room'}
+                          </span>
+                        </div>
+                        <div className="space-y-1">
+                          {order.items.slice(0, 3).map((item) => (
+                            <div key={item.id} className="flex justify-between text-xs">
+                              <span className="text-slate-400">
+                                {item.name} ×{item.quantity}
+                              </span>
+                              <span className="text-slate-500">{fmtMoney(Number(item.total))}</span>
+                            </div>
+                          ))}
+                          {order.items.length > 3 && (
+                            <p className="text-xs text-slate-700">+{order.items.length - 3} more</p>
+                          )}
+                        </div>
+                        <div className="border-t border-[#1e2536] pt-2 flex justify-between">
+                          <span className="text-xs text-slate-500">Total</span>
+                          <span className="text-sm font-bold text-white">
+                            {fmtMoney(Number(order.total))}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
@@ -1044,6 +1168,16 @@ function OrderScreen({ terminalId, staff }: { terminalId: string; staff: Termina
           total={total}
           onClose={() => setShowPay(false)}
           onConfirm={handlePay}
+          isLoading={isBusy}
+        />
+      )}
+      {continueOrder && (
+        <PaymentModal
+          total={Number(continueOrder.total)}
+          onClose={() => setContinueOrder(null)}
+          onConfirm={(method, amountTendered) =>
+            handleContinuePayment(continueOrder, method, amountTendered)
+          }
           isLoading={isBusy}
         />
       )}
@@ -1062,7 +1196,35 @@ function OrderScreen({ terminalId, staff }: { terminalId: string; staff: Termina
 // Root — Gate between the three screens
 // ─────────────────────────────────────────────────────────────────────────────
 export default function PosTerminalPage() {
-  const { terminalId, staffSession, hydrated } = usePosStore();
+  const { terminalId, terminalDeviceKey, staffSession, hydrated, resetTerminal } = usePosStore();
+  const { data: terminalStatus, error: terminalStatusError } = useTerminalStatus(
+    terminalId,
+    terminalDeviceKey,
+  );
+
+  useEffect(() => {
+    if (!hydrated || !terminalId) return;
+    if (!terminalDeviceKey) {
+      resetTerminal();
+      return;
+    }
+    if (terminalStatusError) {
+      resetTerminal();
+      openToast('error', 'This device is no longer registered for that terminal.');
+      return;
+    }
+    if (terminalStatus && !terminalStatus.isRegisteredOnThisDevice) {
+      resetTerminal();
+      openToast('error', 'This terminal is registered to a different device.');
+    }
+  }, [
+    hydrated,
+    resetTerminal,
+    terminalDeviceKey,
+    terminalId,
+    terminalStatus,
+    terminalStatusError,
+  ]);
 
   console.log(terminalId, staffSession, hydrated);
   // Don't render until sessionStorage has been read
@@ -1075,13 +1237,13 @@ export default function PosTerminalPage() {
   }
 
   // Screen 1 — device not registered
-  if (!terminalId) {
+  if (!terminalId || !terminalDeviceKey) {
     return <TerminalSetupScreen />;
   }
 
   // Screen 2 — device registered, no staff logged in
   if (!staffSession) {
-    return <StaffPinScreen terminalId={terminalId} />;
+    return <StaffPinScreen terminalId={terminalId} terminalDeviceKey={terminalDeviceKey} />;
   }
 
   // Screen 3 — fully operational

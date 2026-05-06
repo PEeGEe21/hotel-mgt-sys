@@ -26,6 +26,7 @@ const roleLabels: Record<Role, string> = {
   RECEPTIONIST: 'Receptionist',
   HOUSEKEEPING: 'Housekeeping',
   CASHIER: 'Cashier',
+  COOK: 'Cook',
   BARTENDER: 'Bartender',
   STAFF: 'Staff',
 };

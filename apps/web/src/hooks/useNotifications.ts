@@ -32,6 +32,8 @@ export type AppNotification = {
   message: string;
   metadata: NotificationMetadata;
   readAt: string | null;
+  pinnedAt?: string | null;
+  archivedAt?: string | null;
   createdAt: string;
 };
 
@@ -46,17 +48,21 @@ export function useNotifications(options: {
   page?: number;
   unreadOnly?: boolean;
   event?: AppNotificationEvent;
+  includeArchived?: boolean;
+  pinnedOnly?: boolean;
 } = {}) {
   const limit = options.limit ?? 12;
   const page = options.page ?? 1;
   const unreadOnly = options.unreadOnly ?? false;
   const event = options.event;
+  const includeArchived = options.includeArchived ?? false;
+  const pinnedOnly = options.pinnedOnly ?? false;
 
   return useQuery<NotificationsInboxResponse>({
-    queryKey: ['notifications', 'inbox', { limit, page, unreadOnly, event }],
+    queryKey: ['notifications', 'inbox', { limit, page, unreadOnly, event, includeArchived, pinnedOnly }],
     queryFn: async () => {
       const { data } = await api.get('/notifications', {
-        params: { limit, page, unreadOnly, event },
+        params: { limit, page, unreadOnly, event, includeArchived, pinnedOnly },
       });
       return data;
     },
@@ -86,6 +92,73 @@ export function useMarkAllNotificationsAsRead() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['notifications', 'inbox'] });
       openToast('success', 'Notifications marked as read');
+    },
+    onError: (e: any) =>
+      openToast('error', e?.response?.data?.message ?? 'Failed to update notifications'),
+  });
+}
+
+function invalidateNotifications(qc: ReturnType<typeof useQueryClient>) {
+  qc.invalidateQueries({ queryKey: ['notifications', 'inbox'] });
+}
+
+export function useArchiveNotification() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.patch(`/notifications/${id}/archive`).then((r) => r.data),
+    onSuccess: () => invalidateNotifications(qc),
+    onError: (e: any) =>
+      openToast('error', e?.response?.data?.message ?? 'Failed to archive notification'),
+  });
+}
+
+export function useUnarchiveNotification() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.patch(`/notifications/${id}/unarchive`).then((r) => r.data),
+    onSuccess: () => invalidateNotifications(qc),
+    onError: (e: any) =>
+      openToast('error', e?.response?.data?.message ?? 'Failed to restore notification'),
+  });
+}
+
+export function usePinNotification() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.patch(`/notifications/${id}/pin`).then((r) => r.data),
+    onSuccess: () => invalidateNotifications(qc),
+    onError: (e: any) =>
+      openToast('error', e?.response?.data?.message ?? 'Failed to pin notification'),
+  });
+}
+
+export function useUnpinNotification() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.patch(`/notifications/${id}/unpin`).then((r) => r.data),
+    onSuccess: () => invalidateNotifications(qc),
+    onError: (e: any) =>
+      openToast('error', e?.response?.data?.message ?? 'Failed to unpin notification'),
+  });
+}
+
+export function useBulkNotificationAction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: {
+      action: 'read' | 'archive' | 'unarchive' | 'pin' | 'unpin';
+      ids: string[];
+    }) => api.patch('/notifications/bulk', payload).then((r) => r.data),
+    onSuccess: (_, payload) => {
+      invalidateNotifications(qc);
+      const labelMap = {
+        read: 'Notifications marked as read',
+        archive: 'Notifications archived',
+        unarchive: 'Notifications restored',
+        pin: 'Notifications pinned',
+        unpin: 'Notifications unpinned',
+      } as const;
+      openToast('success', labelMap[payload.action]);
     },
     onError: (e: any) =>
       openToast('error', e?.response?.data?.message ?? 'Failed to update notifications'),

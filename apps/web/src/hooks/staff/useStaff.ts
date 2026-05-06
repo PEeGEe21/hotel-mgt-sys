@@ -11,6 +11,7 @@ export type StaffRole =
   | 'RECEPTIONIST'
   | 'HOUSEKEEPING'
   | 'CASHIER'
+  | 'COOK'
   | 'BARTENDER'
   | 'STAFF';
 

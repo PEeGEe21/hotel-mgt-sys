@@ -34,19 +34,25 @@ export class PosTerminalsController {
   @Post()
   @Permissions('manage:pos')
   create(@Request() req: any, @Body() dto: CreatePosTerminalDto) {
-    return this.posTerminalsService.create(req.user.hotelId, dto);
+    return this.posTerminalsService.create(req.user.hotelId, req.user.sub, dto);
   }
 
   @Patch(':id')
   @Permissions('manage:pos')
   update(@Request() req: any, @Param('id') id: string, @Body() dto: UpdatePosTerminalDto) {
-    return this.posTerminalsService.update(req.user.hotelId, id, dto);
+    return this.posTerminalsService.update(req.user.hotelId, req.user.sub, id, dto);
   }
 
   @Delete(':id')
   @Permissions('manage:pos')
   remove(@Request() req: any, @Param('id') id: string) {
-    return this.posTerminalsService.remove(req.user.hotelId, id);
+    return this.posTerminalsService.remove(req.user.hotelId, req.user.sub, id);
+  }
+
+  @Post(':id/deregister-device')
+  @Permissions('manage:pos')
+  deregisterDevice(@Request() req: any, @Param('id') id: string) {
+    return this.posTerminalsService.deregisterDevice(req.user.hotelId, req.user.sub, id);
   }
 
   @Post('group')

@@ -14,6 +14,15 @@ type SendEmailOptions = {
   metadata?: Record<string, unknown>;
 };
 
+type EmailAttemptResult = {
+  ok: boolean;
+  statusCode?: number;
+  rawBody?: string;
+  parsedBody?: any;
+  error?: unknown;
+  attempt: number;
+};
+
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
@@ -33,6 +42,68 @@ export class EmailService {
     }
   }
 
+  private isRetryableStatus(statusCode: number) {
+    return statusCode === 408 || statusCode === 409 || statusCode === 425 || statusCode === 429 || statusCode >= 500;
+  }
+
+  private async sendViaResend(args: {
+    apiKey: string;
+    from: string;
+    to: string;
+    subject: string;
+    html: string;
+    text?: string;
+  }): Promise<EmailAttemptResult> {
+    try {
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${args.apiKey}`,
+          'Content-Type': 'application/json',
+          'User-Agent': 'hotel-os/1.0',
+        },
+        body: JSON.stringify({
+          from: args.from,
+          to: [args.to],
+          subject: args.subject,
+          html: args.html,
+          text: args.text,
+        }),
+      });
+
+      const rawBody = await response.text();
+      const parsedBody = this.parseJsonSafely(rawBody);
+      return {
+        ok: response.ok,
+        statusCode: response.status,
+        rawBody,
+        parsedBody,
+        attempt: 1,
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        error,
+        attempt: 1,
+      };
+    }
+  }
+
+  private buildRetryMetadata(options: SendEmailOptions, extra?: Record<string, unknown>) {
+    return {
+      ...(options.metadata ?? {}),
+      retryPayload: {
+        to: options.to,
+        subject: options.subject,
+        html: options.html,
+        text: options.text ?? null,
+        hotelId: options.hotelId ?? null,
+        event: options.event ?? null,
+      },
+      ...extra,
+    };
+  }
+
   private async getBranding(hotelId?: string | null) {
     if (!hotelId) {
       return {
@@ -42,6 +113,7 @@ export class EmailService {
         hotelWebsite: null,
         hotelAddress: null,
         hotelLogo: null,
+        emailAutoRetryEnabled: false,
       };
     }
 
@@ -57,6 +129,7 @@ export class EmailService {
         city: true,
         state: true,
         country: true,
+        emailAutoRetryEnabled: true,
       },
     });
 
@@ -68,6 +141,7 @@ export class EmailService {
         hotelWebsite: null,
         hotelAddress: null,
         hotelLogo: null,
+        emailAutoRetryEnabled: false,
       };
     }
 
@@ -80,6 +154,7 @@ export class EmailService {
       hotelWebsite: hotel.website,
       hotelAddress: addressParts.join(', '),
       hotelLogo: hotel.logo,
+      emailAutoRetryEnabled: hotel.emailAutoRetryEnabled,
     };
   }
 
@@ -129,6 +204,8 @@ export class EmailService {
       html: options.html,
     });
 
+    const autoRetryEnabled = Boolean(branding.emailAutoRetryEnabled);
+
     if (!apiKey) {
       this.logger.warn(`RESEND_API_KEY is not configured; skipped email to ${options.to}.`);
       await this.logDelivery({
@@ -140,33 +217,33 @@ export class EmailService {
         event: options.event,
         status: 'SKIPPED',
         errorMessage: 'RESEND_API_KEY is not configured',
-        metadata: options.metadata ?? null,
+        metadata: this.buildRetryMetadata(options, {
+          retryState: {
+            attempts: 0,
+            retryable: false,
+            mode: 'configuration_missing',
+            autoRetryEnabled,
+          },
+        }),
       });
       return { sent: false, provider: 'resend' };
     }
 
-    try {
-      const response = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-          'User-Agent': 'hotel-os/1.0',
-        },
-        body: JSON.stringify({
-          from,
-          to: [options.to],
-          subject: options.subject,
-          html: brandedHtml,
-          text: options.text,
-        }),
+    const maxAttempts = autoRetryEnabled ? 3 : 1;
+    let lastAttempt: EmailAttemptResult | null = null;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      const result = await this.sendViaResend({
+        apiKey,
+        from,
+        to: options.to,
+        subject: options.subject,
+        html: brandedHtml,
+        text: options.text,
       });
+      lastAttempt = { ...result, attempt };
 
-      const rawBody = await response.text();
-      const parsedBody = this.parseJsonSafely(rawBody);
-
-      if (!response.ok) {
-        this.logger.error(`Resend email failed with ${response.status}: ${rawBody}`);
+      if (result.ok) {
         await this.logDelivery({
           hotelId: options.hotelId ?? null,
           recipient: options.to,
@@ -174,30 +251,38 @@ export class EmailService {
           fromEmail: from,
           provider: 'resend',
           event: options.event,
-          status: 'FAILED',
-          errorMessage: `HTTP ${response.status}: ${rawBody}`,
-          providerMessageId: parsedBody?.id ?? null,
-          metadata: options.metadata ?? null,
+          status: 'SENT',
+          providerMessageId: result.parsedBody?.id ?? null,
+          metadata: this.buildRetryMetadata(options, {
+            retryState: {
+              attempts: attempt,
+              retryable: false,
+              recoveredAfterRetry: attempt > 1,
+              autoRetryEnabled,
+            },
+          }),
+          sentAt: new Date(),
         });
-        return { sent: false, provider: 'resend', statusCode: response.status };
+        return {
+          sent: true,
+          provider: 'resend',
+          providerMessageId: result.parsedBody?.id ?? null,
+        };
       }
 
-      await this.logDelivery({
-        hotelId: options.hotelId ?? null,
-        recipient: options.to,
-        subject: options.subject,
-        fromEmail: from,
-        provider: 'resend',
-        event: options.event,
-        status: 'SENT',
-        providerMessageId: parsedBody?.id ?? null,
-        metadata: options.metadata ?? null,
-        sentAt: new Date(),
-      });
+      const retryable =
+        result.error !== undefined ||
+        (typeof result.statusCode === 'number' && this.isRetryableStatus(result.statusCode));
 
-      return { sent: true, provider: 'resend', providerMessageId: parsedBody?.id ?? null };
-    } catch (error) {
-      this.logger.error(`Resend email request failed: ${String(error)}`);
+      if (!retryable || attempt >= maxAttempts) {
+        break;
+      }
+    }
+
+    if (lastAttempt?.statusCode) {
+      this.logger.error(
+        `Resend email failed with ${lastAttempt.statusCode}: ${lastAttempt.rawBody ?? ''}`,
+      );
       await this.logDelivery({
         hotelId: options.hotelId ?? null,
         recipient: options.to,
@@ -206,10 +291,39 @@ export class EmailService {
         provider: 'resend',
         event: options.event,
         status: 'FAILED',
-        errorMessage: String(error),
-        metadata: options.metadata ?? null,
+        errorMessage: `HTTP ${lastAttempt.statusCode}: ${lastAttempt.rawBody ?? ''}`,
+        providerMessageId: lastAttempt.parsedBody?.id ?? null,
+        metadata: this.buildRetryMetadata(options, {
+          retryState: {
+            attempts: lastAttempt.attempt,
+            retryable: this.isRetryableStatus(lastAttempt.statusCode),
+            exhausted: true,
+            autoRetryEnabled,
+          },
+        }),
       });
-      return { sent: false, provider: 'resend' };
+      return { sent: false, provider: 'resend', statusCode: lastAttempt.statusCode };
     }
+
+    this.logger.error(`Resend email request failed: ${String(lastAttempt?.error ?? 'unknown error')}`);
+    await this.logDelivery({
+      hotelId: options.hotelId ?? null,
+      recipient: options.to,
+      subject: options.subject,
+      fromEmail: from,
+      provider: 'resend',
+      event: options.event,
+      status: 'FAILED',
+      errorMessage: String(lastAttempt?.error ?? 'unknown error'),
+      metadata: this.buildRetryMetadata(options, {
+        retryState: {
+          attempts: lastAttempt?.attempt ?? 1,
+          retryable: true,
+          exhausted: true,
+          autoRetryEnabled,
+        },
+      }),
+    });
+    return { sent: false, provider: 'resend' };
   }
 }

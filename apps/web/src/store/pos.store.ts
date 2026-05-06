@@ -24,6 +24,13 @@ export type TerminalStaff = {
   position: string;
 };
 
+function todaySessionKey() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
+    now.getDate(),
+  ).padStart(2, '0')}`;
+}
+
 interface PosState {
   // ── Cart — per table ────────────────────────────────────────────────────────
   carts: Record<string, CartItem[]>;
@@ -31,6 +38,7 @@ interface PosState {
 
   // ── Terminal session ────────────────────────────────────────────────────────
   terminalId: string | null; // which physical terminal this device is bound to
+  terminalDeviceKey: string | null; // server-issued device binding key
   staffSession: TerminalStaff | null; // who is currently operating
 
   // ── Order config ────────────────────────────────────────────────────────────
@@ -41,6 +49,7 @@ interface PosState {
 
   // ── Hydration ────────────────────────────────────────────────────────────────
   hydrated: boolean;
+  sessionDate: string;
 
   // ── Cart actions ────────────────────────────────────────────────────────────
   setActiveTable: (table: string) => void;
@@ -53,6 +62,7 @@ interface PosState {
   // ── Session actions ─────────────────────────────────────────────────────────
   setDiscount: (pct: number) => void;
   setTerminalId: (id: string | null) => void;
+  setTerminalDeviceKey: (key: string | null) => void;
   setStaffSession: (staff: TerminalStaff) => void;
   clearStaffSession: () => void;
   resetTerminal: () => void; // full reset — unbinds device
@@ -63,6 +73,7 @@ interface PosState {
 
   // ── Internal ────────────────────────────────────────────────────────────────
   setHydrated: (v: boolean) => void;
+  setSessionDate: (value: string) => void;
 }
 
 // ─── Store ────────────────────────────────────────────────────────────────────
@@ -72,10 +83,12 @@ export const usePosStore = create<PosState>()(
       carts: {},
       activeTable: '',
       terminalId: null,
+      terminalDeviceKey: null,
       staffSession: null,
       discount: 0,
       groupOrder: [],
       hydrated: false,
+      sessionDate: todaySessionKey(),
 
       // ── Cart ────────────────────────────────────────────────────────────────
       setActiveTable: (table) => set({ activeTable: table, discount: 0 }),
@@ -121,6 +134,7 @@ export const usePosStore = create<PosState>()(
       // ── Session ─────────────────────────────────────────────────────────────
       setDiscount: (pct) => set({ discount: pct }),
       setTerminalId: (id) => set({ terminalId: id }),
+      setTerminalDeviceKey: (key) => set({ terminalDeviceKey: key }),
       setStaffSession: (staff) => set({ staffSession: staff }),
       clearStaffSession: () => set({ staffSession: null }),
 
@@ -128,10 +142,12 @@ export const usePosStore = create<PosState>()(
       resetTerminal: () =>
         set({
           terminalId: null,
+          terminalDeviceKey: null,
           staffSession: null,
           carts: {},
           activeTable: '',
           discount: 0,
+          sessionDate: todaySessionKey(),
         }),
 
       // ── Group order ──────────────────────────────────────────────────────────
@@ -151,22 +167,30 @@ export const usePosStore = create<PosState>()(
 
       // ── Internal ─────────────────────────────────────────────────────────────
       setHydrated: (v) => set({ hydrated: v }),
+      setSessionDate: (value) => set({ sessionDate: value }),
     }),
     {
       name: 'hotel-pos',
       storage: createJSONStorage(() =>
-        typeof window !== 'undefined' ? sessionStorage : localStorage,
+        typeof window !== 'undefined' ? localStorage : localStorage,
       ),
       partialize: (state) => ({
         carts: state.carts,
         activeTable: state.activeTable,
         terminalId: state.terminalId,
+        terminalDeviceKey: state.terminalDeviceKey,
         staffSession: state.staffSession,
         discount: state.discount,
         groupOrder: state.groupOrder,
+        sessionDate: state.sessionDate,
         // hydrated intentionally excluded — always starts false
       }),
       onRehydrateStorage: () => (state) => {
+        const today = todaySessionKey();
+        if (state && state.sessionDate !== today) {
+          state.clearAll();
+          state.setSessionDate(today);
+        }
         state?.setHydrated(true);
       },
     },

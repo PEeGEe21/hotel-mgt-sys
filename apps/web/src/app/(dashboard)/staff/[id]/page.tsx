@@ -63,6 +63,7 @@ const ROLE_COLOR: Record<string, string> = {
   RECEPTIONIST: 'text-sky-400',
   HOUSEKEEPING: 'text-emerald-400',
   CASHIER: 'text-amber-400',
+  COOK: 'text-rose-400',
   BARTENDER: 'text-orange-400',
   STAFF: 'text-slate-400',
 };
@@ -90,6 +91,7 @@ function EditStaffModal({ staff, onClose }: { staff: ApiStaff; onClose: () => vo
     'RECEPTIONIST',
     'HOUSEKEEPING',
     'CASHIER',
+    'COOK',
     'BARTENDER',
     'STAFF',
   ];

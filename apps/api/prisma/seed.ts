@@ -140,6 +140,9 @@ const DASHBOARD_ROLE_SIZE_OVERRIDES: Partial<
   [Role.CASHIER]: {
     outstanding_folios: 'compact',
   },
+  [Role.COOK]: {
+    active_pos_orders: 'full',
+  },
   [Role.BARTENDER]: {
     active_pos_orders: 'full',
   },
@@ -204,6 +207,7 @@ const DASHBOARD_ROLE_LAYOUTS: Record<Role, string[]> = {
     'active_pos_orders',
     'my_attendance_today',
   ],
+  [Role.COOK]: ['active_pos_orders', 'low_stock_alerts', 'my_attendance_today'],
   [Role.BARTENDER]: [
     'pos_sales_today',
     'active_pos_orders',
@@ -830,6 +834,10 @@ async function main() {
       'manage:hr',
       'manage:permissions',
       'manage:pos',
+      'view:pos-kitchen-board',
+      'update:pos-kitchen-board',
+      'view:pos-bar-board',
+      'update:pos-bar-board',
     ],
     [Role.ADMIN]: [
       'view:dashboard',
@@ -879,6 +887,10 @@ async function main() {
       'manage:hr',
       'manage:permissions',
       'manage:pos',
+      'view:pos-kitchen-board',
+      'update:pos-kitchen-board',
+      'view:pos-bar-board',
+      'update:pos-bar-board',
     ],
     [Role.MANAGER]: [
       'view:dashboard',
@@ -918,6 +930,10 @@ async function main() {
       'view:hr',
       'manage:hr',
       'manage:pos',
+      'view:pos-kitchen-board',
+      'update:pos-kitchen-board',
+      'view:pos-bar-board',
+      'update:pos-bar-board',
     ],
     [Role.RECEPTIONIST]: [
       'view:dashboard',
@@ -950,7 +966,23 @@ async function main() {
       'view:finance',
       'clock:self',
     ],
-    [Role.BARTENDER]: ['view:dashboard', 'view:pos', 'create:pos', 'view:inventory', 'clock:self'],
+    [Role.COOK]: [
+      'view:dashboard',
+      'view:pos',
+      'view:inventory',
+      'clock:self',
+      'view:pos-kitchen-board',
+      'update:pos-kitchen-board',
+    ],
+    [Role.BARTENDER]: [
+      'view:dashboard',
+      'view:pos',
+      'create:pos',
+      'view:inventory',
+      'clock:self',
+      'view:pos-bar-board',
+      'update:pos-bar-board',
+    ],
     [Role.STAFF]: ['view:dashboard', 'clock:self'],
   };
 

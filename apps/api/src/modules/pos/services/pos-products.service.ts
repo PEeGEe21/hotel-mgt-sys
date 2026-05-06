@@ -14,6 +14,9 @@ import { CreatePosProductCategoryDto } from '../dtos/products/create-pos-product
 
 // ─── Service ──────────────────────────────────────────────────────────────────
 const PRODUCT_INCLUDE = {
+  category: {
+    select: { id: true, name: true, color: true, icon: true },
+  },
   ingredients: {
     include: {
       inventoryItem: {
@@ -103,13 +106,6 @@ export class PosProductsService {
   async create(hotelId: string, dto: CreateProductDto) {
     await this.assertCategoryBelongsToHotel(hotelId, dto.categoryId);
 
-    // Validate ingredients requirement for non-service products
-    if (dto.type !== 'SERVICE' && (!dto.ingredients || dto.ingredients.length === 0)) {
-      throw new BadRequestException(
-        'Physical and bundle products must have at least one ingredient linked to inventory.',
-      );
-    }
-
     // Check SKU uniqueness
     if (dto.sku) {
       const existing = await this.prisma.posProduct.findUnique({
@@ -137,6 +133,7 @@ export class PosProductsService {
           isAvailable: dto.isAvailable ?? true,
           stock: dto.stock,
           type: dto.type,
+          prepStation: dto.prepStation,
         },
       });
 
@@ -168,14 +165,20 @@ export class PosProductsService {
     if (dto.categoryId) {
       await this.assertCategoryBelongsToHotel(hotelId, dto.categoryId);
     }
-
-    // Validate ingredients if updating a physical/bundle product
-    if (dto.ingredients !== undefined) {
-      if (newType !== 'SERVICE' && dto.ingredients.length === 0) {
-        throw new BadRequestException(
-          'Physical and bundle products must have at least one ingredient.',
-        );
+    if (dto.sku !== undefined) {
+      const normalizedSku = dto.sku?.trim();
+      if (normalizedSku) {
+        const existing = await this.prisma.posProduct.findUnique({
+          where: { hotelId_sku: { hotelId, sku: normalizedSku } },
+        });
+        if (existing && existing.id !== id) {
+          throw new ConflictException(`SKU "${normalizedSku}" already exists.`);
+        }
       }
+    }
+
+    // Validate ingredients if provided
+    if (dto.ingredients !== undefined) {
       if (dto.ingredients.length > 0) {
         await this.validateIngredients(hotelId, dto.ingredients);
       }
@@ -188,11 +191,14 @@ export class PosProductsService {
           name: dto.name,
           price: dto.price,
           categoryId: dto.categoryId,
+          sku: dto.sku?.trim() || null,
           description: dto.description,
           unit: dto.unit,
+          image: dto.image,
           isAvailable: dto.isAvailable,
           stock: dto.stock,
           type: dto.type,
+          prepStation: dto.prepStation,
         },
       });
 

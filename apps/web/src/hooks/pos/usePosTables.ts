@@ -43,6 +43,10 @@ export type CreateTableInput = {
   sortOrder?: number;
 };
 
+type TableOpenOrdersQueryOptions = {
+  refetchInterval?: number | false;
+};
+
 // ─── Hooks ────────────────────────────────────────────────────────────────────
 export function usePosTables(includeInactive = false) {
   return useQuery<TablesResponse>({
@@ -67,7 +71,10 @@ export function usePosTable(id: string) {
   });
 }
 
-export function useTableOpenOrders(id: string | null) {
+export function useTableOpenOrders(
+  id: string | null,
+  options: TableOpenOrdersQueryOptions = {},
+) {
   return useQuery<TableOpenOrders>({
     queryKey: ['pos-tables', id, 'orders'],
     queryFn:  async () => {
@@ -75,7 +82,7 @@ export function useTableOpenOrders(id: string | null) {
       return data;
     },
     enabled:        !!id,
-    refetchInterval: 30_000, // refresh open orders every 30s on terminal
+    refetchInterval: options.refetchInterval ?? 30_000, // refresh open orders every 30s on terminal
   });
 }
 

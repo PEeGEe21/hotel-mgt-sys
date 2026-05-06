@@ -20,6 +20,21 @@ export function getNotificationSeverity(metadata: NotificationMetadata) {
   return null;
 }
 
+function getFallbackSeverity(event: AppNotificationEvent) {
+  const map: Partial<Record<AppNotificationEvent, 'info' | 'success' | 'warning' | 'critical'>> = {
+    paymentOverdue: 'warning',
+    checkOutDue: 'warning',
+    housekeepingAlert: 'warning',
+    noShowFollowUp: 'warning',
+    maintenanceEscalation: 'critical',
+    systemAlerts: 'critical',
+    paymentReceived: 'success',
+    checkIn: 'success',
+    lowInventory: 'warning',
+  };
+  return map[event] ?? null;
+}
+
 export const NOTIFICATION_EVENT_LABELS: Record<AppNotificationEvent, string> = {
   newReservation: 'Reservation',
   checkIn: 'Check-in',
@@ -102,6 +117,10 @@ export function getNotificationContextSummary(item: AppNotification) {
       return [asString(metadata, 'sku'), asString(metadata, 'unit')]
         .filter(Boolean)
         .join(' · ');
+    case 'systemAlerts':
+      return [asString(metadata, 'summary'), asString(metadata, 'alertDate')]
+        .filter(Boolean)
+        .join(' · ');
     default:
       return null;
   }
@@ -134,6 +153,8 @@ export function getNotificationSecondaryMessage(item: AppNotification) {
         ? `Stock ${quantity} / minimum ${minStock}`
         : null;
     }
+    case 'systemAlerts':
+      return asString(metadata, 'arrivalDate') ?? asString(metadata, 'alertDate');
     default:
       return null;
   }
@@ -141,4 +162,8 @@ export function getNotificationSecondaryMessage(item: AppNotification) {
 
 export function hasLinkedEmailDelivery(metadata: NotificationMetadata) {
   return metadata?.hasEmailDelivery === true;
+}
+
+export function resolveNotificationSeverity(item: AppNotification) {
+  return getNotificationSeverity(item.metadata) ?? getFallbackSeverity(item.event);
 }

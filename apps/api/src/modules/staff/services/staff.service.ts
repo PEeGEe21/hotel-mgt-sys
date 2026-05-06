@@ -16,8 +16,36 @@ import { RealtimePresenceService } from '../../realtime/realtime-presence.servic
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function genEmployeeCode(index: number): string {
-  return `EMP-${String(index).padStart(3, '0')}`;
+function employeeCodePrefix(hotelName?: string | null): string {
+  const cleaned = (hotelName ?? '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9 ]+/g, ' ')
+    .trim();
+
+  const words = cleaned.split(/\s+/).filter(Boolean);
+  if (words.length >= 2) {
+    return words
+      .slice(0, 3)
+      .map((word) => word[0])
+      .join('')
+      .padEnd(3, 'X')
+      .slice(0, 3);
+  }
+
+  const compact = cleaned.replace(/\s+/g, '');
+  if (compact.length >= 3) return compact.slice(0, 3);
+  if (compact.length > 0) return compact.padEnd(3, 'X');
+  return 'EMP';
+}
+
+function genEmployeeCode(hotelName?: string | null): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const prefix = employeeCodePrefix(hotelName);
+  let suffix = '';
+  for (let i = 0; i < 4; i += 1) {
+    suffix += chars[randomInt(0, chars.length)];
+  }
+  return `${prefix}-${suffix}`;
 }
 
 const STAFF_INCLUDE = {
@@ -33,6 +61,15 @@ const STAFF_INCLUDE = {
   },
 } as const;
 
+function genUsername(firstName: string, lastName: string, email: string) {
+  const base = `${firstName}.${lastName}`
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '.')
+    .replace(/^\.+|\.+$/g, '');
+
+  return base || email.split('@')[0].toLowerCase();
+}
+
 @Injectable()
 export class StaffService {
   constructor(
@@ -40,8 +77,13 @@ export class StaffService {
     private readonly presenceService: RealtimePresenceService,
   ) {}
 
-  async setPin(hotelId: string, staffId: string, dto: SetStaffPinDto) {
-    const staff = await this.prisma.staff.findFirst({
+  private async setPinWithClient(
+    prisma: PrismaService | any,
+    hotelId: string,
+    staffId: string,
+    dto: SetStaffPinDto,
+  ) {
+    const staff = await prisma.staff.findFirst({
       where: { id: staffId, hotelId },
       select: { id: true },
     });
@@ -57,7 +99,7 @@ export class StaffService {
     }
 
     const pinHash = await bcrypt.hash(pin, 10);
-    await this.prisma.staff.update({
+    await prisma.staff.update({
       where: { id: staffId },
       data: {
         pinHash,
@@ -67,6 +109,10 @@ export class StaffService {
     });
 
     return { staffId, pin };
+  }
+
+  async setPin(hotelId: string, staffId: string, dto: SetStaffPinDto) {
+    return this.setPinWithClient(this.prisma, hotelId, staffId, dto);
   }
 
   async findAll(hotelId: string, filters: StaffFilterDto) {
@@ -233,23 +279,29 @@ export class StaffService {
     if (existingUser) throw new ConflictException('A user with this email already exists.');
 
     // Auto-generate employee code
-    const count = await this.prisma.staff.count({ where: { hotelId } });
+    const hotel = await this.prisma.hotel.findUnique({
+      where: { id: hotelId },
+      select: { name: true },
+    });
     let employeeCode: string;
     let attempts = 0;
     do {
-      employeeCode = genEmployeeCode(count + 1 + attempts);
+      employeeCode = genEmployeeCode(hotel?.name);
       const exists = await this.prisma.staff.findUnique({ where: { employeeCode } });
       if (!exists) break;
     } while (++attempts < 20);
 
+    if (attempts >= 20) {
+      throw new ConflictException('Could not generate a unique employee code. Please try again.');
+    }
+
     const passwordHash = await bcrypt.hash('password', 10);
 
     return this.prisma.$transaction(async (tx) => {
-      // generate user name using firstname and lastname and email
-
       const user = await tx.user.create({
         data: {
           email: dto.email,
+          username: genUsername(dto.firstName, dto.lastName, dto.email),
           passwordHash,
           role: dto.role,
           isActive: true,
@@ -275,7 +327,7 @@ export class StaffService {
         },
       });
 
-      await this.setPin(hotelId, staff.id, { generate: true });
+      await this.setPinWithClient(tx, hotelId, staff.id, { generate: true });
 
       return { staff, employeeCode: employeeCode!, defaultPassword: 'password' };
     });

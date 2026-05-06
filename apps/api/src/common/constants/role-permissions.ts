@@ -51,7 +51,11 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, string[]> = {
     'view:hr',
     'manage:hr',
     'manage:permissions',
-    'manage:pos'
+    'manage:pos',
+    'view:pos-kitchen-board',
+    'update:pos-kitchen-board',
+    'view:pos-bar-board',
+    'update:pos-bar-board',
   ],
 
   ADMIN: [
@@ -103,7 +107,11 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, string[]> = {
     'view:hr',
     'manage:hr',
     'manage:permissions',
-    'manage:pos'
+    'manage:pos',
+    'view:pos-kitchen-board',
+    'update:pos-kitchen-board',
+    'view:pos-bar-board',
+    'update:pos-bar-board',
   ],
 
   MANAGER: [
@@ -146,6 +154,10 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, string[]> = {
     'manage:hr',
     'manage:pos',
     'view:mailing',
+    'view:pos-kitchen-board',
+    'update:pos-kitchen-board',
+    'view:pos-bar-board',
+    'update:pos-bar-board',
   ],
 
   RECEPTIONIST: [
@@ -186,12 +198,16 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, string[]> = {
     'clock:self',
   ],
 
+  COOK: ['view:dashboard', 'view:pos', 'view:inventory', 'clock:self', 'view:pos-kitchen-board', 'update:pos-kitchen-board'],
+
   BARTENDER: [
     'view:dashboard',
     'view:pos',
     'create:pos',
     'view:inventory',
     'clock:self',
+    'view:pos-bar-board',
+    'update:pos-bar-board',
   ],
 
   STAFF: ['view:dashboard', 'clock:self'],

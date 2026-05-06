@@ -1,4 +1,4 @@
-import { Controller, Get, Query, Request, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Post, Query, Request, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard, Permissions, PermissionsGuard } from '../auth/guards';
 import { MailingService } from './mailing.service';
@@ -31,5 +31,12 @@ export class MailingController {
       search,
       correlationId,
     });
+  }
+
+  @Post('emails/:id/retry')
+  @Permissions('view:mailing')
+  @ApiOperation({ summary: 'Retry a failed or skipped outbound email' })
+  retry(@Request() req: any, @Param('id') id: string) {
+    return this.mailingService.retry(req.user.hotelId ?? null, id);
   }
 }

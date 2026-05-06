@@ -18,6 +18,9 @@ export type TerminalInfo = {
 export type TerminalStatus = TerminalInfo & {
   currentStaff: TerminalStaff | null;
   hasSetupCode: boolean;
+  isRegisteredOnThisDevice: boolean;
+  registeredDeviceName: string | null;
+  registeredAt: string | null;
 };
 
 export type SetupCodeResult = {
@@ -32,24 +35,29 @@ export type SetupCodeResult = {
 
 // Called once per device to bind it to a terminal record
 export function useAuthenticateTerminal() {
-  const { setTerminalId } = usePosStore();
+  const { setTerminalId, setTerminalDeviceKey } = usePosStore();
   return useMutation({
-    mutationFn: (setupCode: string) =>
-      api.post('/pos/terminals/authenticate', { setupCode }).then((r) => r.data),
-    onSuccess: (data: { terminal: TerminalInfo }) => {
+    mutationFn: ({ setupCode, deviceName }: { setupCode: string; deviceName?: string }) =>
+      api.post('/pos/terminals/authenticate', { setupCode, deviceName }).then((r) => r.data),
+    onSuccess: (data: { terminal: TerminalInfo; deviceKey: string }) => {
       setTerminalId(data.terminal.id);
+      setTerminalDeviceKey(data.deviceKey);
     },
     onError: (e: any) => openToast('error', e?.response?.data?.message ?? 'Invalid setup code'),
   });
 }
 
 // Staff PIN login on a registered terminal
-export function useStaffPinLogin(terminalId: string) {
+export function useStaffPinLogin(terminalId: string, terminalDeviceKey: string) {
   const { setStaffSession } = usePosStore();
   return useMutation({
     mutationFn: ({ employeeCode, pin }: { employeeCode: string; pin: string }) =>
       api
-        .post(`/pos/terminals/${terminalId}/staff-login`, { employeeCode, pin })
+        .post(
+          `/pos/terminals/${terminalId}/staff-login`,
+          { employeeCode, pin },
+          { headers: { 'x-pos-device-key': terminalDeviceKey } },
+        )
         .then((r) => r.data),
     onSuccess: (data: { staff: TerminalStaff }) => {
       setStaffSession(data.staff);
@@ -59,10 +67,17 @@ export function useStaffPinLogin(terminalId: string) {
 }
 
 // Staff logout
-export function useStaffLogout(terminalId: string) {
+export function useStaffLogout(terminalId: string, terminalDeviceKey: string) {
   const { clearStaffSession } = usePosStore();
   return useMutation({
-    mutationFn: () => api.post(`/pos/terminals/${terminalId}/staff-logout`).then((r) => r.data),
+    mutationFn: () =>
+      api
+        .post(
+          `/pos/terminals/${terminalId}/staff-logout`,
+          {},
+          { headers: { 'x-pos-device-key': terminalDeviceKey } },
+        )
+        .then((r) => r.data),
     onSuccess: () => {
       clearStaffSession();
     },
@@ -71,11 +86,16 @@ export function useStaffLogout(terminalId: string) {
 }
 
 // Terminal status — who's logged in, whether setup code exists
-export function useTerminalStatus(terminalId: string | null) {
+export function useTerminalStatus(terminalId: string | null, terminalDeviceKey: string | null) {
   return useQuery<TerminalStatus>({
-    queryKey: ['terminal-status', terminalId],
-    queryFn: () => api.get(`/pos/terminals/${terminalId}/status`).then((r) => r.data),
-    enabled: !!terminalId,
+    queryKey: ['terminal-status', terminalId, terminalDeviceKey],
+    queryFn: () =>
+      api
+        .get(`/pos/terminals/${terminalId}/status`, {
+          headers: terminalDeviceKey ? { 'x-pos-device-key': terminalDeviceKey } : undefined,
+        })
+        .then((r) => r.data),
+    enabled: !!terminalId && !!terminalDeviceKey,
     refetchInterval: 60_000,
   });
 }

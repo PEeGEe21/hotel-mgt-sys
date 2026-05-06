@@ -18,4 +18,6 @@ export class PayOrderDto {
   @ApiPropertyOptional() @IsNumber() @Min(0) @IsOptional() amountTendered?: number; // for cash change calculation
   @ApiPropertyOptional() @IsString() @IsOptional() reference?: string;
   @ApiPropertyOptional() @IsString() @IsOptional() note?: string;
+  @ApiPropertyOptional() @IsString() @IsOptional() posTerminalId?: string;
+  @ApiPropertyOptional() @IsString() @IsOptional() terminalDeviceKey?: string;
 }

@@ -8,7 +8,7 @@ import { isInAppNotificationSoundEnabled } from '@/lib/notification-sound-settin
 import { useAuthStore } from '@/store/auth.store';
 
 type NotificationSyncPayload = {
-  reason?: 'created' | 'read' | 'read-all';
+  reason?: 'created' | 'read' | 'read-all' | 'updated';
 };
 
 export function useNotificationsRealtime() {

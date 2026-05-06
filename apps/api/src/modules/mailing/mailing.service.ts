@@ -1,9 +1,13 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { EmailService } from '../../common/email/email.service';
 
 @Injectable()
 export class MailingService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private emailService: EmailService,
+  ) {}
 
   async list(params: {
     hotelId: string | null;
@@ -90,6 +94,56 @@ export class MailingService {
         from: total === 0 ? 0 : skip + 1,
         to: Math.min(skip + limit, total),
       },
+    };
+  }
+
+  async retry(hotelId: string | null, id: string) {
+    const row = await this.prisma.emailDeliveryLog.findFirst({
+      where: { id, hotelId },
+    });
+
+    if (!row) {
+      throw new NotFoundException('Email delivery log not found.');
+    }
+
+    if (!['FAILED', 'SKIPPED'].includes(row.status)) {
+      throw new BadRequestException('Only failed or skipped deliveries can be retried.');
+    }
+
+    const metadata =
+      row.metadata && typeof row.metadata === 'object' && !Array.isArray(row.metadata)
+        ? (row.metadata as Record<string, any>)
+        : {};
+    const retryPayload =
+      metadata.retryPayload &&
+      typeof metadata.retryPayload === 'object' &&
+      !Array.isArray(metadata.retryPayload)
+        ? metadata.retryPayload
+        : null;
+
+    if (!retryPayload?.html || !retryPayload?.subject || !retryPayload?.to) {
+      throw new BadRequestException('This delivery log does not have a stored retry payload.');
+    }
+
+    const result = await this.emailService.sendEmail({
+      to: String(retryPayload.to),
+      subject: String(retryPayload.subject),
+      html: String(retryPayload.html),
+      text: retryPayload.text ? String(retryPayload.text) : undefined,
+      hotelId: (retryPayload.hotelId as string | null | undefined) ?? hotelId,
+      event: (retryPayload.event as string | undefined) ?? row.event ?? undefined,
+      metadata: {
+        ...metadata,
+        retriedFromLogId: row.id,
+        retryTriggeredAt: new Date().toISOString(),
+        retryTrigger: 'manual_mail_log_retry',
+      },
+    });
+
+    return {
+      retried: true,
+      sent: result.sent,
+      sourceLogId: row.id,
     };
   }
 }

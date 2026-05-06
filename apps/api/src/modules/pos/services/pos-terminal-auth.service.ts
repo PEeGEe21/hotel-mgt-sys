@@ -6,7 +6,9 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import * as bcrypt from 'bcryptjs';
-import { randomInt } from 'crypto';
+import { createHash, randomBytes, randomInt } from 'crypto';
+import { AttendanceType } from '@prisma/client';
+import dayjs from 'dayjs';
 import { TerminalSetupDto } from '../dtos/terminals/terminal-setup.dto';
 import { StaffPinLoginDto } from '../dtos/terminals/staff-pin-login.dto';
 
@@ -16,8 +18,64 @@ import { StaffPinLoginDto } from '../dtos/terminals/staff-pin-login.dto';
 export class PosTerminalAuthService {
   constructor(private prisma: PrismaService) {}
 
+  private hashDeviceKey(deviceKey: string) {
+    return createHash('sha256').update(deviceKey).digest('hex');
+  }
+
+  private resolveDeviceName(dto?: { deviceName?: string }, userAgent?: string | null) {
+    const trimmed = dto?.deviceName?.trim();
+    if (trimmed) return trimmed.slice(0, 120);
+    if (!userAgent) return 'Registered device';
+    return userAgent.slice(0, 120);
+  }
+
+  private async assertStaffClockedInToday(staffId: string) {
+    const today = dayjs().startOf('day').toDate();
+    const lastRecord = await this.prisma.attendance.findFirst({
+      where: { staffId, timestamp: { gte: today } },
+      orderBy: { timestamp: 'desc' },
+      select: { type: true, timestamp: true },
+    });
+
+    if (!lastRecord || lastRecord.type !== AttendanceType.CLOCK_IN) {
+      throw new UnauthorizedException(
+        'Clock in for today before using this terminal.',
+      );
+    }
+  }
+
+  async assertTerminalDeviceAccess(terminalId: string, deviceKey?: string | null) {
+    const terminal = await this.prisma.posTerminal.findFirst({
+      where: { id: terminalId },
+      select: {
+        id: true,
+        hotelId: true,
+        name: true,
+        status: true,
+        currentStaffId: true,
+        registeredDeviceKeyHash: true,
+      },
+    });
+
+    if (!terminal) throw new NotFoundException('Terminal not found.');
+    if (!terminal.registeredDeviceKeyHash) {
+      throw new UnauthorizedException('This terminal is not currently registered to a device.');
+    }
+    if (!deviceKey || this.hashDeviceKey(deviceKey) !== terminal.registeredDeviceKeyHash) {
+      throw new UnauthorizedException('This device is not authorized for the selected terminal.');
+    }
+    if (terminal.status === 'Offline') {
+      throw new BadRequestException('Terminal is offline.');
+    }
+
+    return terminal;
+  }
+
   // ── Validate terminal setup code → binds device to terminal ───────────────
-  async authenticateTerminal(dto: TerminalSetupDto) {
+  async authenticateTerminal(
+    dto: TerminalSetupDto,
+    meta?: { ipAddress?: string | null; userAgent?: string | null },
+  ) {
     const code = dto.setupCode.trim().toUpperCase();
 
     const terminal = await this.prisma.posTerminal.findFirst({
@@ -38,10 +96,25 @@ export class PosTerminalAuthService {
       );
     }
 
+    if (terminal.setupCodeExpiresAt && terminal.setupCodeExpiresAt < new Date()) {
+      throw new UnauthorizedException('This setup code has expired. Generate a new one.');
+    }
+
+    const deviceKey = randomBytes(32).toString('hex');
+    const registeredAt = new Date();
+
     // Clear the setup code after use — one-time use
     await this.prisma.posTerminal.update({
       where: { id: terminal.id },
-      data: { setupCode: null },
+      data: {
+        setupCode: null,
+        setupCodeExpiresAt: null,
+        registeredDeviceKeyHash: this.hashDeviceKey(deviceKey),
+        registeredDeviceName: this.resolveDeviceName(dto, meta?.userAgent ?? null),
+        registeredIpAddress: meta?.ipAddress ?? null,
+        registeredAt,
+        lastActivityAt: registeredAt,
+      },
     });
 
     return {
@@ -53,18 +126,15 @@ export class PosTerminalAuthService {
         status: terminal.status,
         terminalGroup: terminal.terminalGroup,
       },
+      deviceKey,
+      registeredAt: registeredAt.toISOString(),
       message: `Terminal "${terminal.name}" authenticated successfully.`,
     };
   }
 
   // ── Staff PIN login on terminal ────────────────────────────────────────────
-  async staffPinLogin(terminalId: string, dto: StaffPinLoginDto) {
-    const terminal = await this.prisma.posTerminal.findFirst({
-      where: { id: terminalId },
-      select: { id: true, hotelId: true, status: true, name: true },
-    });
-    if (!terminal) throw new NotFoundException('Terminal not found.');
-    if (terminal.status === 'Offline') throw new BadRequestException('Terminal is offline.');
+  async staffPinLogin(terminalId: string, dto: StaffPinLoginDto, deviceKey?: string | null) {
+    const terminal = await this.assertTerminalDeviceAccess(terminalId, deviceKey);
 
     const staff = await this.prisma.staff.findFirst({
       where: {
@@ -92,6 +162,8 @@ export class PosTerminalAuthService {
       throw new UnauthorizedException('Incorrect PIN.');
     }
 
+    await this.assertStaffClockedInToday(staff.id);
+
     // Reset failed attempts, update last used
     await this.prisma.staff.update({
       where: { id: staff.id },
@@ -104,7 +176,7 @@ export class PosTerminalAuthService {
     // Record who is operating this terminal
     await this.prisma.posTerminal.update({
       where: { id: terminalId },
-      data: { currentStaffId: staff.id },
+      data: { currentStaffId: staff.id, lastActivityAt: new Date() },
     });
 
     return {
@@ -121,16 +193,12 @@ export class PosTerminalAuthService {
   }
 
   // ── Staff logout from terminal ─────────────────────────────────────────────
-  async staffLogout(terminalId: string) {
-    const terminal = await this.prisma.posTerminal.findFirst({
-      where: { id: terminalId },
-      select: { id: true, currentStaffId: true },
-    });
-    if (!terminal) throw new NotFoundException('Terminal not found.');
+  async staffLogout(terminalId: string, deviceKey?: string | null) {
+    await this.assertTerminalDeviceAccess(terminalId, deviceKey);
 
     await this.prisma.posTerminal.update({
       where: { id: terminalId },
-      data: { currentStaffId: null },
+      data: { currentStaffId: null, lastActivityAt: new Date() },
     });
 
     return { message: 'Staff logged out from terminal.' };
@@ -145,25 +213,33 @@ export class PosTerminalAuthService {
 
     // Generate a short memorable code: e.g. BAR01, T3X9
     const code = this.genCode();
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
     await this.prisma.posTerminal.update({
       where: { id: terminalId },
-      data: { setupCode: code },
+      data: {
+        setupCode: code,
+        setupCodeExpiresAt: expiresAt,
+        currentStaffId: null,
+        registeredDeviceKeyHash: null,
+        registeredDeviceName: null,
+        registeredIpAddress: null,
+        registeredAt: null,
+      },
     });
 
     return {
       terminalId,
       terminalName: terminal.name,
       setupCode: code,
-      expiresIn: '24 hours', // informational only — no expiry enforced yet, Option B will add proper expiry
+      expiresAt: expiresAt.toISOString(),
+      expiresIn: '24 hours',
       note: 'Share this code with the staff setting up the device. It can only be used once.',
-      // TODO (Option B): generate a QR code URL here
-      // qrCodeUrl: `/api/pos/terminals/${terminalId}/setup-qr?code=${code}`,
     };
   }
 
   // ── Get current terminal status (who's logged in etc) ─────────────────────
-  async getTerminalStatus(terminalId: string) {
+  async getTerminalStatus(terminalId: string, deviceKey?: string | null) {
     const terminal = await this.prisma.posTerminal.findFirst({
       where: { id: terminalId },
       include: {
@@ -182,6 +258,13 @@ export class PosTerminalAuthService {
       terminalGroup: terminal.terminalGroup,
       currentStaff: terminal.currentStaff ?? null,
       hasSetupCode: !!terminal.setupCode,
+      isRegisteredOnThisDevice: Boolean(
+        deviceKey &&
+          terminal.registeredDeviceKeyHash &&
+          this.hashDeviceKey(deviceKey) === terminal.registeredDeviceKeyHash,
+      ),
+      registeredDeviceName: terminal.registeredDeviceName ?? null,
+      registeredAt: terminal.registeredAt?.toISOString() ?? null,
     };
   }
 

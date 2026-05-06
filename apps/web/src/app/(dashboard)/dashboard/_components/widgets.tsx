@@ -409,12 +409,34 @@ export function ActivePosOrdersWidget() {
                   <div>
                     <p className="text-sm font-medium text-slate-200">{item.label}</p>
                     <p className={`text-xs ${muted}`}>
-                      {item.itemCount} items · {formatMoney(item.total)}
+                      {item.orderNo} · {item.itemCount} items · {formatMoney(item.total)}
                     </p>
+                    {item.prepSummary?.totalRoutedItems ? (
+                      <p className="mt-1 text-[11px] text-slate-400">
+                        Prep {item.prepSummary.ready}/{item.prepSummary.totalRoutedItems} ready
+                        {item.prepSummary.queued ? ` · ${item.prepSummary.queued} queued` : ''}
+                        {item.prepSummary.inProgress ? ` · ${item.prepSummary.inProgress} cooking` : ''}
+                      </p>
+                    ) : (
+                      <p className="mt-1 text-[11px] text-slate-500">No routed prep items</p>
+                    )}
                   </div>
-                  <span className={`${statPill} ${statusPills[item.status]}`}>{item.status}</span>
+                  <div className="flex flex-col items-end gap-2">
+                    <span className={`${statPill} ${statusPills[item.status]}`}>{item.status}</span>
+                    {item.delayed ? (
+                      <span className={`${statPill} bg-rose-500/15 text-rose-400`}>Delayed</span>
+                    ) : null}
+                  </div>
                 </div>
               ))}
+              <div className="flex items-center gap-2 pt-1 text-[11px] text-slate-400">
+                <span className="rounded-full border border-[#1e2536] bg-[#111623] px-2 py-1">
+                  Kitchen queue: {data.stationSummary?.kitchenQueued ?? 0}
+                </span>
+                <span className="rounded-full border border-[#1e2536] bg-[#111623] px-2 py-1">
+                  Bar queue: {data.stationSummary?.barQueued ?? 0}
+                </span>
+              </div>
             </div>
           ) : (
             <WidgetEmptyState

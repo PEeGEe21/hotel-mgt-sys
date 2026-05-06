@@ -8,13 +8,14 @@ import {
   ChevronRight,
   Inbox,
   Mail,
+  RefreshCcw,
   Search,
   Sparkles,
   Link2,
 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Pagination from '@/components/ui/pagination';
-import { useMailing, type EmailDeliveryLog } from '@/hooks/useMailing';
+import { useMailing, useRetryMailDelivery, type EmailDeliveryLog } from '@/hooks/useMailing';
 import {
   Drawer,
   DrawerContent,
@@ -143,6 +144,7 @@ export default function MailingPage() {
   );
 
   const { data, isLoading } = useMailing(filters);
+  const retryDelivery = useRetryMailDelivery();
   const emails = data?.emails ?? [];
 
   const groupedEmails = useMemo(() => {
@@ -202,6 +204,10 @@ export default function MailingPage() {
   const prettyMetadata = selectedEmail?.metadata
     ? JSON.stringify(selectedEmail.metadata, null, 2)
     : null;
+  const canRetrySelectedEmail =
+    !!selectedEmail &&
+    ['FAILED', 'SKIPPED'].includes(selectedEmail.status) &&
+    !!selectedEmail.metadata?.retryPayload;
 
   return (
     <>
@@ -477,6 +483,22 @@ export default function MailingPage() {
                 <p className="mt-2 whitespace-pre-wrap break-words text-sm text-slate-200">
                   {selectedEmail.errorMessage ?? 'No provider error was recorded for this delivery.'}
                 </p>
+                <div className="mt-4">
+                  <button
+                    type="button"
+                    onClick={() => retryDelivery.mutate(selectedEmail.id)}
+                    disabled={!canRetrySelectedEmail || retryDelivery.isPending}
+                    className="inline-flex items-center rounded-lg border border-[#1e2536] bg-[#161b27] px-3 py-2 text-sm font-medium text-slate-200 transition-colors hover:bg-white/5 disabled:opacity-50"
+                  >
+                    <RefreshCcw size={14} className="mr-2" />
+                    {retryDelivery.isPending ? 'Retrying...' : 'Retry delivery'}
+                  </button>
+                  {!canRetrySelectedEmail && (
+                    <p className="mt-2 text-xs text-slate-500">
+                      Retry is available for failed or skipped deliveries that stored a resend payload.
+                    </p>
+                  )}
+                </div>
               </div>
 
               <div className="rounded-xl border border-[#1e2536] bg-[#0f1117]/30 p-4">

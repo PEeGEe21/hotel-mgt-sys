@@ -10,8 +10,13 @@ export type Role =
   | 'RECEPTIONIST'
   | 'HOUSEKEEPING'
   | 'CASHIER'
+  | 'COOK'
   | 'BARTENDER'
   | 'STAFF';
+
+export type PrepStation = 'NONE' | 'KITCHEN' | 'BAR';
+
+export type PrepStatus = 'QUEUED' | 'IN_PROGRESS' | 'READY' | 'FULFILLED' | 'CANCELLED';
 
 export type RoomStatus =
   | 'AVAILABLE'
