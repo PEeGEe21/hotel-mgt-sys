@@ -9,6 +9,8 @@ import { DEFAULT_ROLE_PERMISSIONS } from '../../../common/constants/role-permiss
 import { UpdateMeDto } from '../dtos/update-me.dto';
 import { EmailService } from '../../../common/email/email.service';
 import { RealtimePresenceService } from '../../realtime/realtime-presence.service';
+import { AuthSessionService } from './auth-session.service';
+import { RedisCacheService } from '../../../common/redis/redis-cache.service';
 
 type PasswordResetTokenRow = {
   id: string;
@@ -28,6 +30,8 @@ export class AuthService {
     private config: ConfigService,
     private email: EmailService,
     private realtimePresenceService: RealtimePresenceService,
+    private authSessionService: AuthSessionService,
+    private cache: RedisCacheService,
   ) {}
 
   // ─── Validate user credentials (called by LocalStrategy) ──────────────────
@@ -51,9 +55,18 @@ export class AuthService {
 
   // ─── Login — returns access + refresh tokens ───────────────────────────────
   async login(user: any, meta?: { ipAddress?: string | null; userAgent?: string | null }) {
+    const { sessionId } = await this.authSessionService.createSession(
+      {
+        userId: user.id,
+        hotelId: user.staff?.hotelId ?? null,
+      },
+      meta,
+    );
     const [accessToken, refreshToken] = await Promise.all([
-      this.generateAccessToken(user),
-      this.generateRefreshToken(user.id),
+      this.generateAccessToken(user, { sessionId }),
+      this.generateRefreshToken(user.id, {
+        sessionId,
+      }),
     ]);
 
     await this.prisma.user.update({
@@ -85,6 +98,7 @@ export class AuthService {
 
   // ─── Refresh — rotate refresh token, issue new access token ───────────────
   async refresh(token: string) {
+    const sessionId = await this.authSessionService.consumeRefreshToken(token);
     const stored = await this.prisma.refreshToken.findUnique({
       where: { token },
       include: { user: { include: { staff: true } } },
@@ -102,12 +116,29 @@ export class AuthService {
       throw new UnauthorizedException('Account is inactive.');
     }
 
+    const resolvedSessionId =
+      sessionId ??
+      (
+        await this.authSessionService.createSession({
+          userId: stored.user.id,
+          hotelId: stored.user.staff?.hotelId ?? null,
+          impersonatorId: stored.impersonatorId ?? null,
+          isImpersonation: stored.isImpersonation ?? false,
+        })
+      ).sessionId;
+
+    await this.authSessionService.validateSession(resolvedSessionId, stored.user.id);
+
     // Rotate — delete old, issue new
     await this.prisma.refreshToken.delete({ where: { token } });
 
     const [accessToken, refreshToken] = await Promise.all([
-      this.generateAccessToken(stored.user, stored.impersonatorId ?? null),
+      this.generateAccessToken(stored.user, {
+        sessionId: resolvedSessionId,
+        impersonatorId: stored.impersonatorId ?? null,
+      }),
       this.generateRefreshToken(stored.user.id, {
+        sessionId: resolvedSessionId,
         impersonatorId: stored.impersonatorId ?? null,
         isImpersonation: stored.isImpersonation ?? false,
       }),
@@ -119,6 +150,7 @@ export class AuthService {
   // ─── Logout — invalidate refresh token ────────────────────────────────────
   async logout(
     userId: string,
+    sessionId?: string | null,
     refreshToken?: string,
     meta?: { ipAddress?: string | null; userAgent?: string | null },
   ) {
@@ -131,6 +163,10 @@ export class AuthService {
       await this.prisma.refreshToken.deleteMany({
         where: { userId, token: refreshToken },
       });
+    }
+
+    if (sessionId) {
+      await this.authSessionService.revokeSession(sessionId, userId);
     }
 
     await this.realtimePresenceService.clearUserPresence(userId, user?.staff?.hotelId ?? null);
@@ -158,6 +194,7 @@ export class AuthService {
     });
 
     await this.prisma.refreshToken.deleteMany({ where: { userId } });
+    await this.authSessionService.revokeAllUserSessions(userId);
     await this.realtimePresenceService.clearUserPresence(userId, user?.staff?.hotelId ?? null);
     if (meta?.ipAddress || meta?.userAgent) {
       await this.logAudit({
@@ -191,6 +228,31 @@ export class AuthService {
       },
       hotel: this.sanitizeHotel(user.staff?.hotel),
     };
+  }
+
+  async listSessions(userId: string, currentSessionId?: string | null) {
+    const sessions = await this.authSessionService.listUserSessions(userId, currentSessionId);
+    return { sessions };
+  }
+
+  async revokeSession(userId: string, sessionId: string, currentSessionId?: string | null) {
+    if (sessionId === currentSessionId) {
+      throw new BadRequestException('You cannot revoke your current session from this action.');
+    }
+
+    const sessions = await this.authSessionService.listUserSessions(userId, currentSessionId);
+    const target = sessions.find((session) => session.id === sessionId);
+    if (!target) {
+      throw new UnauthorizedException('Session not found.');
+    }
+
+    await this.authSessionService.revokeSession(sessionId, userId);
+    return { message: 'Session revoked successfully.' };
+  }
+
+  async revokeOtherSessions(userId: string, currentSessionId?: string | null) {
+    const count = await this.authSessionService.revokeOtherUserSessions(userId, currentSessionId);
+    return { message: count > 0 ? 'Other sessions revoked successfully.' : 'No other sessions found.' };
   }
 
   // ─── Update current user profile ─────────────────────────────────────────
@@ -268,6 +330,7 @@ export class AuthService {
       this.prisma.refreshToken.deleteMany({ where: { userId } }),
       this.markPasswordResetTokensUsed(userId),
     ]);
+    await this.authSessionService.revokeAllUserSessions(userId);
 
     await this.logAudit({
       actorUserId: user.id,
@@ -362,6 +425,7 @@ export class AuthService {
       this.markOtherPasswordResetTokensUsed(resetToken.userId, resetToken.id),
       this.prisma.refreshToken.deleteMany({ where: { userId: resetToken.userId } }),
     ]);
+    await this.authSessionService.revokeAllUserSessions(resetToken.userId);
 
     await this.logAudit({
       actorUserId: resetToken.userId,
@@ -399,13 +463,17 @@ export class AuthService {
   }
 
   // ─── Helpers ───────────────────────────────────────────────────────────────
-  private generateAccessToken(user: any, impersonatorId?: string | null) {
+  private generateAccessToken(
+    user: any,
+    opts?: { sessionId?: string | null; impersonatorId?: string | null },
+  ) {
     const payload = {
       sub: user.id,
       email: user.email,
       role: user.role,
-      impersonatorId: impersonatorId ?? null,
-      isImpersonation: Boolean(impersonatorId),
+      sid: opts?.sessionId ?? null,
+      impersonatorId: opts?.impersonatorId ?? null,
+      isImpersonation: Boolean(opts?.impersonatorId),
     };
     return this.jwt.signAsync(payload, {
       secret: this.config.get('JWT_SECRET'),
@@ -415,7 +483,7 @@ export class AuthService {
 
   private async generateRefreshToken(
     userId: string,
-    opts?: { impersonatorId?: string | null; isImpersonation?: boolean },
+    opts?: { sessionId?: string | null; impersonatorId?: string | null; isImpersonation?: boolean },
   ) {
     const token = crypto.randomBytes(64).toString('hex');
     const expiresAt = new Date();
@@ -430,6 +498,10 @@ export class AuthService {
         isImpersonation: Boolean(opts?.isImpersonation),
       },
     });
+
+    if (opts?.sessionId) {
+      await this.authSessionService.rotateRefreshToken(opts.sessionId, token, expiresAt);
+    }
 
     return token;
   }
@@ -542,9 +614,23 @@ export class AuthService {
       throw new ForbiddenException('Cannot impersonate users from another hotel.');
     }
 
+    const { sessionId } = await this.authSessionService.createSession(
+      {
+        userId: target.id,
+        hotelId: target.staff?.hotelId ?? null,
+        impersonatorId: impersonator.id,
+        isImpersonation: true,
+      },
+      meta,
+    );
+
     const [accessToken, refreshToken] = await Promise.all([
-      this.generateAccessToken(target, impersonator.id),
+      this.generateAccessToken(target, {
+        sessionId,
+        impersonatorId: impersonator.id,
+      }),
       this.generateRefreshToken(target.id, {
+        sessionId,
         impersonatorId: impersonator.id,
         isImpersonation: true,
       }),
@@ -578,6 +664,7 @@ export class AuthService {
   async stopImpersonation(
     currentUserId: string,
     impersonatorId: string | null,
+    sessionId: string | null,
     refreshToken: string | null,
     meta?: { ipAddress?: string | null; userAgent?: string | null },
   ) {
@@ -591,6 +678,10 @@ export class AuthService {
       });
     }
 
+    if (sessionId) {
+      await this.authSessionService.revokeSession(sessionId, currentUserId);
+    }
+
     const impersonator = await this.prisma.user.findUnique({
       where: { id: impersonatorId },
       include: { staff: { include: { hotel: true } } },
@@ -599,9 +690,22 @@ export class AuthService {
       throw new UnauthorizedException('Impersonator not found or inactive.');
     }
 
+    const { sessionId: nextSessionId } = await this.authSessionService.createSession(
+      {
+        userId: impersonator.id,
+        hotelId: impersonator.staff?.hotelId ?? null,
+      },
+      meta,
+    );
+
     const [accessToken, newRefreshToken] = await Promise.all([
-      this.generateAccessToken(impersonator, null),
-      this.generateRefreshToken(impersonator.id),
+      this.generateAccessToken(impersonator, {
+        sessionId: nextSessionId,
+        impersonatorId: null,
+      }),
+      this.generateRefreshToken(impersonator.id, {
+        sessionId: nextSessionId,
+      }),
     ]);
 
     const rolePermissions = await this.getRolePermissions(
@@ -660,33 +764,37 @@ export class AuthService {
 
   // ─── Public hotel info (for login page branding — no auth required) ────────
   async getPublicHotelInfo(domain?: string) {
-    const hotel = domain
-      ? await this.prisma.hotel.findFirst({
-          where: {
-            OR: [
-              { domain },
-              { domain: domain.replace(/^www\./, '') }, // strip www
-            ],
-          },
-        })
-      : null;
+    const normalizedDomain = domain?.replace(/^www\./, '').trim().toLowerCase() || 'default';
 
-    // Fallback to first hotel if domain not matched (single-tenant / dev)
-    const resolved = hotel ?? (await this.prisma.hotel.findFirst());
-    if (!resolved) return null;
+    return this.cache.getOrSet(`auth:hotel-info:${normalizedDomain}`, 5 * 60, async () => {
+      const hotel = domain
+        ? await this.prisma.hotel.findFirst({
+            where: {
+              OR: [
+                { domain },
+                { domain: domain.replace(/^www\./, '') }, // strip www
+              ],
+            },
+          })
+        : null;
 
-    return {
-      name: resolved.name,
-      city: resolved.city,
-      country: resolved.country,
-      domain: resolved.domain,
-      logo: resolved.logo ?? null,
-      geofenceEnabled: resolved.geofenceEnabled ?? false,
-      geofenceRadiusMeters: resolved.geofenceRadiusMeters ?? 0,
-      attendancePinRequired: resolved.attendancePinRequired ?? false,
-      attendanceKioskEnabled: resolved.attendanceKioskEnabled ?? true,
-      attendancePersonalEnabled: resolved.attendancePersonalEnabled ?? true,
-    };
+      // Fallback to first hotel if domain not matched (single-tenant / dev)
+      const resolved = hotel ?? (await this.prisma.hotel.findFirst());
+      if (!resolved) return null;
+
+      return {
+        name: resolved.name,
+        city: resolved.city,
+        country: resolved.country,
+        domain: resolved.domain,
+        logo: resolved.logo ?? null,
+        geofenceEnabled: resolved.geofenceEnabled ?? false,
+        geofenceRadiusMeters: resolved.geofenceRadiusMeters ?? 0,
+        attendancePinRequired: resolved.attendancePinRequired ?? false,
+        attendanceKioskEnabled: resolved.attendanceKioskEnabled ?? true,
+        attendancePersonalEnabled: resolved.attendancePersonalEnabled ?? true,
+      };
+    });
   }
 
   private sanitizeUser(user: any) {

@@ -1,7 +1,11 @@
+import { RedisService } from '../redis/redis.service';
+
 type RateLimitOptions = {
   max: number;
   windowMs: number;
   skipPaths?: string[];
+  redisService: RedisService;
+  onError?: (error: unknown) => void;
 };
 
 type RateLimitRequest = {
@@ -21,11 +25,6 @@ type RateLimitResponse = {
   };
 };
 
-type RateLimitBucket = {
-  count: number;
-  resetAt: number;
-};
-
 function getClientKey(req: RateLimitRequest) {
   const forwardedFor = req.headers['x-forwarded-for'];
   const forwardedIp = Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor?.split(',')[0];
@@ -40,53 +39,59 @@ function shouldSkip(req: RateLimitRequest, skipPaths: string[]) {
 }
 
 export function createRateLimitMiddleware(options: RateLimitOptions) {
-  const buckets = new Map<string, RateLimitBucket>();
-  const cleanup = setInterval(() => {
-    const now = Date.now();
-
-    for (const [key, bucket] of buckets.entries()) {
-      if (bucket.resetAt <= now) {
-        buckets.delete(key);
-      }
-    }
-  }, Math.max(options.windowMs, 60_000));
-
-  cleanup.unref?.();
+  const script = `
+    local current = redis.call("INCR", KEYS[1])
+    if current == 1 then
+      redis.call("PEXPIRE", KEYS[1], ARGV[1])
+    end
+    local ttl = redis.call("PTTL", KEYS[1])
+    return {current, ttl}
+  `;
 
   return (req: RateLimitRequest, res: RateLimitResponse, next: () => void) => {
-    if (shouldSkip(req, options.skipPaths || [])) {
-      next();
-      return;
-    }
+    void (async () => {
+      if (shouldSkip(req, options.skipPaths || [])) {
+        next();
+        return;
+      }
 
-    const now = Date.now();
-    const key = getClientKey(req);
-    const existingBucket = buckets.get(key);
-    const bucket =
-      existingBucket && existingBucket.resetAt > now
-        ? existingBucket
-        : { count: 0, resetAt: now + options.windowMs };
+      try {
+        await options.redisService.ensureReady();
 
-    bucket.count += 1;
-    buckets.set(key, bucket);
+        const now = Date.now();
+        const key = `rate-limit:${getClientKey(req)}`;
+        const result = (await options.redisService.command.eval(
+          script,
+          1,
+          key,
+          String(options.windowMs),
+        )) as [number | string, number | string];
 
-    const remaining = Math.max(options.max - bucket.count, 0);
-    const resetSeconds = Math.ceil((bucket.resetAt - now) / 1000);
+        const count = Number(result[0] ?? 0);
+        const ttlMs = Math.max(Number(result[1] ?? options.windowMs), 0);
+        const resetAt = now + ttlMs;
+        const remaining = Math.max(options.max - count, 0);
+        const resetSeconds = Math.max(1, Math.ceil(ttlMs / 1000));
 
-    res.setHeader('X-RateLimit-Limit', String(options.max));
-    res.setHeader('X-RateLimit-Remaining', String(remaining));
-    res.setHeader('X-RateLimit-Reset', String(Math.ceil(bucket.resetAt / 1000)));
+        res.setHeader('X-RateLimit-Limit', String(options.max));
+        res.setHeader('X-RateLimit-Remaining', String(remaining));
+        res.setHeader('X-RateLimit-Reset', String(Math.ceil(resetAt / 1000)));
 
-    if (bucket.count > options.max) {
-      res.setHeader('Retry-After', String(resetSeconds));
-      res.status(429).json({
-        statusCode: 429,
-        message: 'Too many requests. Please try again later.',
-        retryAfter: resetSeconds,
-      });
-      return;
-    }
+        if (count > options.max) {
+          res.setHeader('Retry-After', String(resetSeconds));
+          res.status(429).json({
+            statusCode: 429,
+            message: 'Too many requests. Please try again later.',
+            retryAfter: resetSeconds,
+          });
+          return;
+        }
 
-    next();
+        next();
+      } catch (error) {
+        options.onError?.(error);
+        next();
+      }
+    })();
   };
 }

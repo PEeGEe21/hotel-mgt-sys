@@ -21,8 +21,17 @@ import {
   Check,
   X,
   Copy,
+  Loader2,
 } from 'lucide-react';
-import { useChangePassword, useMe, useResetAttendancePin, useUpdateMe } from '@/hooks/useMe';
+import {
+  useChangePassword,
+  useMe,
+  useResetAttendancePin,
+  useRevokeOtherSessions,
+  useRevokeSession,
+  useSessions,
+  useUpdateMe,
+} from '@/hooks/useMe';
 import { useAuthStore } from '@/store/auth.store';
 import openToast from '@/components/ToastComponent';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -50,33 +59,6 @@ import { validateImageFile } from '@/utils/image-file';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 type Tab = 'profile' | 'password' | 'notifications' | 'sessions' | 'permissions';
-
-const activeSessions = [
-  {
-    id: 's1',
-    device: 'Chrome on Windows 11',
-    location: 'Lagos, Nigeria',
-    ip: '102.89.45.12',
-    lastActive: '2026-03-12 08:02',
-    current: true,
-  },
-  {
-    id: 's2',
-    device: 'Safari on iPhone 15',
-    location: 'Lagos, Nigeria',
-    ip: '102.89.45.13',
-    lastActive: '2026-03-11 22:14',
-    current: false,
-  },
-  {
-    id: 's3',
-    device: 'Chrome on MacBook Pro',
-    location: 'Abuja, Nigeria',
-    ip: '197.210.54.88',
-    lastActive: '2026-03-10 14:30',
-    current: false,
-  },
-];
 
 const roleColors: Record<string, string> = {
   SUPER_ADMIN: 'text-red-400 bg-red-500/15 border-red-500/30',
@@ -140,6 +122,39 @@ const formatDateTime = (value?: string | Date | null) => {
     hour: '2-digit',
     minute: '2-digit',
   });
+};
+
+const describeUserAgent = (userAgent?: string | null) => {
+  if (!userAgent) return 'Unknown device';
+
+  const ua = userAgent.toLowerCase();
+  const browser = ua.includes('edg/')
+    ? 'Edge'
+    : ua.includes('opr/') || ua.includes('opera')
+      ? 'Opera'
+      : ua.includes('chrome/') && !ua.includes('edg/')
+        ? 'Chrome'
+        : ua.includes('safari/') && !ua.includes('chrome/')
+          ? 'Safari'
+          : ua.includes('firefox/')
+            ? 'Firefox'
+            : 'Browser';
+
+  const device = ua.includes('iphone')
+    ? 'iPhone'
+    : ua.includes('ipad')
+      ? 'iPad'
+      : ua.includes('android')
+        ? 'Android'
+        : ua.includes('mac os x') || ua.includes('macintosh')
+          ? 'Mac'
+          : ua.includes('windows')
+            ? 'Windows'
+            : ua.includes('linux')
+              ? 'Linux'
+              : 'Device';
+
+  return `${browser} on ${device}`;
 };
 
 // ─── Shared input ──────────────────────────────────────────────────────────────
@@ -1346,16 +1361,33 @@ function PermissionsTab() {
 
 // ─── Sessions Tab ─────────────────────────────────────────────────────────────
 function SessionsTab({ lastLogin }: { lastLogin: string }) {
-  const [sessions, setSessions] = useState(activeSessions);
-
-  const revokeSession = (id: string) =>
-    setSessions((s) => s.filter((x) => x.id === 's1' || x.id !== id));
-  const revokeAll = () => setSessions((s) => s.filter((x) => x.current));
+  const { data, isLoading, isError } = useSessions();
+  const revokeSession = useRevokeSession();
+  const revokeOtherSessions = useRevokeOtherSessions();
+  const sessions = data?.sessions ?? [];
 
   const deviceIcon = (device: string) => {
     if (device.toLowerCase().includes('iphone') || device.toLowerCase().includes('android'))
       return Smartphone;
     return Monitor;
+  };
+
+  const handleRevokeSession = async (id: string) => {
+    try {
+      await revokeSession.mutateAsync(id);
+      openToast('success', 'Session revoked successfully');
+    } catch (error: any) {
+      openToast('error', error?.response?.data?.message ?? 'Could not revoke session');
+    }
+  };
+
+  const handleRevokeOthers = async () => {
+    try {
+      const result = await revokeOtherSessions.mutateAsync();
+      openToast('success', result?.message ?? 'Other sessions revoked successfully');
+    } catch (error: any) {
+      openToast('error', error?.response?.data?.message ?? 'Could not revoke other sessions');
+    }
   };
 
   return (
@@ -1364,22 +1396,42 @@ function SessionsTab({ lastLogin }: { lastLogin: string }) {
         <div>
           <p className="text-sm font-semibold text-white">Active Sessions</p>
           <p className="text-xs text-slate-500 mt-0.5">
-            {sessions.length} device{sessions.length !== 1 ? 's' : ''} signed in
+            {isLoading
+              ? 'Loading sessions...'
+              : `${sessions.length} device${sessions.length !== 1 ? 's' : ''} signed in`}
           </p>
         </div>
         {sessions.length > 1 && (
           <button
-            onClick={revokeAll}
+            onClick={handleRevokeOthers}
+            disabled={revokeOtherSessions.isPending}
             className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 px-3 py-1.5 rounded-lg font-medium transition-colors"
           >
-            <LogOut size={12} /> Sign out all other sessions
+            {revokeOtherSessions.isPending ? <Loader2 size={12} className="animate-spin" /> : <LogOut size={12} />} Sign out all other sessions
           </button>
         )}
       </div>
 
       <div className="space-y-3">
+        {isLoading && (
+          <div className="bg-[#161b27] border border-[#1e2536] rounded-xl p-4 flex items-center gap-3 text-sm text-slate-400">
+            <Loader2 size={16} className="animate-spin text-slate-500" />
+            Loading your active sessions...
+          </div>
+        )}
+        {isError && (
+          <div className="bg-[#161b27] border border-red-500/20 rounded-xl p-4 text-sm text-red-300">
+            We couldn&apos;t load your sessions right now.
+          </div>
+        )}
+        {!isLoading && !isError && sessions.length === 0 && (
+          <div className="bg-[#161b27] border border-[#1e2536] rounded-xl p-4 text-sm text-slate-400">
+            No active sessions were found for this account.
+          </div>
+        )}
         {sessions.map((s) => {
-          const DevIcon = deviceIcon(s.device);
+          const device = describeUserAgent(s.userAgent);
+          const DevIcon = deviceIcon(device);
           return (
             <div
               key={s.id}
@@ -1392,7 +1444,7 @@ function SessionsTab({ lastLogin }: { lastLogin: string }) {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <p className="text-sm font-medium text-slate-200">{s.device}</p>
+                  <p className="text-sm font-medium text-slate-200">{device}</p>
                   {s.current && (
                     <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/20 border border-blue-500/30 text-blue-400 font-semibold">
                       Current Session
@@ -1402,21 +1454,24 @@ function SessionsTab({ lastLogin }: { lastLogin: string }) {
                 <div className="flex items-center gap-3 mt-0.5 flex-wrap">
                   <span className="text-xs text-slate-500 flex items-center gap-1">
                     <Globe size={10} />
-                    {s.location}
+                    {s.ipAddress ?? 'Unknown network'}
                   </span>
-                  <span className="text-xs text-slate-600 font-mono">{s.ip}</span>
+                  {s.isImpersonation && (
+                    <span className="text-xs text-amber-300">Impersonation</span>
+                  )}
                   <span className="text-xs text-slate-600 flex items-center gap-1">
                     <Clock size={10} />
-                    {s.lastActive}
+                    {formatDateTime(s.lastSeenAt)}
                   </span>
                 </div>
               </div>
               {!s.current && (
                 <button
-                  onClick={() => revokeSession(s.id)}
+                  onClick={() => handleRevokeSession(s.id)}
+                  disabled={revokeSession.isPending}
                   className="text-xs text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 px-3 py-1.5 rounded-lg font-medium transition-colors whitespace-nowrap flex items-center gap-1 shrink-0"
                 >
-                  <X size={11} /> Revoke
+                  {revokeSession.isPending ? <Loader2 size={11} className="animate-spin" /> : <X size={11} />} Revoke
                 </button>
               )}
             </div>
@@ -1431,7 +1486,7 @@ function SessionsTab({ lastLogin }: { lastLogin: string }) {
         </div>
         <div>
           <p className="text-xs text-slate-500">Last successful login</p>
-          <p className="text-sm font-medium text-slate-200">{lastLogin} · Lagos, Nigeria</p>
+          <p className="text-sm font-medium text-slate-200">{lastLogin}</p>
         </div>
       </div>
     </div>

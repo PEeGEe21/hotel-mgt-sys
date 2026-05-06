@@ -10,6 +10,24 @@ export type MeResponse = {
   hotel: any;
 };
 
+export type AuthSession = {
+  id: string;
+  userId: string;
+  hotelId: string | null;
+  impersonatorId: string | null;
+  isImpersonation: boolean;
+  ipAddress: string | null;
+  userAgent: string | null;
+  createdAt: string;
+  lastSeenAt: string;
+  expiresAt: string;
+  current: boolean;
+};
+
+export type SessionsResponse = {
+  sessions: AuthSession[];
+};
+
 export type UpdateMeInput = {
   name?: string;
   email?: string;
@@ -30,6 +48,17 @@ export function useMe() {
       return data;
     },
     staleTime: 30_000,
+  });
+}
+
+export function useSessions() {
+  return useQuery<SessionsResponse>({
+    queryKey: ['auth', 'sessions'],
+    queryFn: async () => {
+      const { data } = await api.get('/auth/sessions');
+      return data;
+    },
+    staleTime: 15_000,
   });
 }
 
@@ -75,6 +104,28 @@ export function useChangePassword() {
       qc.invalidateQueries({ queryKey: ['auth', 'me'] });
       const current = useAuthStore.getState().user;
       if (current) setUser({ ...current, mustChangePassword: false });
+    },
+  });
+}
+
+export function useRevokeSession() {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: (sessionId: string) => api.delete(`/auth/sessions/${sessionId}`).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['auth', 'sessions'] });
+    },
+  });
+}
+
+export function useRevokeOtherSessions() {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => api.post('/auth/sessions/revoke-others').then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['auth', 'sessions'] });
     },
   });
 }

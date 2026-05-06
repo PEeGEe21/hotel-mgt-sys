@@ -17,6 +17,7 @@ import dayjs from 'dayjs';
 import { PrismaService } from '../../prisma/prisma.service';
 import { DEFAULT_ROLE_PERMISSIONS } from '../../common/constants/role-permissions';
 import { UpdateDashboardLayoutDto } from './dtos/update-dashboard-layout.dto';
+import { RedisCacheService } from '../../common/redis/redis-cache.service';
 
 type DashboardContext = {
   userId: string;
@@ -38,49 +39,60 @@ const DASHBOARD_ROLES = [
   Role.STAFF,
 ];
 
+const DASHBOARD_CONFIG_TTL_SECONDS = 5 * 60;
+const DASHBOARD_FEATURE_FLAGS_TTL_SECONDS = 2 * 60;
+const DASHBOARD_ADMIN_LAYOUTS_TTL_SECONDS = 5 * 60;
+const DASHBOARD_WIDGET_DEFAULT_TTL_SECONDS = 30;
+
 @Injectable()
 export class DashboardService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache: RedisCacheService,
+  ) {}
 
   async getConfig(userId: string) {
     const ctx = await this.getDashboardContext(userId);
+    const cacheKey = this.dashboardConfigCacheKey(ctx.hotelId, ctx.role);
 
-    const roleConfig = await this.prisma.roleDashboardConfig.findMany({
-      where: {
-        hotelId: ctx.hotelId,
+    return this.cache.getOrSet(cacheKey, DASHBOARD_CONFIG_TTL_SECONDS, async () => {
+      const roleConfig = await this.prisma.roleDashboardConfig.findMany({
+        where: {
+          hotelId: ctx.hotelId,
+          role: ctx.role,
+          enabled: true,
+        },
+        include: {
+          widget: true,
+        },
+        orderBy: { position: 'asc' },
+      });
+
+      return {
         role: ctx.role,
-        enabled: true,
-      },
-      include: {
-        widget: true,
-      },
-      orderBy: { position: 'asc' },
+        widgets: roleConfig.map((entry) => {
+          const sizeOverride =
+            entry.sizeOverride && entry.widget.allowedSizes.includes(entry.sizeOverride)
+              ? entry.sizeOverride
+              : null;
+
+          return {
+            id: entry.widget.id,
+            title: entry.widget.title,
+            permissionKey: entry.widget.permissionKey,
+            featureFlag: entry.widget.featureFlag,
+            defaultEnabled: entry.widget.defaultEnabled,
+            defaultSize: entry.widget.defaultSize,
+            allowedSizes: entry.widget.allowedSizes,
+            position: entry.position,
+            enabled: entry.enabled,
+            size: sizeOverride ?? entry.widget.defaultSize,
+            sizeOverride,
+            config: entry.config,
+          };
+        }),
+      };
     });
-
-    return {
-      role: ctx.role,
-      widgets: roleConfig.map((entry) => {
-        const sizeOverride =
-          entry.sizeOverride && entry.widget.allowedSizes.includes(entry.sizeOverride)
-            ? entry.sizeOverride
-            : null;
-
-        return {
-          id: entry.widget.id,
-          title: entry.widget.title,
-          permissionKey: entry.widget.permissionKey,
-          featureFlag: entry.widget.featureFlag,
-          defaultEnabled: entry.widget.defaultEnabled,
-          defaultSize: entry.widget.defaultSize,
-          allowedSizes: entry.widget.allowedSizes,
-          position: entry.position,
-          enabled: entry.enabled,
-          size: sizeOverride ?? entry.widget.defaultSize,
-          sizeOverride,
-          config: entry.config,
-        };
-      }),
-    };
   }
 
   async getFeatureFlags(userId: string) {
@@ -91,33 +103,37 @@ export class DashboardService {
 
   async getAdminLayouts(userId: string) {
     const ctx = await this.getDashboardContext(userId);
-    const [widgets, rows] = await Promise.all([
-      this.prisma.dashboardWidget.findMany({ orderBy: { title: 'asc' } }),
-      this.prisma.roleDashboardConfig.findMany({
-        where: { hotelId: ctx.hotelId },
-        include: { widget: true },
-        orderBy: [{ role: 'asc' }, { position: 'asc' }],
-      }),
-    ]);
+    const cacheKey = this.dashboardAdminLayoutsCacheKey(ctx.hotelId);
 
-    return {
-      roles: DASHBOARD_ROLES,
-      widgets,
-      rows: rows.map((row) => ({
-        id: row.id,
-        role: row.role,
-        widgetId: row.widgetId,
-        title: row.widget.title,
-        permissionKey: row.widget.permissionKey,
-        featureFlag: row.widget.featureFlag,
-        defaultSize: row.widget.defaultSize,
-        allowedSizes: row.widget.allowedSizes,
-        position: row.position,
-        enabled: row.enabled,
-        sizeOverride: row.sizeOverride,
-        size: row.sizeOverride ?? row.widget.defaultSize,
-      })),
-    };
+    return this.cache.getOrSet(cacheKey, DASHBOARD_ADMIN_LAYOUTS_TTL_SECONDS, async () => {
+      const [widgets, rows] = await Promise.all([
+        this.prisma.dashboardWidget.findMany({ orderBy: { title: 'asc' } }),
+        this.prisma.roleDashboardConfig.findMany({
+          where: { hotelId: ctx.hotelId },
+          include: { widget: true },
+          orderBy: [{ role: 'asc' }, { position: 'asc' }],
+        }),
+      ]);
+
+      return {
+        roles: DASHBOARD_ROLES,
+        widgets,
+        rows: rows.map((row) => ({
+          id: row.id,
+          role: row.role,
+          widgetId: row.widgetId,
+          title: row.widget.title,
+          permissionKey: row.widget.permissionKey,
+          featureFlag: row.widget.featureFlag,
+          defaultSize: row.widget.defaultSize,
+          allowedSizes: row.widget.allowedSizes,
+          position: row.position,
+          enabled: row.enabled,
+          sizeOverride: row.sizeOverride,
+          size: row.sizeOverride ?? row.widget.defaultSize,
+        })),
+      };
+    });
   }
 
   async updateAdminLayouts(userId: string, dto: UpdateDashboardLayoutDto) {
@@ -167,6 +183,8 @@ export class DashboardService {
       ),
     );
 
+    await this.invalidateDashboardCaches(ctx.hotelId);
+
     return this.getAdminLayouts(userId);
   }
 
@@ -184,36 +202,14 @@ export class DashboardService {
       throw new ForbiddenException('This widget is disabled.');
     }
 
-    switch (widgetId) {
-      case 'occupancy_overview':
-        return this.getOccupancyOverview(ctx.hotelId);
-      case 'todays_checkins_outs':
-        return this.getTodaysCheckinsOuts(ctx.hotelId);
-      case 'room_status_grid':
-        return this.getRoomStatusGrid(ctx.hotelId);
-      case 'revenue_today':
-        return this.getRevenueToday(ctx.hotelId);
-      case 'outstanding_folios':
-        return this.getOutstandingFolios(ctx.hotelId);
-      case 'pos_sales_today':
-        return this.getPosSalesToday(ctx.hotelId);
-      case 'active_pos_orders':
-        return this.getActivePosOrders(ctx.hotelId);
-      case 'low_stock_alerts':
-        return this.getLowStockAlerts(ctx.hotelId);
-      case 'housekeeping_queue':
-        return this.getHousekeepingQueue(ctx.hotelId);
-      case 'staff_on_duty':
-        return this.getStaffOnDuty(ctx.hotelId);
-      case 'pending_approvals':
-        return this.getPendingApprovals(ctx.hotelId);
-      case 'my_attendance_today':
-        return this.getMyAttendanceToday(ctx.staffId);
-      case 'my_tasks_today':
-        return this.getMyTasksToday(ctx.hotelId, ctx.staffId);
-      default:
-        throw new NotFoundException('Dashboard widget is not implemented.');
+    const ttl = this.dashboardWidgetCacheTtl(widgetId);
+    if (ttl > 0) {
+      return this.cache.getOrSet(this.dashboardWidgetCacheKey(ctx.hotelId, widgetId), ttl, () =>
+        this.resolveWidgetData(widgetId, ctx),
+      );
     }
+
+    return this.resolveWidgetData(widgetId, ctx);
   }
 
   private async getDashboardContext(userId: string): Promise<DashboardContext> {
@@ -281,11 +277,92 @@ export class DashboardService {
   }
 
   private async getFeatureFlagMap() {
-    const flags = await this.prisma.featureFlag.findMany();
-    return flags.reduce<Record<string, boolean>>((acc, flag) => {
-      acc[flag.key] = flag.enabled !== false;
-      return acc;
-    }, {});
+    return this.cache.getOrSet(
+      this.dashboardFeatureFlagsCacheKey(),
+      DASHBOARD_FEATURE_FLAGS_TTL_SECONDS,
+      async () => {
+        const flags = await this.prisma.featureFlag.findMany();
+        return flags.reduce<Record<string, boolean>>((acc, flag) => {
+          acc[flag.key] = flag.enabled !== false;
+          return acc;
+        }, {});
+      },
+    );
+  }
+
+  private async invalidateDashboardCaches(hotelId: string) {
+    await this.cache.delMany([
+      this.dashboardAdminLayoutsCacheKey(hotelId),
+      ...DASHBOARD_ROLES.map((role) => this.dashboardConfigCacheKey(hotelId, role)),
+    ]);
+  }
+
+  private dashboardConfigCacheKey(hotelId: string, role: Role) {
+    return `dashboard:config:${hotelId}:${role}`;
+  }
+
+  private dashboardFeatureFlagsCacheKey() {
+    return 'dashboard:feature-flags';
+  }
+
+  private dashboardAdminLayoutsCacheKey(hotelId: string) {
+    return `dashboard:admin-layouts:${hotelId}`;
+  }
+
+  private dashboardWidgetCacheKey(hotelId: string, widgetId: string) {
+    return `dashboard:widget:${hotelId}:${widgetId}`;
+  }
+
+  private dashboardWidgetCacheTtl(widgetId: string) {
+    switch (widgetId) {
+      case 'occupancy_overview':
+      case 'todays_checkins_outs':
+      case 'room_status_grid':
+      case 'revenue_today':
+      case 'outstanding_folios':
+      case 'pos_sales_today':
+      case 'active_pos_orders':
+      case 'low_stock_alerts':
+      case 'housekeeping_queue':
+      case 'staff_on_duty':
+      case 'pending_approvals':
+        return DASHBOARD_WIDGET_DEFAULT_TTL_SECONDS;
+      default:
+        return 0;
+    }
+  }
+
+  private resolveWidgetData(widgetId: string, ctx: DashboardContext): Promise<unknown> {
+    switch (widgetId) {
+      case 'occupancy_overview':
+        return this.getOccupancyOverview(ctx.hotelId);
+      case 'todays_checkins_outs':
+        return this.getTodaysCheckinsOuts(ctx.hotelId);
+      case 'room_status_grid':
+        return this.getRoomStatusGrid(ctx.hotelId);
+      case 'revenue_today':
+        return this.getRevenueToday(ctx.hotelId);
+      case 'outstanding_folios':
+        return this.getOutstandingFolios(ctx.hotelId);
+      case 'pos_sales_today':
+        return this.getPosSalesToday(ctx.hotelId);
+      case 'active_pos_orders':
+        return this.getActivePosOrders(ctx.hotelId);
+      case 'low_stock_alerts':
+        return this.getLowStockAlerts(ctx.hotelId);
+      case 'housekeeping_queue':
+        return this.getHousekeepingQueue(ctx.hotelId);
+      case 'staff_on_duty':
+        return this.getStaffOnDuty(ctx.hotelId);
+      case 'pending_approvals':
+        return this.getPendingApprovals(ctx.hotelId);
+      case 'my_attendance_today':
+        return this.getMyAttendanceToday(ctx.staffId);
+      case 'my_tasks_today':
+        return this.getMyTasksToday(ctx.hotelId, ctx.staffId);
+      default:
+        throw new NotFoundException('Dashboard widget is not implemented.');
+    }
   }
 
   private getDayRange() {

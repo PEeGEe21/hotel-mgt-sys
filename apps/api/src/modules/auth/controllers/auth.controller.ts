@@ -10,6 +10,7 @@ import {
   Query,
   Patch,
   Param,
+  Delete,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { AuthService } from '../services/auth.service';
@@ -78,7 +79,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Logout current session' })
   logout(@Request() req: any, @Body() dto: LogoutDto) {
-    return this.authService.logout(req.user.sub, dto.refreshToken, {
+    return this.authService.logout(req.user.sub, req.user.sid ?? null, dto.refreshToken, {
       ipAddress: getRequestIp(req),
       userAgent: getUserAgent(req),
     });
@@ -94,6 +95,30 @@ export class AuthController {
       ipAddress: getRequestIp(req),
       userAgent: getUserAgent(req),
     });
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Get('sessions')
+  @ApiOperation({ summary: 'List current user sessions' })
+  getSessions(@Request() req: any) {
+    return this.authService.listSessions(req.user.sub, req.user.sid ?? null);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Delete('sessions/:sessionId')
+  @ApiOperation({ summary: 'Revoke one of the current user sessions' })
+  revokeSession(@Request() req: any, @Param('sessionId') sessionId: string) {
+    return this.authService.revokeSession(req.user.sub, sessionId, req.user.sid ?? null);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Post('sessions/revoke-others')
+  @ApiOperation({ summary: 'Revoke all other sessions except current' })
+  revokeOtherSessions(@Request() req: any) {
+    return this.authService.revokeOtherSessions(req.user.sub, req.user.sid ?? null);
   }
 
   @ApiBearerAuth()
@@ -142,6 +167,7 @@ export class AuthController {
     return this.authService.stopImpersonation(
       req.user.sub,
       req.user.impersonatorId ?? null,
+      req.user.sid ?? null,
       dto.refreshToken ?? null,
       {
         ipAddress: getRequestIp(req),

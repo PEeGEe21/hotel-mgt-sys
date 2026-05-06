@@ -3,17 +3,20 @@ import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { ConfigService } from '@nestjs/config';
 import { AuthService } from './services/auth.service';
+import { AuthSessionService } from './services/auth-session.service';
 import { AuthController } from './controllers/auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { LocalStrategy } from './strategies/local.strategy';
 import { EmailModule } from '../../common/email/email.module';
 import { RealtimeModule } from '../realtime/realtime.module';
+import { RedisModule } from '../../common/redis/redis.module';
 
 @Module({
   imports: [
     PassportModule,
     EmailModule,
     RealtimeModule,
+    RedisModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
@@ -22,7 +25,7 @@ import { RealtimeModule } from '../realtime/realtime.module';
       }),
     }),
   ],
-  providers:   [AuthService, JwtStrategy, LocalStrategy],
+  providers:   [AuthService, AuthSessionService, JwtStrategy, LocalStrategy],
   controllers: [AuthController],
   exports:     [AuthService],
 })

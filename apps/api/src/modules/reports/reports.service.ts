@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AttendanceType } from '@prisma/client';
 import dayjs from 'dayjs';
+import { RedisCacheService } from '../../common/redis/redis-cache.service';
 
 type RangeInput = { from?: string; to?: string };
 type Range = { from: Date; to: Date };
@@ -9,6 +10,7 @@ type MaybeRange = Range | null;
 
 const REVENUE_TYPES = new Set(['RESERVATION', 'POS', 'FACILITY']);
 const ACTIVE_FOLIO_STATUSES = ['PENDING', 'CONFIRMED', 'CHECKED_IN', 'CHECKED_OUT'];
+const REPORT_AGGREGATE_TTL_SECONDS = 60;
 
 function resolveRange(params: RangeInput): Range {
   const from = params.from ? dayjs(params.from).startOf('day') : dayjs().startOf('month');
@@ -96,7 +98,10 @@ function classifyBookingSource(source?: string | null) {
 
 @Injectable()
 export class ReportsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private cache: RedisCacheService,
+  ) {}
 
   private async buildRevenueAggregation(hotelId: string, range: Range) {
     const invoices = await this.prisma.invoice.findMany({
@@ -228,200 +233,206 @@ export class ReportsService {
   }
 
   async getOverview(hotelId: string, params: RangeInput) {
-    const range = resolveRange(params);
-    const [revenue, outstandingFolios, totalRooms, occupiedRooms, reservations] = await Promise.all([
-      this.buildRevenueAggregation(hotelId, range),
-      this.getOutstandingFolios(hotelId, { ...params, page: 1, limit: 1 }),
-      this.prisma.room.count({ where: { hotelId } }),
-      this.prisma.room.count({ where: { hotelId, status: 'OCCUPIED' } }),
-      this.prisma.reservation.findMany({
-        where: {
-          hotelId,
-          checkIn: { gte: range.from },
-          checkOut: { lte: range.to },
+    return this.cacheReportAggregate(hotelId, 'overview', params, async () => {
+      const range = resolveRange(params);
+      const [revenue, outstandingFolios, totalRooms, occupiedRooms, reservations] = await Promise.all([
+        this.buildRevenueAggregation(hotelId, range),
+        this.getOutstandingFolios(hotelId, { ...params, page: 1, limit: 1 }),
+        this.prisma.room.count({ where: { hotelId } }),
+        this.prisma.room.count({ where: { hotelId, status: 'OCCUPIED' } }),
+        this.prisma.reservation.findMany({
+          where: {
+            hotelId,
+            checkIn: { gte: range.from },
+            checkOut: { lte: range.to },
+          },
+          select: { source: true },
+        }),
+      ]);
+
+      const activeReservations = await this.prisma.reservation.findMany({
+        where: { hotelId, status: { in: ['CHECKED_IN', 'CONFIRMED'] } },
+        select: { totalAmount: true, checkIn: true, checkOut: true },
+      });
+
+      const adr = activeReservations.length
+        ? Math.round(
+            activeReservations.reduce((sum, reservation) => {
+              const nights = Math.max(dayjs(reservation.checkOut).diff(dayjs(reservation.checkIn), 'day'), 1);
+              return sum + money(reservation.totalAmount) / nights;
+            }, 0) / activeReservations.length,
+          )
+        : 0;
+
+      const sourceCounts = reservations.reduce<Record<string, number>>((acc, reservation) => {
+        const key = reservation.source?.trim() || 'Direct';
+        acc[key] = (acc[key] ?? 0) + 1;
+        return acc;
+      }, {});
+
+      const guestSourceData = Object.entries(sourceCounts)
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 5)
+        .map(([name, count], index) => ({
+          name,
+          value: percent(count, reservations.length),
+          color: ['#3b82f6', '#0ea5e9', '#8b5cf6', '#10b981', '#64748b'][index] ?? '#64748b',
+        }));
+
+      return {
+        range: rangePayload(range),
+        summary: {
+          revenueTotal: revenue.summary.invoiceTotal,
+          occupancyRate: percent(occupiedRooms, totalRooms),
+          occupiedRooms,
+          totalRooms,
+          adr,
+          outstandingFolios: outstandingFolios.summary.outstanding,
+          outstandingCount: outstandingFolios.summary.count,
         },
-        select: { source: true },
-      }),
-    ]);
-
-    const activeReservations = await this.prisma.reservation.findMany({
-      where: { hotelId, status: { in: ['CHECKED_IN', 'CONFIRMED'] } },
-      select: { totalAmount: true, checkIn: true, checkOut: true },
+        revenueChart: revenue.streamDaily,
+        guestSourceData,
+      };
     });
-
-    const adr = activeReservations.length
-      ? Math.round(
-          activeReservations.reduce((sum, reservation) => {
-            const nights = Math.max(dayjs(reservation.checkOut).diff(dayjs(reservation.checkIn), 'day'), 1);
-            return sum + money(reservation.totalAmount) / nights;
-          }, 0) / activeReservations.length,
-        )
-      : 0;
-
-    const sourceCounts = reservations.reduce<Record<string, number>>((acc, reservation) => {
-      const key = reservation.source?.trim() || 'Direct';
-      acc[key] = (acc[key] ?? 0) + 1;
-      return acc;
-    }, {});
-
-    const guestSourceData = Object.entries(sourceCounts)
-      .sort(([, a], [, b]) => b - a)
-      .slice(0, 5)
-      .map(([name, count], index) => ({
-        name,
-        value: percent(count, reservations.length),
-        color: ['#3b82f6', '#0ea5e9', '#8b5cf6', '#10b981', '#64748b'][index] ?? '#64748b',
-      }));
-
-    return {
-      range: rangePayload(range),
-      summary: {
-        revenueTotal: revenue.summary.invoiceTotal,
-        occupancyRate: percent(occupiedRooms, totalRooms),
-        occupiedRooms,
-        totalRooms,
-        adr,
-        outstandingFolios: outstandingFolios.summary.outstanding,
-        outstandingCount: outstandingFolios.summary.count,
-      },
-      revenueChart: revenue.streamDaily,
-      guestSourceData,
-    };
   }
 
   async getRevenue(hotelId: string, params: RangeInput) {
-    const range = resolveRange(params);
-    const revenue = await this.buildRevenueAggregation(hotelId, range);
+    return this.cacheReportAggregate(hotelId, 'revenue', params, async () => {
+      const range = resolveRange(params);
+      const revenue = await this.buildRevenueAggregation(hotelId, range);
 
-    return {
-      range: rangePayload(range),
-      summary: revenue.summary,
-      byType: revenue.byType,
-      byStatus: revenue.byStatus,
-      daily: revenue.daily,
-      streamDaily: revenue.streamDaily,
-      rows: revenue.rows,
-    };
+      return {
+        range: rangePayload(range),
+        summary: revenue.summary,
+        byType: revenue.byType,
+        byStatus: revenue.byStatus,
+        daily: revenue.daily,
+        streamDaily: revenue.streamDaily,
+        rows: revenue.rows,
+      };
+    });
   }
 
   async getCogs(hotelId: string, params: RangeInput) {
-    const range = resolveRange(params);
-    const [movements, revenue] = await Promise.all([
-      this.prisma.stockMovement.findMany({
-        where: {
-          hotelId,
-          type: 'OUT',
-          sourceType: 'POS_SALE',
-          createdAt: { gte: range.from, lte: range.to },
-        },
-        orderBy: { createdAt: 'desc' },
-        include: {
-          item: {
-            select: {
-              id: true,
-              name: true,
-              sku: true,
-              category: true,
-              unit: true,
-              costPerUnit: true,
+    return this.cacheReportAggregate(hotelId, 'cogs', params, async () => {
+      const range = resolveRange(params);
+      const [movements, revenue] = await Promise.all([
+        this.prisma.stockMovement.findMany({
+          where: {
+            hotelId,
+            type: 'OUT',
+            sourceType: 'POS_SALE',
+            createdAt: { gte: range.from, lte: range.to },
+          },
+          orderBy: { createdAt: 'desc' },
+          include: {
+            item: {
+              select: {
+                id: true,
+                name: true,
+                sku: true,
+                category: true,
+                unit: true,
+                costPerUnit: true,
+              },
             },
           },
-        },
-      }),
-      this.buildRevenueAggregation(hotelId, range),
-    ]);
+        }),
+        this.buildRevenueAggregation(hotelId, range),
+      ]);
 
-    const byCategory = new Map<string, { category: string; cost: number; quantity: number; count: number }>();
-    const byItem = new Map<string, { itemId: string; name: string; sku: string; category: string; unit: string; cost: number; quantity: number; count: number }>();
-    const daily = new Map<string, { date: string; cost: number; quantity: number; count: number }>();
-    let totalCost = 0;
-    let totalQuantity = 0;
+      const byCategory = new Map<string, { category: string; cost: number; quantity: number; count: number }>();
+      const byItem = new Map<string, { itemId: string; name: string; sku: string; category: string; unit: string; cost: number; quantity: number; count: number }>();
+      const daily = new Map<string, { date: string; cost: number; quantity: number; count: number }>();
+      let totalCost = 0;
+      let totalQuantity = 0;
 
-    const rows = movements.map((movement) => {
-      const quantity = money(movement.quantity);
-      const unitCost = money(movement.item.costPerUnit);
-      const cost = quantity * unitCost;
-      const date = movement.createdAt.toISOString().slice(0, 10);
+      const rows = movements.map((movement) => {
+        const quantity = money(movement.quantity);
+        const unitCost = money(movement.item.costPerUnit);
+        const cost = quantity * unitCost;
+        const date = movement.createdAt.toISOString().slice(0, 10);
 
-      totalCost += cost;
-      totalQuantity += quantity;
+        totalCost += cost;
+        totalQuantity += quantity;
 
-      addToBucket(byCategory, movement.item.category, { category: movement.item.category, cost: 0, quantity: 0, count: 0 }, (bucket) => {
-        bucket.cost += cost;
-        bucket.quantity += quantity;
-        bucket.count += 1;
-      });
-
-      addToBucket(
-        byItem,
-        movement.item.id,
-        {
-          itemId: movement.item.id,
-          name: movement.item.name,
-          sku: movement.item.sku,
-          category: movement.item.category,
-          unit: movement.item.unit,
-          cost: 0,
-          quantity: 0,
-          count: 0,
-        },
-        (bucket) => {
+        addToBucket(byCategory, movement.item.category, { category: movement.item.category, cost: 0, quantity: 0, count: 0 }, (bucket) => {
           bucket.cost += cost;
           bucket.quantity += quantity;
           bucket.count += 1;
-        },
-      );
+        });
 
-      addToBucket(daily, date, { date, cost: 0, quantity: 0, count: 0 }, (bucket) => {
-        bucket.cost += cost;
-        bucket.quantity += quantity;
-        bucket.count += 1;
+        addToBucket(
+          byItem,
+          movement.item.id,
+          {
+            itemId: movement.item.id,
+            name: movement.item.name,
+            sku: movement.item.sku,
+            category: movement.item.category,
+            unit: movement.item.unit,
+            cost: 0,
+            quantity: 0,
+            count: 0,
+          },
+          (bucket) => {
+            bucket.cost += cost;
+            bucket.quantity += quantity;
+            bucket.count += 1;
+          },
+        );
+
+        addToBucket(daily, date, { date, cost: 0, quantity: 0, count: 0 }, (bucket) => {
+          bucket.cost += cost;
+          bucket.quantity += quantity;
+          bucket.count += 1;
+        });
+
+        return {
+          id: movement.id,
+          createdAt: movement.createdAt,
+          sourceId: movement.sourceId,
+          quantity,
+          itemName: movement.item.name,
+          itemSku: movement.item.sku,
+          itemCategory: movement.item.category,
+          itemUnit: movement.item.unit,
+          unitCost,
+          cost,
+          note: movement.note,
+        };
       });
 
+      const expenseRows = Array.from(daily.values())
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .map((row) => ({
+          month: chartLabel(row.date),
+          payroll: 0,
+          supplies: row.cost,
+          utilities: 0,
+          maintenance: 0,
+          marketing: 0,
+          total: row.cost,
+        }));
+
       return {
-        id: movement.id,
-        createdAt: movement.createdAt,
-        sourceId: movement.sourceId,
-        quantity,
-        itemName: movement.item.name,
-        itemSku: movement.item.sku,
-        itemCategory: movement.item.category,
-        itemUnit: movement.item.unit,
-        unitCost,
-        cost,
-        note: movement.note,
+        range: rangePayload(range),
+        summary: {
+          totalCost,
+          totalQuantity,
+          count: movements.length,
+          costRatio: revenue.summary.invoiceTotal
+            ? Number(((totalCost / revenue.summary.invoiceTotal) * 100).toFixed(1))
+            : 0,
+          grossProfit: Math.max(revenue.summary.invoiceTotal - totalCost, 0),
+        },
+        byCategory: Array.from(byCategory.values()).sort((a, b) => b.cost - a.cost),
+        byItem: Array.from(byItem.values()).sort((a, b) => b.cost - a.cost),
+        daily: Array.from(daily.values()).sort((a, b) => a.date.localeCompare(b.date)),
+        expenseRows,
+        rows,
       };
     });
-
-    const expenseRows = Array.from(daily.values())
-      .sort((a, b) => a.date.localeCompare(b.date))
-      .map((row) => ({
-        month: chartLabel(row.date),
-        payroll: 0,
-        supplies: row.cost,
-        utilities: 0,
-        maintenance: 0,
-        marketing: 0,
-        total: row.cost,
-      }));
-
-    return {
-      range: rangePayload(range),
-      summary: {
-        totalCost,
-        totalQuantity,
-        count: movements.length,
-        costRatio: revenue.summary.invoiceTotal
-          ? Number(((totalCost / revenue.summary.invoiceTotal) * 100).toFixed(1))
-          : 0,
-        grossProfit: Math.max(revenue.summary.invoiceTotal - totalCost, 0),
-      },
-      byCategory: Array.from(byCategory.values()).sort((a, b) => b.cost - a.cost),
-      byItem: Array.from(byItem.values()).sort((a, b) => b.cost - a.cost),
-      daily: Array.from(daily.values()).sort((a, b) => a.date.localeCompare(b.date)),
-      expenseRows,
-      rows,
-    };
   }
 
   async getOutstandingFolios(
@@ -524,35 +535,36 @@ export class ReportsService {
   }
 
   async getGuestInsights(hotelId: string, params: RangeInput) {
-    const range = resolveRange(params);
-    const granularity = seriesGranularity(range);
-    const [guests, reservations, inHouse] = await Promise.all([
-      this.prisma.guest.findMany({
-        where: { hotelId },
-        select: {
-          id: true,
-          nationality: true,
-          isVip: true,
-          _count: { select: { reservations: true } },
-        },
-      }),
-      this.prisma.reservation.findMany({
-        where: {
-          hotelId,
-          checkIn: { gte: range.from },
-          checkOut: { lte: range.to },
-        },
-        select: {
-          guestId: true,
-          status: true,
-          source: true,
-          totalAmount: true,
-          checkIn: true,
-          checkOut: true,
-        },
-      }),
-      this.prisma.reservation.count({ where: { hotelId, status: 'CHECKED_IN' } }),
-    ]);
+    return this.cacheReportAggregate(hotelId, 'guests', params, async () => {
+      const range = resolveRange(params);
+      const granularity = seriesGranularity(range);
+      const [guests, reservations, inHouse] = await Promise.all([
+        this.prisma.guest.findMany({
+          where: { hotelId },
+          select: {
+            id: true,
+            nationality: true,
+            isVip: true,
+            _count: { select: { reservations: true } },
+          },
+        }),
+        this.prisma.reservation.findMany({
+          where: {
+            hotelId,
+            checkIn: { gte: range.from },
+            checkOut: { lte: range.to },
+          },
+          select: {
+            guestId: true,
+            status: true,
+            source: true,
+            totalAmount: true,
+            checkIn: true,
+            checkOut: true,
+          },
+        }),
+        this.prisma.reservation.count({ where: { hotelId, status: 'CHECKED_IN' } }),
+      ]);
 
     const vipGuests = guests.filter((guest) => guest.isVip).length;
     const repeatGuests = guests.filter((guest) => guest._count.reservations > 1).length;
@@ -729,49 +741,51 @@ export class ReportsService {
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([, row]) => row);
 
-    return {
-      range: rangePayload(range),
-      summary: {
-        totalGuests: guests.length,
-        inHouse,
-        vipGuests,
-        repeatGuests,
-        avgStayNights,
-      },
-      sourceData,
-      nationalityMix,
-      reservationStatusRows,
-      guestTrend,
-      bookingSourceTrend,
-    };
+      return {
+        range: rangePayload(range),
+        summary: {
+          totalGuests: guests.length,
+          inHouse,
+          vipGuests,
+          repeatGuests,
+          avgStayNights,
+        },
+        sourceData,
+        nationalityMix,
+        reservationStatusRows,
+        guestTrend,
+        bookingSourceTrend,
+      };
+    });
   }
 
   async getStaffInsights(hotelId: string, params: RangeInput) {
-    const range = resolveRange(params);
-    const rangeStart = dayjs(range.from).startOf('day');
-    const rangeEnd = dayjs(range.to).endOf('day');
-    const dayCount = Math.max(rangeEnd.startOf('day').diff(rangeStart, 'day') + 1, 1);
+    return this.cacheReportAggregate(hotelId, 'staff', params, async () => {
+      const range = resolveRange(params);
+      const rangeStart = dayjs(range.from).startOf('day');
+      const rangeEnd = dayjs(range.to).endOf('day');
+      const dayCount = Math.max(rangeEnd.startOf('day').diff(rangeStart, 'day') + 1, 1);
 
-    const [staff, attendanceRange, leavesRange] = await Promise.all([
-      this.prisma.staff.findMany({
-        where: { hotelId },
-        select: { id: true, department: true },
-        orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
-      }),
-      this.prisma.attendance.findMany({
-        where: { hotelId, timestamp: { gte: rangeStart.toDate(), lte: rangeEnd.toDate() } },
-        orderBy: { timestamp: 'asc' },
-      }),
-      this.prisma.leave.findMany({
-        where: {
-          hotelId,
-          status: 'APPROVED',
-          startDate: { lte: rangeEnd.toDate() },
-          endDate: { gte: rangeStart.toDate() },
-        },
-        select: { staffId: true, startDate: true, endDate: true },
-      }),
-    ]);
+      const [staff, attendanceRange, leavesRange] = await Promise.all([
+        this.prisma.staff.findMany({
+          where: { hotelId },
+          select: { id: true, department: true },
+          orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
+        }),
+        this.prisma.attendance.findMany({
+          where: { hotelId, timestamp: { gte: rangeStart.toDate(), lte: rangeEnd.toDate() } },
+          orderBy: { timestamp: 'asc' },
+        }),
+        this.prisma.leave.findMany({
+          where: {
+            hotelId,
+            status: 'APPROVED',
+            startDate: { lte: rangeEnd.toDate() },
+            endDate: { gte: rangeStart.toDate() },
+          },
+          select: { staffId: true, startDate: true, endDate: true },
+        }),
+      ]);
 
     const leaveSet = new Set<string>();
     leavesRange.forEach((leave) => {
@@ -881,160 +895,184 @@ export class ReportsService {
       };
     });
 
-    return {
-      range: rangePayload(range),
-      summary: {
-        totalStaff: staff.length,
-        attendanceRate: percent(totalPresentDays, staff.length * dayCount),
-        avgHoursWorked: hoursSamples.length
-          ? (hoursSamples.reduce((sum, value) => sum + value, 0) / hoursSamples.length).toFixed(1)
-          : '0.0',
-        lateArrivals,
-      },
-      attendanceWeek: weekRows,
-      departmentRows,
-    };
+      return {
+        range: rangePayload(range),
+        summary: {
+          totalStaff: staff.length,
+          attendanceRate: percent(totalPresentDays, staff.length * dayCount),
+          avgHoursWorked: hoursSamples.length
+            ? (hoursSamples.reduce((sum, value) => sum + value, 0) / hoursSamples.length).toFixed(1)
+            : '0.0',
+          lateArrivals,
+        },
+        attendanceWeek: weekRows,
+        departmentRows,
+      };
+    });
   }
 
   async getInventoryInsights(hotelId: string, params: RangeInput) {
-    const range = resolveRange(params);
-    const [items, turnoverCount] = await Promise.all([
-      this.prisma.inventoryItem.findMany({
-        where: { hotelId },
-        select: {
-          name: true,
-          quantity: true,
-          minStock: true,
-          unit: true,
-          category: true,
-          costPerUnit: true,
-        },
-        orderBy: { name: 'asc' },
-      }),
-      this.prisma.stockMovement.count({
-        where: {
-          hotelId,
-          type: 'OUT',
-          sourceType: 'POS_SALE',
-          createdAt: { gte: range.from, lte: range.to },
-        },
-      }),
-    ]);
+    return this.cacheReportAggregate(hotelId, 'inventory', params, async () => {
+      const range = resolveRange(params);
+      const [items, turnoverCount] = await Promise.all([
+        this.prisma.inventoryItem.findMany({
+          where: { hotelId },
+          select: {
+            name: true,
+            quantity: true,
+            minStock: true,
+            unit: true,
+            category: true,
+            costPerUnit: true,
+          },
+          orderBy: { name: 'asc' },
+        }),
+        this.prisma.stockMovement.count({
+          where: {
+            hotelId,
+            type: 'OUT',
+            sourceType: 'POS_SALE',
+            createdAt: { gte: range.from, lte: range.to },
+          },
+        }),
+      ]);
 
-    const inventoryAlertRows = items
-      .filter((item) => money(item.quantity) <= money(item.minStock))
-      .slice(0, 8)
-      .map((item) => ({
-        item: item.name,
-        current: money(item.quantity),
-        par: money(item.minStock) || 1,
-        unit: item.unit,
-        category: item.category,
-      }));
+      const inventoryAlertRows = items
+        .filter((item) => money(item.quantity) <= money(item.minStock))
+        .slice(0, 8)
+        .map((item) => ({
+          item: item.name,
+          current: money(item.quantity),
+          par: money(item.minStock) || 1,
+          unit: item.unit,
+          category: item.category,
+        }));
 
-    return {
-      range: rangePayload(range),
-      summary: {
-        totalItems: items.length,
-        lowStockCount: items.filter((item) => money(item.quantity) <= money(item.minStock)).length,
-        inventoryValue: items.reduce((sum, item) => sum + money(item.quantity) * money(item.costPerUnit), 0),
-        turnoverRate: turnoverCount,
-      },
-      inventoryAlertRows,
-    };
+      return {
+        range: rangePayload(range),
+        summary: {
+          totalItems: items.length,
+          lowStockCount: items.filter((item) => money(item.quantity) <= money(item.minStock)).length,
+          inventoryValue: items.reduce((sum, item) => sum + money(item.quantity) * money(item.costPerUnit), 0),
+          turnoverRate: turnoverCount,
+        },
+        inventoryAlertRows,
+      };
+    });
   }
 
   async getOccupancyInsights(hotelId: string, params: RangeInput) {
-    const range = resolveRange(params);
-    const [rooms, activeReservations, periodReservations] = await Promise.all([
-      this.prisma.room.findMany({
-        where: { hotelId },
-        select: { id: true, status: true },
-      }),
-      this.prisma.reservation.findMany({
-        where: { hotelId, status: { in: ['CHECKED_IN', 'CONFIRMED'] } },
-        select: {
-          totalAmount: true,
-          checkIn: true,
-          checkOut: true,
-        },
-      }),
-      this.prisma.reservation.findMany({
-        where: {
-          hotelId,
-          checkIn: { lte: range.to },
-          checkOut: { gte: range.from },
-          status: { in: ['CHECKED_IN', 'CONFIRMED', 'CHECKED_OUT'] },
-        },
-        select: {
-          totalAmount: true,
-          checkIn: true,
-          checkOut: true,
-          room: { select: { type: true } },
-        },
-      }),
-    ]);
+    return this.cacheReportAggregate(hotelId, 'occupancy', params, async () => {
+      const range = resolveRange(params);
+      const [rooms, activeReservations, periodReservations] = await Promise.all([
+        this.prisma.room.findMany({
+          where: { hotelId },
+          select: { id: true, status: true },
+        }),
+        this.prisma.reservation.findMany({
+          where: { hotelId, status: { in: ['CHECKED_IN', 'CONFIRMED'] } },
+          select: {
+            totalAmount: true,
+            checkIn: true,
+            checkOut: true,
+          },
+        }),
+        this.prisma.reservation.findMany({
+          where: {
+            hotelId,
+            checkIn: { lte: range.to },
+            checkOut: { gte: range.from },
+            status: { in: ['CHECKED_IN', 'CONFIRMED', 'CHECKED_OUT'] },
+          },
+          select: {
+            totalAmount: true,
+            checkIn: true,
+            checkOut: true,
+            room: { select: { type: true } },
+          },
+        }),
+      ]);
 
-    const totalRooms = rooms.length;
-    const occupiedRooms = rooms.filter((room) => room.status === 'OCCUPIED').length;
-    const adr = activeReservations.length
-      ? Math.round(
-          activeReservations.reduce((sum, reservation) => {
-            const nights = Math.max(dayjs(reservation.checkOut).diff(dayjs(reservation.checkIn), 'day'), 1);
-            return sum + money(reservation.totalAmount) / nights;
-          }, 0) / activeReservations.length,
-        )
-      : 0;
-    const revPar = Math.round((adr * percent(occupiedRooms, totalRooms)) / 100);
-
-    const dayCount = Math.max(dayjs(range.to).diff(dayjs(range.from), 'day') + 1, 1);
-    const occupancyData = Array.from({ length: dayCount }).map((_, index) => {
-      const date = dayjs(range.from).add(index, 'day');
-      const overlapping = periodReservations.filter((reservation) => {
-        const checkIn = dayjs(reservation.checkIn).startOf('day');
-        const checkOut = dayjs(reservation.checkOut).startOf('day');
-        return (date.isAfter(checkIn) || date.isSame(checkIn, 'day')) && date.isBefore(checkOut);
-      });
-      const dailyAdr = overlapping.length
+      const totalRooms = rooms.length;
+      const occupiedRooms = rooms.filter((room) => room.status === 'OCCUPIED').length;
+      const adr = activeReservations.length
         ? Math.round(
-            overlapping.reduce((sum, reservation) => {
+            activeReservations.reduce((sum, reservation) => {
               const nights = Math.max(dayjs(reservation.checkOut).diff(dayjs(reservation.checkIn), 'day'), 1);
               return sum + money(reservation.totalAmount) / nights;
-            }, 0) / overlapping.length,
+            }, 0) / activeReservations.length,
           )
         : 0;
-      const occupancy = percent(overlapping.length, totalRooms);
+      const revPar = Math.round((adr * percent(occupiedRooms, totalRooms)) / 100);
+
+      const dayCount = Math.max(dayjs(range.to).diff(dayjs(range.from), 'day') + 1, 1);
+      const occupancyData = Array.from({ length: dayCount }).map((_, index) => {
+        const date = dayjs(range.from).add(index, 'day');
+        const overlapping = periodReservations.filter((reservation) => {
+          const checkIn = dayjs(reservation.checkIn).startOf('day');
+          const checkOut = dayjs(reservation.checkOut).startOf('day');
+          return (date.isAfter(checkIn) || date.isSame(checkIn, 'day')) && date.isBefore(checkOut);
+        });
+        const dailyAdr = overlapping.length
+          ? Math.round(
+              overlapping.reduce((sum, reservation) => {
+                const nights = Math.max(dayjs(reservation.checkOut).diff(dayjs(reservation.checkIn), 'day'), 1);
+                return sum + money(reservation.totalAmount) / nights;
+              }, 0) / overlapping.length,
+            )
+          : 0;
+        const occupancy = percent(overlapping.length, totalRooms);
+        return {
+          month: date.format('MMM D'),
+          occupancy,
+          adr: dailyAdr,
+          revpar: Math.round((dailyAdr * occupancy) / 100),
+        };
+      });
+
+      const roomTypeMap = new Map<string, { type: string; revenue: number; nights: number; adr: number }>();
+      periodReservations.forEach((reservation) => {
+        const roomType = reservation.room?.type ?? 'Unknown';
+        const nights = Math.max(dayjs(reservation.checkOut).diff(dayjs(reservation.checkIn), 'day'), 1);
+        const revenue = money(reservation.totalAmount);
+        const bucket = roomTypeMap.get(roomType) ?? { type: roomType, revenue: 0, nights: 0, adr: 0 };
+        bucket.revenue += revenue;
+        bucket.nights += nights;
+        bucket.adr = bucket.nights ? Math.round(bucket.revenue / bucket.nights) : 0;
+        roomTypeMap.set(roomType, bucket);
+      });
+
       return {
-        month: date.format('MMM D'),
-        occupancy,
-        adr: dailyAdr,
-        revpar: Math.round((dailyAdr * occupancy) / 100),
+        range: rangePayload(range),
+        summary: {
+          occupancyRate: percent(occupiedRooms, totalRooms),
+          occupiedRooms,
+          checkedIn: activeReservations.length,
+          adr,
+          revPar,
+        },
+        occupancyData,
+        roomTypeRevenue: Array.from(roomTypeMap.values()).sort((a, b) => b.revenue - a.revenue),
       };
     });
+  }
 
-    const roomTypeMap = new Map<string, { type: string; revenue: number; nights: number; adr: number }>();
-    periodReservations.forEach((reservation) => {
-      const roomType = reservation.room?.type ?? 'Unknown';
-      const nights = Math.max(dayjs(reservation.checkOut).diff(dayjs(reservation.checkIn), 'day'), 1);
-      const revenue = money(reservation.totalAmount);
-      const bucket = roomTypeMap.get(roomType) ?? { type: roomType, revenue: 0, nights: 0, adr: 0 };
-      bucket.revenue += revenue;
-      bucket.nights += nights;
-      bucket.adr = bucket.nights ? Math.round(bucket.revenue / bucket.nights) : 0;
-      roomTypeMap.set(roomType, bucket);
-    });
+  private cacheReportAggregate<T>(
+    hotelId: string,
+    reportKey: string,
+    params: RangeInput,
+    resolver: () => Promise<T>,
+  ) {
+    return this.cache.getOrSet(
+      this.reportAggregateCacheKey(hotelId, reportKey, params),
+      REPORT_AGGREGATE_TTL_SECONDS,
+      resolver,
+    );
+  }
 
-    return {
-      range: rangePayload(range),
-      summary: {
-        occupancyRate: percent(occupiedRooms, totalRooms),
-        occupiedRooms,
-        checkedIn: activeReservations.length,
-        adr,
-        revPar,
-      },
-      occupancyData,
-      roomTypeRevenue: Array.from(roomTypeMap.values()).sort((a, b) => b.revenue - a.revenue),
-    };
+  private reportAggregateCacheKey(hotelId: string, reportKey: string, params: RangeInput) {
+    const from = params.from?.trim() || 'default';
+    const to = params.to?.trim() || 'default';
+    return `reports:${reportKey}:${hotelId}:${from}:${to}`;
   }
 }

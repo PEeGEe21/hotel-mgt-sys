@@ -11,6 +11,7 @@ import { GlobalExceptionFilter } from './common/filters/global-exception.filter'
 import { StructuredLogger } from './common/logger/structured-logger';
 import { monitoringNotifier } from './common/monitoring/monitoring.notifier';
 import { RealtimeIoAdapter } from './modules/realtime/realtime.adapter';
+import { RedisService } from './common/redis/redis.service';
 
 async function bootstrap() {
   const logger = new StructuredLogger();
@@ -28,6 +29,7 @@ async function bootstrap() {
   });
   const app = await NestFactory.create(AppModule, { logger });
   const configService = app.get(ConfigService);
+  const redisService = app.get(RedisService);
   const port = configService.get<number>('port') || 4000;
 
   // Global prefix
@@ -44,6 +46,16 @@ async function bootstrap() {
       max: configService.get<number>('rateLimit.max') || 600,
       windowMs: configService.get<number>('rateLimit.windowMs') || 60_000,
       skipPaths: ['/api/v1/health'],
+      redisService,
+      onError: (error) => {
+        logger.warn(
+          {
+            message: 'Rate limiter degraded to fail-open',
+            error: error instanceof Error ? error.message : String(error),
+          },
+          'RateLimitMiddleware',
+        );
+      },
     }),
   );
 
