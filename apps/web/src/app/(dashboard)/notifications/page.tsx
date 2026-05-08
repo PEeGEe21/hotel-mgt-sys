@@ -38,6 +38,7 @@ import {
   resolveNotificationSeverity,
 } from '@/lib/notification-presenter';
 import { cn } from '@/lib/utils';
+import { Checkbox } from '@/components/ui/checkbox';
 
 function formatFullDate(value: string) {
   return new Date(value).toLocaleString('en-NG', {
@@ -82,7 +83,8 @@ export default function NotificationsPage() {
     [],
   );
   const selectedCount = selectedIds.length;
-  const allVisibleSelected = items.length > 0 && items.every((item) => selectedIds.includes(item.id));
+  const allVisibleSelected =
+    items.length > 0 && items.every((item) => selectedIds.includes(item.id));
 
   const toggleSelected = (id: string) => {
     setSelectedIds((current) =>
@@ -107,9 +109,7 @@ export default function NotificationsPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
-            Inbox
-          </p>
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Inbox</p>
           <h1 className="mt-2 text-2xl font-semibold text-white">Notifications</h1>
           <p className="mt-1 text-sm text-slate-400">
             System alerts, reservation activity, and stock warnings show up here.
@@ -132,7 +132,7 @@ export default function NotificationsPage() {
         </div>
       </div>
 
-      {selectedCount > 0 && (
+      {/* {selectedCount > 0 && (
         <Card className="border-[#1e2536] bg-[#161b27] text-white shadow-none">
           <CardContent className="flex flex-wrap items-center gap-2 p-4">
             <span className="text-sm text-slate-300">{selectedCount} selected</span>
@@ -177,18 +177,23 @@ export default function NotificationsPage() {
               }
               className="!border-[#1e2536] bg-[#0f1117] text-slate-200 hover:bg-white/5 hover:text-white"
             >
-              {view === 'pinned' ? <PinOff className="mr-2 h-4 w-4" /> : <Pin className="mr-2 h-4 w-4" />}
+              {view === 'pinned' ? (
+                <PinOff className="mr-2 h-4 w-4" />
+              ) : (
+                <Pin className="mr-2 h-4 w-4" />
+              )}
               {view === 'pinned' ? 'Unpin selected' : 'Pin selected'}
             </Button>
           </CardContent>
         </Card>
-      )}
+      )} */}
 
       <Card className="border-[#1e2536] bg-[#161b27] text-white shadow-none pb-0">
         <CardHeader className="border-b border-[#1e2536]">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <CardTitle className="text-base font-semibold">Recent activity</CardTitle>
-            <div className="flex flex-col gap-3">
+            {/* <CardTitle className="text-base font-semibold">Recent activity</CardTitle> */}
+
+            <div className="flex flex-wrap gap-3">
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
@@ -262,6 +267,60 @@ export default function NotificationsPage() {
                 ))}
               </select>
             </div>
+
+            {selectedCount > 0 && (
+              <CardContent className="flex flex-wrap items-center gap-2 p-4">
+                <span className="text-sm text-slate-300">{selectedCount} selected</span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => bulkAction.mutate({ action: 'read', ids: selectedIds })}
+                  className="!border-[#1e2536] bg-[#0f1117] text-slate-200 hover:bg-white/5 hover:text-white"
+                >
+                  <CheckCheck className="mr-2 h-4 w-4" />
+                  Mark selected as read
+                </Button>
+                {view === 'archived' ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => bulkAction.mutate({ action: 'unarchive', ids: selectedIds })}
+                    className="!border-[#1e2536] bg-[#0f1117] text-slate-200 hover:bg-white/5 hover:text-white"
+                  >
+                    <ArchiveRestore className="mr-2 h-4 w-4" />
+                    Restore selected
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => bulkAction.mutate({ action: 'archive', ids: selectedIds })}
+                    className="!border-[#1e2536] bg-[#0f1117] text-slate-200 hover:bg-white/5 hover:text-white"
+                  >
+                    <ArchiveX className="mr-2 h-4 w-4" />
+                    Archive selected
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() =>
+                    bulkAction.mutate({
+                      action: view === 'pinned' ? 'unpin' : 'pin',
+                      ids: selectedIds,
+                    })
+                  }
+                  className="!border-[#1e2536] bg-[#0f1117] text-slate-200 hover:bg-white/5 hover:text-white"
+                >
+                  {view === 'pinned' ? (
+                    <PinOff className="mr-2 h-4 w-4" />
+                  ) : (
+                    <Pin className="mr-2 h-4 w-4" />
+                  )}
+                  {view === 'pinned' ? 'Unpin selected' : 'Pin selected'}
+                </Button>
+              </CardContent>
+            )}
           </div>
         </CardHeader>
         <CardContent className="p-0">
@@ -289,15 +348,18 @@ export default function NotificationsPage() {
             <div className="divide-y divide-[#1e2536]">
               <div className="flex items-center justify-between border-b border-[#1e2536] bg-[#0f1117]/40 px-6 py-3 text-xs text-slate-500">
                 <label className="flex items-center gap-2">
-                  <input
+                  <Checkbox onCheckedChange={toggleSelectAllVisible} checked={allVisibleSelected} className='border-[#2a3448] !bg-[#0f1117] text-blue-500' />
+                  {/* <input
                     type="checkbox"
                     checked={allVisibleSelected}
                     onChange={toggleSelectAllVisible}
                     className="h-4 w-4 rounded border-[#2a3448] bg-[#0f1117] text-blue-500"
-                  />
+                  /> */}
                   Select visible
                 </label>
-                <span>{items.length} item{items.length === 1 ? '' : 's'} on this page</span>
+                <span>
+                  {items.length} item{items.length === 1 ? '' : 's'} on this page
+                </span>
               </div>
               {items.map((item) => {
                 const unread = !item.readAt;
@@ -384,7 +446,9 @@ export default function NotificationsPage() {
                           )}
                         </div>
                       )}
-                      <p className="mt-3 text-xs text-slate-500">{formatFullDate(item.createdAt)}</p>
+                      <p className="mt-3 text-xs text-slate-500">
+                        {formatFullDate(item.createdAt)}
+                      </p>
                     </div>
 
                     <div className="flex shrink-0 flex-wrap items-center gap-3">

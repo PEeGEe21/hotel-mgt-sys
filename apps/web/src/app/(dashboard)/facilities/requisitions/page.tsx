@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Plus, Search, X } from 'lucide-react';
 import { useDebounce } from '@/hooks/useDebounce';
 import { useFacilities } from '@/hooks/facility/useFacility';
+import { useCreateRequisitionInvoice } from '@/hooks/finance/useFinance';
 import {
   FacilityRequisition,
   useCreateFacilityRequisition,
@@ -102,6 +103,7 @@ export default function FacilityRequisitionsPage() {
     status: filter === 'All' ? undefined : filter,
   });
   const createRequisition = useCreateFacilityRequisition();
+  const createRequisitionInvoice = useCreateRequisitionInvoice();
   const updateStatus = useUpdateFacilityRequisitionStatus();
   const { data: facilitiesData } = useFacilities({ page: 1, limit: 100 });
   const { data: staffData } = useStaff({ page: 1, limit: 200 });
@@ -346,7 +348,12 @@ export default function FacilityRequisitionsPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex gap-1">
+                    <div className="flex flex-wrap gap-1">
+                      {r.invoice ? (
+                        <span className="text-xs bg-violet-500/15 text-violet-300 px-2 py-1 rounded-lg font-medium">
+                          {r.invoice.invoiceNo}
+                        </span>
+                      ) : null}
                       {r.status === 'PENDING' && (
                         <>
                           <button
@@ -366,13 +373,24 @@ export default function FacilityRequisitionsPage() {
                         </>
                       )}
                       {r.status === 'APPROVED' && (
-                        <button
-                          onClick={() => handleStatus(r.id, 'FULFILLED')}
-                          disabled={updateStatus.isPending}
-                          className="text-xs bg-blue-500/15 text-blue-400 hover:bg-blue-500/25 px-2 py-1 rounded-lg transition-colors font-medium disabled:opacity-60"
-                        >
-                          Fulfill
-                        </button>
+                        <>
+                          {!r.invoiceId ? (
+                            <button
+                              onClick={() => createRequisitionInvoice.mutate(r.id)}
+                              disabled={createRequisitionInvoice.isPending}
+                              className="text-xs bg-violet-500/15 text-violet-300 hover:bg-violet-500/25 px-2 py-1 rounded-lg transition-colors font-medium disabled:opacity-60"
+                            >
+                              Create Expense Invoice
+                            </button>
+                          ) : null}
+                          <button
+                            onClick={() => handleStatus(r.id, 'FULFILLED')}
+                            disabled={updateStatus.isPending}
+                            className="text-xs bg-blue-500/15 text-blue-400 hover:bg-blue-500/25 px-2 py-1 rounded-lg transition-colors font-medium disabled:opacity-60"
+                          >
+                            Fulfill
+                          </button>
+                        </>
                       )}
                     </div>
                   </td>

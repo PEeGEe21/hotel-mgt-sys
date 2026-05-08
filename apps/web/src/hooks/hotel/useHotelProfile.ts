@@ -36,6 +36,14 @@ export type HotelProfile = {
   autoCreateCheckoutHousekeepingTasks: boolean;
   housekeepingFollowUpEnabled?: boolean;
   housekeepingFollowUpGraceHours?: number;
+  invoiceTemplateSettings?: {
+    accentColor: string;
+    headerTitle: string;
+    footerNote: string;
+    showLogo: boolean;
+    showTaxBreakdown: boolean;
+    showNotes: boolean;
+  };
   cronSettings?: {
     attendanceAbsenceScanEnabled: boolean;
     attendanceAbsenceScanHour: number;
@@ -156,6 +164,8 @@ export function useUpdateHotelProfile() {
         autoCreateCheckoutHousekeepingTasks: data.autoCreateCheckoutHousekeepingTasks,
         housekeepingFollowUpEnabled: data.housekeepingFollowUpEnabled,
         housekeepingFollowUpGraceHours: data.housekeepingFollowUpGraceHours,
+        invoiceTemplateSettings: data.invoiceTemplateSettings,
+        cronSettings: data.cronSettings,
       });
       openToast('success', 'Hotel profile updated');
     },

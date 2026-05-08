@@ -872,7 +872,7 @@ function NotificationsTab() {
   }, [testEvent, visibleKeys]);
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 relative">
       <div>
         <div className="space-y-5">
           <div className="bg-[#161b27] border border-[#1e2536] rounded-xl overflow-hidden">
@@ -962,305 +962,307 @@ function NotificationsTab() {
         </div>
       </div>
 
-      <div className="space-y-5">
-        <div className="rounded-xl border border-[#1e2536] bg-[#161b27] p-5">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <p className="text-sm font-semibold text-slate-200">In-app notification sound</p>
-              <p className="mt-1 text-xs text-slate-500">
-                Play a default chime when a new realtime notification arrives while you are using
-                the app.
-              </p>
+      <div className="relative">
+        <div className="space-y-5 sticky top-0">
+          <div className="rounded-xl border border-[#1e2536] bg-[#161b27] p-5">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold text-slate-200">In-app notification sound</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Play a default chime when a new realtime notification arrives while you are using
+                  the app.
+                </p>
+              </div>
+              <Switch
+                checked={inAppSoundEnabled}
+                onCheckedChange={(checked) => {
+                  const enabled = Boolean(checked);
+                  setInAppSoundEnabledState(enabled);
+                  setInAppNotificationSoundEnabled(enabled);
+                }}
+                className="data-[state=checked]:bg-blue-600 data-[state=unchecked]:bg-[#0f1117] border border-[#1e2536]"
+                aria-label="Toggle in-app notification sound"
+              />
             </div>
-            <Switch
-              checked={inAppSoundEnabled}
-              onCheckedChange={(checked) => {
-                const enabled = Boolean(checked);
-                setInAppSoundEnabledState(enabled);
-                setInAppNotificationSoundEnabled(enabled);
-              }}
-              className="data-[state=checked]:bg-blue-600 data-[state=unchecked]:bg-[#0f1117] border border-[#1e2536]"
-              aria-label="Toggle in-app notification sound"
-            />
           </div>
-        </div>
 
-        {canSendTestNotification && (
+          {canSendTestNotification && (
+            <div className="rounded-xl border border-[#1e2536] bg-[#161b27] p-5">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-slate-200">Test notification trigger</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Send a test notification to yourself using one of your allowed event types to
+                    verify inbox, sound, push, and email behavior.
+                  </p>
+                </div>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <select
+                    value={testEvent}
+                    onChange={(e) => setTestEvent(e.target.value as NotificationEvent)}
+                    className="rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-2 text-sm text-slate-300 outline-none"
+                  >
+                    {visibleKeys.map((key) => (
+                      <option key={key} value={key}>
+                        {labels[key].label}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await sendTestNotification.mutateAsync(testEvent);
+                    }}
+                    disabled={!visibleKeys.length || sendTestNotification.isPending}
+                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60 whitespace-nowrap"
+                  >
+                    {sendTestNotification.isPending ? 'Sending...' : 'Send test notification'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="rounded-xl border border-[#1e2536] bg-[#161b27] p-5">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <p className="text-sm font-semibold text-slate-200">Test notification trigger</p>
+                <p className="text-sm font-semibold text-slate-200">Browser push delivery</p>
                 <p className="mt-1 text-xs text-slate-500">
-                  Send a test notification to yourself using one of your allowed event types to
-                  verify inbox, sound, push, and email behavior.
-                </p>
-              </div>
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <select
-                  value={testEvent}
-                  onChange={(e) => setTestEvent(e.target.value as NotificationEvent)}
-                  className="rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-2 text-sm text-slate-300 outline-none"
-                >
-                  {visibleKeys.map((key) => (
-                    <option key={key} value={key}>
-                      {labels[key].label}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    await sendTestNotification.mutateAsync(testEvent);
-                  }}
-                  disabled={!visibleKeys.length || sendTestNotification.isPending}
-                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60 whitespace-nowrap"
-                >
-                  {sendTestNotification.isPending ? 'Sending...' : 'Send test notification'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div className="rounded-xl border border-[#1e2536] bg-[#161b27] p-5">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <p className="text-sm font-semibold text-slate-200">Browser push delivery</p>
-              <p className="mt-1 text-xs text-slate-500">
-                Enable device-level notifications from this browser for real push delivery when your
-                push preferences are turned on.
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full border border-[#1e2536] bg-[#0f1117] px-3 py-1.5 text-xs text-slate-400">
-                {pushSupported ? `Permission: ${pushPermission}` : 'Push unsupported'}
-              </span>
-              <span
-                className={`rounded-full border px-3 py-1.5 text-xs ${
-                  pushSubscribed
-                    ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
-                    : 'border-amber-500/20 bg-amber-500/10 text-amber-300'
-                }`}
-              >
-                {pushSubscribed ? 'Subscribed' : 'Not subscribed'}
-              </span>
-            </div>
-          </div>
-
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={async () => {
-                if (!pushSettings?.enabled || !pushSettings.publicKey) {
-                  openToast('error', 'Web push is not configured on the server yet.');
-                  return;
-                }
-                await enablePush.mutateAsync(pushSettings.publicKey);
-              }}
-              disabled={!pushSupported || !pushSettings?.enabled || enablePush.isPending}
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {enablePush.isPending ? 'Enabling...' : 'Enable browser push'}
-            </button>
-            <button
-              type="button"
-              onClick={async () => {
-                await disablePush.mutateAsync();
-              }}
-              disabled={!pushSupported || disablePush.isPending}
-              className="rounded-lg border border-[#1e2536] bg-[#0f1117] px-4 py-2 text-sm font-semibold text-slate-300 transition-colors hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {disablePush.isPending ? 'Disabling...' : 'Disable browser push'}
-            </button>
-          </div>
-        </div>
-
-        {canSendTestNotification && (
-          <div className="rounded-xl border border-[#1e2536] bg-[#161b27] p-5">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-              <div>
-                <p className="text-sm font-semibold text-slate-200">Push reliability</p>
-                <p className="mt-1 text-xs text-slate-500">
-                  Review active subscription health and the most recent browser push delivery
-                  outcomes for this account.
+                  Enable device-level notifications from this browser for real push delivery when
+                  your push preferences are turned on.
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full border border-[#1e2536] bg-[#0f1117] px-3 py-1.5 text-xs text-slate-300">
-                  Active subscriptions: {pushStatus?.summary.totalSubscriptions ?? 0}
+                <span className="rounded-full border border-[#1e2536] bg-[#0f1117] px-3 py-1.5 text-xs text-slate-400">
+                  {pushSupported ? `Permission: ${pushPermission}` : 'Push unsupported'}
                 </span>
-                <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-300">
-                  Healthy: {pushStatus?.summary.healthySubscriptions ?? 0}
-                </span>
-                <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-300">
-                  Never tested: {pushStatus?.summary.neverTestedSubscriptions ?? 0}
-                </span>
-                <span className="rounded-full border border-rose-500/20 bg-rose-500/10 px-3 py-1.5 text-xs text-rose-300">
-                  Failing: {pushStatus?.summary.failingSubscriptions ?? 0}
+                <span
+                  className={`rounded-full border px-3 py-1.5 text-xs ${
+                    pushSubscribed
+                      ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
+                      : 'border-amber-500/20 bg-amber-500/10 text-amber-300'
+                  }`}
+                >
+                  {pushSubscribed ? 'Subscribed' : 'Not subscribed'}
                 </span>
               </div>
             </div>
 
-            <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-              <div className="rounded-xl border border-[#1e2536] bg-[#0f1117] p-4">
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Subscription health
-                </p>
-                {pushStatusLoading ? (
-                  <p className="mt-3 text-sm text-slate-500">Loading push health...</p>
-                ) : !pushStatus?.subscriptions.length ? (
-                  <p className="mt-3 text-sm text-slate-500">
-                    No active browser push subscriptions yet on this account.
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!pushSettings?.enabled || !pushSettings.publicKey) {
+                    openToast('error', 'Web push is not configured on the server yet.');
+                    return;
+                  }
+                  await enablePush.mutateAsync(pushSettings.publicKey);
+                }}
+                disabled={!pushSupported || !pushSettings?.enabled || enablePush.isPending}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {enablePush.isPending ? 'Enabling...' : 'Enable browser push'}
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  await disablePush.mutateAsync();
+                }}
+                disabled={!pushSupported || disablePush.isPending}
+                className="rounded-lg border border-[#1e2536] bg-[#0f1117] px-4 py-2 text-sm font-semibold text-slate-300 transition-colors hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {disablePush.isPending ? 'Disabling...' : 'Disable browser push'}
+              </button>
+            </div>
+          </div>
+
+          {canSendTestNotification && (
+            <div className="rounded-xl border border-[#1e2536] bg-[#161b27] p-5">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-slate-200">Push reliability</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Review active subscription health and the most recent browser push delivery
+                    outcomes for this account.
                   </p>
-                ) : (
-                  <div className="mt-3 space-y-3">
-                    {pushStatus.subscriptions.map((subscription) => (
-                      <div
-                        key={subscription.id}
-                        className="rounded-lg border border-[#1e2536] bg-[#161b27] p-3"
-                      >
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                          <div>
-                            <p className="text-sm font-medium text-slate-200">
-                              {subscription.endpointPreview}
-                            </p>
-                            <p className="mt-1 text-xs text-slate-500">
-                              {subscription.userAgent || 'Unknown browser'}
-                            </p>
-                          </div>
-                          <span
-                            className={`rounded-full border px-2.5 py-1 text-[11px] uppercase tracking-wider ${
-                              subscription.health === 'healthy'
-                                ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
-                                : subscription.health === 'failing'
-                                  ? 'border-rose-500/20 bg-rose-500/10 text-rose-300'
-                                  : 'border-amber-500/20 bg-amber-500/10 text-amber-300'
-                            }`}
-                          >
-                            {subscription.health === 'never_tested'
-                              ? 'Never tested'
-                              : subscription.health}
-                          </span>
-                        </div>
-                        <div className="mt-3 grid gap-2 text-xs text-slate-400 md:grid-cols-2">
-                          <p>Last attempt: {formatDateTime(subscription.lastAttemptAt)}</p>
-                          <p>Last success: {formatDateTime(subscription.lastSuccessAt)}</p>
-                          <p>Last event: {subscription.lastDeliveredEvent ?? '—'}</p>
-                          <p>Registered: {formatDateTime(subscription.createdAt)}</p>
-                        </div>
-                        {subscription.lastFailureReason && (
-                          <p className="mt-3 rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
-                            Last failure
-                            {subscription.lastFailureStatusCode
-                              ? ` (${subscription.lastFailureStatusCode})`
-                              : ''}
-                            : {subscription.lastFailureReason}
-                          </p>
-                        )}
-                        <div className="mt-3 flex justify-end">
-                          <button
-                            type="button"
-                            onClick={() => removePushSubscriptionEntry.mutate(subscription.id)}
-                            disabled={removePushSubscriptionEntry.isPending}
-                            className="rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-2 text-xs font-medium text-slate-300 transition-colors hover:bg-white/5 disabled:opacity-50"
-                          >
-                            Remove device subscription
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-full border border-[#1e2536] bg-[#0f1117] px-3 py-1.5 text-xs text-slate-300">
+                    Active subscriptions: {pushStatus?.summary.totalSubscriptions ?? 0}
+                  </span>
+                  <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-300">
+                    Healthy: {pushStatus?.summary.healthySubscriptions ?? 0}
+                  </span>
+                  <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-300">
+                    Never tested: {pushStatus?.summary.neverTestedSubscriptions ?? 0}
+                  </span>
+                  <span className="rounded-full border border-rose-500/20 bg-rose-500/10 px-3 py-1.5 text-xs text-rose-300">
+                    Failing: {pushStatus?.summary.failingSubscriptions ?? 0}
+                  </span>
+                </div>
               </div>
 
-              <div className="space-y-4">
+              <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
                 <div className="rounded-xl border border-[#1e2536] bg-[#0f1117] p-4">
                   <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Last push test result
+                    Subscription health
                   </p>
-                  {!lastPushTestResult ? (
+                  {pushStatusLoading ? (
+                    <p className="mt-3 text-sm text-slate-500">Loading push health...</p>
+                  ) : !pushStatus?.subscriptions.length ? (
                     <p className="mt-3 text-sm text-slate-500">
-                      No push test result recorded yet. Use the test notification trigger after
-                      enabling browser push.
+                      No active browser push subscriptions yet on this account.
                     </p>
                   ) : (
                     <div className="mt-3 space-y-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-medium text-slate-200">
-                            {lastPushTestResult.title}
-                          </p>
-                          <p className="mt-1 text-xs text-slate-500">
-                            {formatDateTime(
-                              lastPushTestResult.deliveredAt ?? lastPushTestResult.createdAt,
-                            )}
-                          </p>
-                        </div>
-                        <span
-                          className={`rounded-full border px-2.5 py-1 text-[11px] uppercase tracking-wider ${
-                            lastPushTestResult.status === 'delivered'
-                              ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
-                              : 'border-rose-500/20 bg-rose-500/10 text-rose-300'
-                          }`}
-                        >
-                          {lastPushTestResult.status}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-400">
-                        Endpoint: {lastPushTestResult.endpointPreview}
-                      </p>
-                      {lastPushTestResult.failureReason && (
-                        <p className="rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
-                          {lastPushTestResult.failureStatusCode
-                            ? `HTTP ${lastPushTestResult.failureStatusCode}: `
-                            : ''}
-                          {lastPushTestResult.failureReason}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                <div className="rounded-xl border border-[#1e2536] bg-[#0f1117] p-4">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Recent push deliveries
-                  </p>
-                  {!pushStatus?.recentDeliveries.length ? (
-                    <p className="mt-3 text-sm text-slate-500">
-                      No recent push delivery attempts yet.
-                    </p>
-                  ) : (
-                    <div className="mt-3 space-y-2 max-h-60 overflow-y-auto">
-                      {pushStatus.recentDeliveries.slice(0, 5).map((delivery) => (
+                      {pushStatus.subscriptions.map((subscription) => (
                         <div
-                          key={delivery.id}
-                          className="flex items-start justify-between gap-3 rounded-lg border border-[#1e2536] bg-[#161b27] px-3 py-2.5 flex-wrap"
+                          key={subscription.id}
+                          className="rounded-lg border border-[#1e2536] bg-[#161b27] p-3"
                         >
-                          <div>
-                            <p className="text-sm text-slate-200">{delivery.title}</p>
-                            <p className="mt-1 text-xs text-slate-500">
-                              {delivery.endpointPreview} •{' '}
-                              {formatDateTime(delivery.deliveredAt ?? delivery.createdAt)}
-                            </p>
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                            <div>
+                              <p className="text-sm font-medium text-slate-200">
+                                {subscription.endpointPreview}
+                              </p>
+                              <p className="mt-1 text-xs text-slate-500">
+                                {subscription.userAgent || 'Unknown browser'}
+                              </p>
+                            </div>
+                            <span
+                              className={`rounded-full border px-2.5 py-1 text-[11px] uppercase tracking-wider ${
+                                subscription.health === 'healthy'
+                                  ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
+                                  : subscription.health === 'failing'
+                                    ? 'border-rose-500/20 bg-rose-500/10 text-rose-300'
+                                    : 'border-amber-500/20 bg-amber-500/10 text-amber-300'
+                              }`}
+                            >
+                              {subscription.health === 'never_tested'
+                                ? 'Never tested'
+                                : subscription.health}
+                            </span>
                           </div>
-                          <span
-                            className={`rounded-full border px-2 py-1 text-[11px] uppercase tracking-wider ${
-                              delivery.status === 'delivered'
-                                ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
-                                : 'border-rose-500/20 bg-rose-500/10 text-rose-300'
-                            }`}
-                          >
-                            {delivery.status}
-                          </span>
+                          <div className="mt-3 grid gap-2 text-xs text-slate-400 md:grid-cols-2">
+                            <p>Last attempt: {formatDateTime(subscription.lastAttemptAt)}</p>
+                            <p>Last success: {formatDateTime(subscription.lastSuccessAt)}</p>
+                            <p>Last event: {subscription.lastDeliveredEvent ?? '—'}</p>
+                            <p>Registered: {formatDateTime(subscription.createdAt)}</p>
+                          </div>
+                          {subscription.lastFailureReason && (
+                            <p className="mt-3 rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
+                              Last failure
+                              {subscription.lastFailureStatusCode
+                                ? ` (${subscription.lastFailureStatusCode})`
+                                : ''}
+                              : {subscription.lastFailureReason}
+                            </p>
+                          )}
+                          <div className="mt-3 flex justify-end">
+                            <button
+                              type="button"
+                              onClick={() => removePushSubscriptionEntry.mutate(subscription.id)}
+                              disabled={removePushSubscriptionEntry.isPending}
+                              className="rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-2 text-xs font-medium text-slate-300 transition-colors hover:bg-white/5 disabled:opacity-50"
+                            >
+                              Remove device subscription
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
                   )}
                 </div>
+
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-[#1e2536] bg-[#0f1117] p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                      Last push test result
+                    </p>
+                    {!lastPushTestResult ? (
+                      <p className="mt-3 text-sm text-slate-500">
+                        No push test result recorded yet. Use the test notification trigger after
+                        enabling browser push.
+                      </p>
+                    ) : (
+                      <div className="mt-3 space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-medium text-slate-200">
+                              {lastPushTestResult.title}
+                            </p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              {formatDateTime(
+                                lastPushTestResult.deliveredAt ?? lastPushTestResult.createdAt,
+                              )}
+                            </p>
+                          </div>
+                          <span
+                            className={`rounded-full border px-2.5 py-1 text-[11px] uppercase tracking-wider ${
+                              lastPushTestResult.status === 'delivered'
+                                ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
+                                : 'border-rose-500/20 bg-rose-500/10 text-rose-300'
+                            }`}
+                          >
+                            {lastPushTestResult.status}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-400">
+                          Endpoint: {lastPushTestResult.endpointPreview}
+                        </p>
+                        {lastPushTestResult.failureReason && (
+                          <p className="rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
+                            {lastPushTestResult.failureStatusCode
+                              ? `HTTP ${lastPushTestResult.failureStatusCode}: `
+                              : ''}
+                            {lastPushTestResult.failureReason}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="rounded-xl border border-[#1e2536] bg-[#0f1117] p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                      Recent push deliveries
+                    </p>
+                    {!pushStatus?.recentDeliveries.length ? (
+                      <p className="mt-3 text-sm text-slate-500">
+                        No recent push delivery attempts yet.
+                      </p>
+                    ) : (
+                      <div className="mt-3 space-y-2 max-h-60 overflow-y-auto">
+                        {pushStatus.recentDeliveries.slice(0, 5).map((delivery) => (
+                          <div
+                            key={delivery.id}
+                            className="flex items-start justify-between gap-3 rounded-lg border border-[#1e2536] bg-[#161b27] px-3 py-2.5 flex-wrap"
+                          >
+                            <div>
+                              <p className="text-sm text-slate-200">{delivery.title}</p>
+                              <p className="mt-1 text-xs text-slate-500">
+                                {delivery.endpointPreview} •{' '}
+                                {formatDateTime(delivery.deliveredAt ?? delivery.createdAt)}
+                              </p>
+                            </div>
+                            <span
+                              className={`rounded-full border px-2 py-1 text-[11px] uppercase tracking-wider ${
+                                delivery.status === 'delivered'
+                                  ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
+                                  : 'border-rose-500/20 bg-rose-500/10 text-rose-300'
+                              }`}
+                            >
+                              {delivery.status}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
@@ -1407,7 +1409,12 @@ function SessionsTab({ lastLogin }: { lastLogin: string }) {
             disabled={revokeOtherSessions.isPending}
             className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 px-3 py-1.5 rounded-lg font-medium transition-colors"
           >
-            {revokeOtherSessions.isPending ? <Loader2 size={12} className="animate-spin" /> : <LogOut size={12} />} Sign out all other sessions
+            {revokeOtherSessions.isPending ? (
+              <Loader2 size={12} className="animate-spin" />
+            ) : (
+              <LogOut size={12} />
+            )}{' '}
+            Sign out all other sessions
           </button>
         )}
       </div>
@@ -1471,7 +1478,12 @@ function SessionsTab({ lastLogin }: { lastLogin: string }) {
                   disabled={revokeSession.isPending}
                   className="text-xs text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 px-3 py-1.5 rounded-lg font-medium transition-colors whitespace-nowrap flex items-center gap-1 shrink-0"
                 >
-                  {revokeSession.isPending ? <Loader2 size={11} className="animate-spin" /> : <X size={11} />} Revoke
+                  {revokeSession.isPending ? (
+                    <Loader2 size={11} className="animate-spin" />
+                  ) : (
+                    <X size={11} />
+                  )}{' '}
+                  Revoke
                 </button>
               )}
             </div>

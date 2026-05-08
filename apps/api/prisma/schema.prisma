@@ -181,6 +181,7 @@ model Hotel {
   autoCreateCheckoutHousekeepingTasks Boolean  @default(true)
   housekeepingFollowUpEnabled         Boolean  @default(false)
   housekeepingFollowUpGraceHours      Int      @default(2)
+  invoiceTemplateSettings             Json?
   createdAt                           DateTime @default(now())
   updatedAt                           DateTime @updatedAt
 
@@ -213,6 +214,8 @@ model Hotel {
   suppliers               Supplier[]
   shiftTemplates          ShiftTemplate[]
   roomTypeConfigs         RoomTypeConfig[]
+  invoices                Invoice[]
+  payments                Payment[]
   rolePermissions         RolePermission[]
   permissionAuditLogs     PermissionAuditLog[]
   accounts                Account[]
@@ -932,11 +935,14 @@ model Invoice {
   total             Decimal
   type              String        @default("RESERVATION") // RESERVATION | POS | FACILITY | MANUAL
   paymentStatus     PaymentStatus @default(UNPAID)
+  counterpartyName  String?
   notes             String?
 
+  hotel           Hotel            @relation(fields: [hotelId], references: [id])
   reservation     Reservation?     @relation(fields: [reservationId], references: [id])
   posOrder        PosOrder?        @relation(fields: [posOrderId], references: [id])
   facilityBooking FacilityBooking? @relation("FacilityBookingInvoice", fields: [facilityBookingId], references: [id])
+  facilityRequisition FacilityRequisition? @relation("FacilityRequisitionInvoice")
   payments        Payment[]
 
   @@index([hotelId])
@@ -954,6 +960,7 @@ model Payment {
   paidAt    DateTime @default(now())
   note      String?
 
+  hotel   Hotel   @relation(fields: [hotelId], references: [id])
   invoice Invoice @relation(fields: [invoiceId], references: [id])
 
   @@index([hotelId])
@@ -1388,6 +1395,7 @@ model FacilityRequisition {
   status          String // PENDING, APPROVED, REJECTED, FULFILLED, CANCELLED
   items           Json
   estimatedTotal  Decimal?
+  invoiceId       String?   
   approvedBy      String?
   approvedAt      DateTime?
   fulfilledAt     DateTime?
@@ -1398,12 +1406,14 @@ model FacilityRequisition {
 
   hotel            Hotel    @relation(fields: [hotelId], references: [id])
   facility         Facility @relation(fields: [facilityId], references: [id])
+  invoice          Invoice? @relation("FacilityRequisitionInvoice", fields: [invoiceId], references: [id])
   requestedByStaff Staff    @relation("FacilityRequisitionRequestedBy", fields: [requestedBy], references: [id])
   approvedByStaff  Staff?   @relation("FacilityRequisitionApprovedBy", fields: [approvedBy], references: [id])
 
   @@index([hotelId])
   @@index([hotelId, facilityId])
   @@index([hotelId, status])
+  @@unique([invoiceId])
 }
 
 model MaintenanceRequest {

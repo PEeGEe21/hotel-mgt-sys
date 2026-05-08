@@ -1035,6 +1035,13 @@ export class FacilitiesService {
         orderBy: { createdAt: 'desc' },
         include: {
           facility: true,
+          invoice: {
+            select: {
+              id: true,
+              invoiceNo: true,
+              paymentStatus: true,
+            },
+          },
           requestedByStaff: { select: { id: true, firstName: true, lastName: true } },
           approvedByStaff: { select: { id: true, firstName: true, lastName: true } },
         },

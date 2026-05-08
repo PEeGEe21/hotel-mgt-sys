@@ -1,9 +1,10 @@
 'use client';
 import Link from 'next/link';
-import { Search, User, LogOut, ChevronDown, Menu } from 'lucide-react';
+import { Search, User, ChevronDown, Menu } from 'lucide-react';
 import { useAuthStore } from '@/store/auth.store';
 import { useHydration } from '@/hooks/useHydration';
 import NotificationInboxBell from '@/components/layout/NotificationInboxBell';
+import SignOutButton from '@/components/auth/SignOutButton';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,7 +15,6 @@ import {
 
 export default function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
   const user = useAuthStore((s) => s.user);
-  const logout = useAuthStore((s) => s.logout);
   const hydrated = useHydration();
 
   const initials = user?.name
@@ -93,8 +93,11 @@ export default function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
                 </Link>
               </DropdownMenuItem> */}
               <DropdownMenuSeparator className="bg-[#161b27]" />
-              <DropdownMenuItem onClick={logout} className="text-red-400 focus:text-red-400 cursor-pointer hover:!bg-white/5 outline-none focus-visible:outline-none">
-                <LogOut size={14} /> Sign out
+              <DropdownMenuItem asChild>
+                <SignOutButton
+                  compact
+                  className="flex w-full items-center gap-2 text-red-400 focus:text-red-400 cursor-pointer hover:!bg-white/5 outline-none focus-visible:outline-none"
+                />
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

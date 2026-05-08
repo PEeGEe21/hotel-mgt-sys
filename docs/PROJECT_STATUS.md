@@ -338,15 +338,18 @@ Notes: Remove proxy routing.
 - [x] File Input Validation
 Notes: client-side image pickers now enforce allowed types and size limits consistently, and API DTOs validate image data URLs / image references for logo, avatar, product, room, and facilities image fields.
 
-- [ ] Sessions.
+- [x] Sessions.
 
-- [ ] fiance Invoices.
+- [x] fiance Invoices.
 Notes: creating, filtering
 
-- [ ] Finance Payments.
+- [x] Finance Payments.
 
 - [ ] HR 
-Notes: Contracts, Payroll
+Notes: Contracts, 
+
+- Future implementation
+   - Payroll
 
 ## Newly Added
 

@@ -1,7 +1,8 @@
 'use client';
 
-import { useQuery, keepPreviousData } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import api from '@/lib/api';
+import openToast from '@/components/ToastComponent';
 
 export type FinanceOverview = {
   range: { from: string; to: string };
@@ -22,12 +23,17 @@ export type FinanceInvoice = {
   invoiceNo: string;
   issuedAt: string;
   dueAt: string | null;
+  subtotal?: number;
+  tax?: number;
+  discount?: number;
   total: number;
   paidAmount: number;
   balance: number;
   paymentStatus: 'UNPAID' | 'PARTIAL' | 'PAID' | 'REFUNDED';
   status: 'UNPAID' | 'PARTIAL' | 'PAID' | 'REFUNDED' | 'OVERDUE';
   type: string;
+  counterpartyName?: string | null;
+  notes?: string | null;
   reservation?: {
     id: string;
     reservationNo: string;
@@ -45,6 +51,12 @@ export type FinanceInvoice = {
       reservationNo: string;
       guest?: { firstName: string; lastName: string } | null;
     } | null;
+  } | null;
+  requisition?: {
+    id: string;
+    title: string;
+    status: string;
+    facility?: { name: string } | null;
   } | null;
 };
 
@@ -68,6 +80,7 @@ export type FinancePayment = {
     id: string;
     invoiceNo: string;
     type: string;
+    counterpartyName?: string | null;
     reservation?: {
       id: string;
       reservationNo: string;
@@ -85,7 +98,54 @@ export type FinancePayment = {
         guest?: { firstName: string; lastName: string } | null;
       } | null;
     } | null;
+    requisition?: {
+      id: string;
+      title: string;
+      status: string;
+    } | null;
   };
+};
+
+export type CreateFinanceInvoiceInput = {
+  type?: string;
+  sourceType?: string;
+  reservationId?: string;
+  posOrderId?: string;
+  facilityBookingId?: string;
+  requisitionId?: string;
+  counterpartyName: string;
+  notes?: string;
+  subtotal: number;
+  tax?: number;
+  discount?: number;
+  dueAt?: string;
+  debitAccountCode?: string;
+  creditAccountCode?: string;
+  recordInitialPayment?: boolean;
+  initialPaymentAmount?: number;
+  initialPaymentMethod?: string;
+  initialPaymentReference?: string;
+  initialPaymentNote?: string;
+  initialPaymentPaidAt?: string;
+  initialPaymentDebitAccountCode?: string;
+  initialPaymentCreditAccountCode?: string;
+};
+
+export type RecordFinancePaymentInput = {
+  invoiceId: string;
+  amount: number;
+  method: string;
+  reference?: string;
+  note?: string;
+  paidAt?: string;
+  debitAccountCode?: string;
+  creditAccountCode?: string;
+};
+
+export type UpdateFinanceInvoiceInput = {
+  counterpartyName?: string;
+  notes?: string;
+  dueAt?: string;
 };
 
 export type FinancePaymentsResponse = {
@@ -161,5 +221,71 @@ export function useFinancePayments(filters: {
     },
     staleTime: 20_000,
     placeholderData: keepPreviousData,
+  });
+}
+
+export function useCreateFinanceInvoice() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (dto: CreateFinanceInvoiceInput) =>
+      api.post('/finance/invoices', dto).then((response) => response.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['finance', 'invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['finance', 'overview'] });
+      openToast('success', 'Invoice created');
+    },
+    onError: (error: any) =>
+      openToast('error', error?.response?.data?.message ?? 'Could not create invoice'),
+  });
+}
+
+export function useCreateRequisitionInvoice() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (requisitionId: string) =>
+      api.post(`/finance/invoices/from-requisition/${requisitionId}`).then((response) => response.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['finance', 'invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['finance', 'overview'] });
+      queryClient.invalidateQueries({ queryKey: ['facility-requisitions'] });
+      openToast('success', 'Expense invoice created');
+    },
+    onError: (error: any) =>
+      openToast('error', error?.response?.data?.message ?? 'Could not create requisition invoice'),
+  });
+}
+
+export function useRecordFinancePayment() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (dto: RecordFinancePaymentInput) =>
+      api.post('/finance/payments', dto).then((response) => response.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['finance', 'payments'] });
+      queryClient.invalidateQueries({ queryKey: ['finance', 'invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['finance', 'overview'] });
+      openToast('success', 'Payment recorded');
+    },
+    onError: (error: any) =>
+      openToast('error', error?.response?.data?.message ?? 'Could not record payment'),
+  });
+}
+
+export function useUpdateFinanceInvoice(invoiceId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (dto: UpdateFinanceInvoiceInput) =>
+      api.patch(`/finance/invoices/${invoiceId}`, dto).then((response) => response.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['finance', 'invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['finance', 'overview'] });
+      openToast('success', 'Invoice updated');
+    },
+    onError: (error: any) =>
+      openToast('error', error?.response?.data?.message ?? 'Could not update invoice'),
   });
 }

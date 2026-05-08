@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { HotelCronJobType } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { UpdateHotelDto } from '../dtos/update-hotel.dto';
 import { RunnableHotelCronJob, RunHotelCronJobDto } from '../dtos/run-hotel-cron-job.dto';
@@ -83,6 +84,49 @@ export class HotelsService {
       dailyDigestScanLastSucceededAt: null,
       dailyDigestScanLastFailedAt: null,
       dailyDigestScanLastError: null,
+    };
+  }
+
+  private buildDefaultInvoiceTemplateSettings() {
+    return {
+      accentColor: '#1d4ed8',
+      headerTitle: 'Invoice',
+      footerNote: 'Thank you for your business.',
+      showLogo: true,
+      showTaxBreakdown: true,
+      showNotes: true,
+    };
+  }
+
+  private coerceInvoiceTemplateSettings(value: unknown) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return this.buildDefaultInvoiceTemplateSettings();
+    }
+
+    const raw = value as Record<string, unknown>;
+    const defaults = this.buildDefaultInvoiceTemplateSettings();
+
+    return {
+      accentColor:
+        typeof raw.accentColor === 'string' && raw.accentColor.trim()
+          ? raw.accentColor.trim()
+          : defaults.accentColor,
+      headerTitle:
+        typeof raw.headerTitle === 'string' && raw.headerTitle.trim()
+          ? raw.headerTitle.trim()
+          : defaults.headerTitle,
+      footerNote:
+        typeof raw.footerNote === 'string' && raw.footerNote.trim()
+          ? raw.footerNote.trim()
+          : defaults.footerNote,
+      showLogo:
+        typeof raw.showLogo === 'boolean' ? raw.showLogo : defaults.showLogo,
+      showTaxBreakdown:
+        typeof raw.showTaxBreakdown === 'boolean'
+          ? raw.showTaxBreakdown
+          : defaults.showTaxBreakdown,
+      showNotes:
+        typeof raw.showNotes === 'boolean' ? raw.showNotes : defaults.showNotes,
     };
   }
 
@@ -202,6 +246,7 @@ export class HotelsService {
 
     return {
       ...hotel,
+      invoiceTemplateSettings: this.coerceInvoiceTemplateSettings(hotel.invoiceTemplateSettings),
       cronSettings: {
         attendanceAbsenceScanEnabled:
           attendanceCronSetting?.enabled ?? this.buildDefaultCronSettings().attendanceAbsenceScanEnabled,
@@ -320,12 +365,20 @@ export class HotelsService {
 
   async updateProfile(hotelId: string, dto: UpdateHotelDto) {
     await this.getProfile(hotelId);
-    const { cronSettings, ...hotelData } = dto;
+    const { cronSettings, invoiceTemplateSettings, ...hotelData } = dto;
 
     await this.prisma.$transaction(async (tx) => {
       await tx.hotel.update({
         where: { id: hotelId },
-        data: hotelData,
+        data: {
+          ...hotelData,
+          ...(invoiceTemplateSettings
+            ? {
+                invoiceTemplateSettings:
+                  this.coerceInvoiceTemplateSettings(invoiceTemplateSettings) as Prisma.InputJsonValue,
+              }
+            : {}),
+        },
       });
 
       if (cronSettings) {

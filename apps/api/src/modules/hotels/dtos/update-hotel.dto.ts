@@ -41,6 +41,15 @@ export class UpdateHotelCronSettingsDto {
   @ApiPropertyOptional() @IsInt() @Min(0) @Max(59) @IsOptional() dailyDigestScanMinute?: number;
 }
 
+export class UpdateHotelInvoiceTemplateSettingsDto {
+  @ApiPropertyOptional() @IsString() @IsOptional() accentColor?: string;
+  @ApiPropertyOptional() @IsString() @IsOptional() headerTitle?: string;
+  @ApiPropertyOptional() @IsString() @IsOptional() footerNote?: string;
+  @ApiPropertyOptional() @IsBoolean() @IsOptional() showLogo?: boolean;
+  @ApiPropertyOptional() @IsBoolean() @IsOptional() showTaxBreakdown?: boolean;
+  @ApiPropertyOptional() @IsBoolean() @IsOptional() showNotes?: boolean;
+}
+
 export class UpdateHotelDto {
   @ApiPropertyOptional() @IsString() @IsOptional() name?: string;
   @ApiPropertyOptional() @IsString() @IsOptional() address?: string;
@@ -70,5 +79,6 @@ export class UpdateHotelDto {
   @ApiPropertyOptional() @IsBoolean() @IsOptional() autoCreateCheckoutHousekeepingTasks?: boolean;
   @ApiPropertyOptional() @IsBoolean() @IsOptional() housekeepingFollowUpEnabled?: boolean;
   @ApiPropertyOptional() @IsInt() @Min(1) @Max(168) @IsOptional() housekeepingFollowUpGraceHours?: number;
+  @ApiPropertyOptional({ type: UpdateHotelInvoiceTemplateSettingsDto }) @ValidateNested() @Type(() => UpdateHotelInvoiceTemplateSettingsDto) @IsOptional() invoiceTemplateSettings?: UpdateHotelInvoiceTemplateSettingsDto;
   @ApiPropertyOptional({ type: UpdateHotelCronSettingsDto }) @ValidateNested() @Type(() => UpdateHotelCronSettingsDto) @IsOptional() cronSettings?: UpdateHotelCronSettingsDto;
 }

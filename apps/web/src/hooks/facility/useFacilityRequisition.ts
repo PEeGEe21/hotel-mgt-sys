@@ -17,6 +17,7 @@ export type FacilityRequisition = {
   status: string;
   items: any;
   estimatedTotal?: number | string | null;
+  invoiceId?: string | null;
   approvedBy?: string | null;
   approvedAt?: string | null;
   fulfilledAt?: string | null;
@@ -25,6 +26,7 @@ export type FacilityRequisition = {
   createdAt: string;
   updatedAt: string;
   facility?: { id: string; name: string } | null;
+  invoice?: { id: string; invoiceNo: string; paymentStatus: string } | null;
   requestedByStaff?: { id: string; firstName: string; lastName: string } | null;
   approvedByStaff?: { id: string; firstName: string; lastName: string } | null;
 };

@@ -97,10 +97,14 @@ This PRD reflects current system modules from the platform codebase.
   - Operational finance summaries (`Finance` module/UI).
 - Invoicing and payments:
   - Invoice and payment management (`Finance` module/UI).
+  - Invoice creation supports manual invoices plus source-linked invoices from reservations, POS orders, facility bookings, and approved facility requisitions.
+  - Invoice creation supports billed-to overrides, optional initial payment capture, printable appearance settings, and finance-side export.
+  - Payment recording supports settlement of outstanding receivable and payable invoices from finance without relying only on reservation pages.
 - Ledger:
   - Accounting entries and records (`Ledger` module/UI).
 - Chart of accounts:
   - Account structure and setup workflows (finance accounts pages).
+  - Finance posting defaults should auto-map common invoice and payment flows, while allowing optional debit/credit overrides for advanced accounting users.
 
 ### 7.5 Inventory & Procurement
 - Inventory management:
@@ -158,6 +162,9 @@ This PRD reflects current system modules from the platform codebase.
 ### FR-4 Commercial & Finance
 - System must support invoices, payments, and ledger records.
 - System must support chart-of-accounts style account organization.
+- System must support source-linked invoicing for reservations, POS, facility bookings, and approved requisitions.
+- System must derive invoice payment status from recorded settlements, including initial payment captured during invoice creation.
+- System must allow hotel-specific printable invoice appearance configuration and finance-side CSV export for invoices and payments.
 
 ### FR-5 Inventory & Supply
 - System must support inventory items, categories, and supplier records.

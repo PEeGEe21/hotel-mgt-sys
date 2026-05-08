@@ -1,0 +1,186 @@
+<html>
+  <head>
+    <meta charset='utf-8' />
+    <title>{{headerTitle}}</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+        padding: 28px;
+        color: #0f172a;
+      }
+      .header {
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+        align-items: flex-start;
+        border-bottom: 3px solid {{accentColor}};
+        padding-bottom: 18px;
+        margin-bottom: 18px;
+      }
+      .brand {
+        display: flex;
+        gap: 14px;
+        align-items: flex-start;
+      }
+      .logo {
+        width: 56px;
+        height: 56px;
+        border-radius: 14px;
+        object-fit: cover;
+      }
+      .title {
+        font-size: 22px;
+        font-weight: 700;
+        margin-bottom: 6px;
+      }
+      .muted {
+        color: #64748b;
+        font-size: 12px;
+        line-height: 1.5;
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        padding: 6px 10px;
+        font-size: 11px;
+        font-weight: 700;
+        color: {{accentColor}};
+        background: rgba(29, 78, 216, 0.08);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+        margin-bottom: 18px;
+      }
+      .block {
+        border: 1px solid #e2e8f0;
+        border-radius: 14px;
+        padding: 16px;
+      }
+      .label {
+        display: block;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: #94a3b8;
+        margin-bottom: 6px;
+      }
+      .value {
+        font-size: 14px;
+        color: #0f172a;
+      }
+      .meta-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 10px;
+        font-size: 13px;
+      }
+      .totals {
+        margin-top: 18px;
+        border: 1px solid #e2e8f0;
+        border-radius: 14px;
+        overflow: hidden;
+      }
+      .total-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px 16px;
+        border-bottom: 1px solid #e2e8f0;
+        font-size: 13px;
+      }
+      .total-row:last-child {
+        border-bottom: none;
+      }
+      .grand {
+        background: rgba(15, 23, 42, 0.04);
+        font-size: 16px;
+        font-weight: 700;
+      }
+      .footer {
+        margin-top: 24px;
+        text-align: center;
+        color: #94a3b8;
+        font-size: 11px;
+      }
+      @media print {
+        body {
+          padding: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class='header'>
+      <div>
+        <div class='brand'>
+          {{#if showLogo}}
+            {{#if hotelLogo}}<img src='{{hotelLogo}}' alt='Logo' class='logo' />{{/if}}
+          {{/if}}
+          <div>
+            <div class='title'>{{headerTitle}}</div>
+            <div class='muted'>
+              <div><strong>{{hotelName}}</strong></div>
+              <div>{{hotelAddress}}, {{hotelCity}}, {{hotelCountry}}</div>
+              <div>{{hotelEmail}} · {{hotelPhone}}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class='pill'>{{paymentStatus}}</div>
+        <div class='muted' style='margin-top: 12px; text-align: right;'>
+          <div>Invoice {{invoiceNo}}</div>
+          <div>Issued {{issuedAt}}</div>
+          <div>Due {{dueAt}}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class='grid'>
+      <div class='block'>
+        <span class='label'>Bill To</span>
+        <div class='value'>{{counterpartyName}}</div>
+      </div>
+      <div class='block'>
+        <span class='label'>Reference</span>
+        <div class='value'>{{referenceText}}</div>
+      </div>
+    </div>
+
+    <div class='totals'>
+      <div class='total-row'><span>Subtotal</span><span>{{subtotal}}</span></div>
+      {{#if showTaxBreakdown}}
+        <div class='total-row'><span>Tax</span><span>{{tax}}</span></div>
+        <div class='total-row'><span>Discount</span><span>{{discount}}</span></div>
+      {{/if}}
+      <div class='total-row grand'><span>Total</span><span>{{total}}</span></div>
+      <div class='total-row'><span>Paid</span><span>{{paidAmount}}</span></div>
+      <div class='total-row'><span>Balance</span><span>{{balance}}</span></div>
+    </div>
+
+    {{#if showNotes}}
+      {{#if notes}}
+        <div class='block' style='margin-top: 18px;'>
+          <span class='label'>Notes</span>
+          <div class='value'>{{notes}}</div>
+        </div>
+      {{/if}}
+    {{/if}}
+
+    <div class='footer'>
+      <div>{{footerNote}}</div>
+      <div style='margin-top: 8px;'>Printed {{printedAt}}</div>
+    </div>
+
+    <script>
+      window.onload = () => { window.print(); window.onafterprint = () => window.close(); };
+    </script>
+  </body>
+</html>

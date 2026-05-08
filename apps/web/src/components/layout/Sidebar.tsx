@@ -17,7 +17,6 @@ import {
   DollarSign,
   BarChart3,
   Dumbbell,
-  LogOut,
   Hotel,
   Settings,
   ChevronDown,
@@ -37,7 +36,6 @@ import {
   AlarmClock,
   X,
 } from 'lucide-react';
-import { useAuthStore } from '@/store/auth.store';
 import { useAppStore } from '@/store/app.store';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useHydration } from '@/hooks/useHydration';
@@ -45,8 +43,9 @@ import { Lock } from '@solar-icons/react';
 import { chevronVariants, dropdownVariants, itemVariants } from '@/utils/animations';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import SignOutButton from '@/components/auth/SignOutButton';
 
-type NavItem = { label: string; href: string; icon: any };
+type NavItem = { label: string; href: string; icon: any; disabled?: boolean; badge?: string };
 type NavGroup = { label: string; href: string; icon: any; permission: string; children: NavItem[] };
 type NavEntry = NavItem | NavGroup;
 const isGroup = (item: NavEntry): item is NavGroup => 'children' in item;
@@ -73,7 +72,7 @@ const nav: NavEntry[] = [
   { label: 'Housekeeping', href: '/housekeeping', icon: Sparkles },
   {
     label: 'Finance',
-    href: '/finance',
+    href: '/finance/overview',
     icon: DollarSign,
     permission: 'view:finance',
     children: [
@@ -110,7 +109,7 @@ const nav: NavEntry[] = [
       { label: 'User Accounts', href: '/hr/accounts', icon: UserCog },
       { label: 'Permissions', href: '/hr/permissions', icon: Shield },
       { label: 'Contracts', href: '/hr/contracts', icon: FileText },
-      { label: 'Payroll', href: '/hr/payroll', icon: Receipt },
+      { label: 'Payroll', href: '/hr/payroll', icon: Receipt, disabled: true, badge: 'Soon' },
     ],
   },
 ];
@@ -131,7 +130,6 @@ function SidebarContent({
   openGroups,
   toggleGroup,
   isActive,
-  logout,
   onNavigate,
 }: {
   mobile?: boolean;
@@ -144,7 +142,6 @@ function SidebarContent({
   openGroups: Record<string, boolean>;
   toggleGroup: (href: string) => void;
   isActive: (href: string) => boolean;
-  logout: () => void;
   onNavigate?: () => void;
 }) {
   return (
@@ -252,19 +249,36 @@ function SidebarContent({
                               exit="closed"
                               custom={index}
                             >
-                              <Link
-                                key={child.href}
-                                href={child.href}
-                                onClick={onNavigate}
-                                className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-150 ${
-                                  active
-                                    ? 'bg-blue-600/20 text-blue-400 font-medium'
-                                    : 'text-slate-500 hover:text-slate-200 hover:bg-white/5'
-                                }`}
-                              >
-                                <CIcon size={14} strokeWidth={active ? 2 : 1.5} />
-                                {child.label}
-                              </Link>
+                              {child.disabled ? (
+                                <div className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-slate-500 opacity-80">
+                                  <CIcon size={14} strokeWidth={1.5} />
+                                  <span>{child.label}</span>
+                                  {child.badge ? (
+                                    <span className="ml-auto rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-300">
+                                      {child.badge}
+                                    </span>
+                                  ) : null}
+                                </div>
+                              ) : (
+                                <Link
+                                  key={child.href}
+                                  href={child.href}
+                                  onClick={onNavigate}
+                                  className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-150 ${
+                                    active
+                                      ? 'bg-blue-600/20 text-blue-400 font-medium'
+                                      : 'text-slate-500 hover:text-slate-200 hover:bg-white/5'
+                                  }`}
+                                >
+                                  <CIcon size={14} strokeWidth={active ? 2 : 1.5} />
+                                  <span>{child.label}</span>
+                                  {child.badge ? (
+                                    <span className="ml-auto rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-300">
+                                      {child.badge}
+                                    </span>
+                                  ) : null}
+                                </Link>
+                              )}
                             </motion.div>
                           );
                         })}
@@ -301,23 +315,20 @@ function SidebarContent({
           <Link
             href="/settings"
             onClick={onNavigate}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 border ${
               pathname.startsWith('/settings')
                 ? 'bg-blue-600/20 text-blue-400 border border-blue-500/20'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-white/5 border-transparent'
             }`}
           >
             <Settings size={16} />
             Settings
           </Link>
         )}
-        <button
-          onClick={logout}
+        <SignOutButton
+          onAfterConfirm={onNavigate}
           className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-400 transition-all hover:bg-red-500/10 hover:text-red-400"
-        >
-          <LogOut size={16} />
-          Sign out
-        </button>
+        />
       </div>
     </aside>
   );
@@ -326,7 +337,6 @@ function SidebarContent({
 export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   const pathname = usePathname();
   const hotel = useAppStore((s) => s.hotel);
-  const logout = useAuthStore((s) => s.logout);
   const hydrated = useHydration();
   const { canNav, can, ready } = usePermissions();
 
@@ -359,7 +369,6 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
         openGroups={openGroups}
         toggleGroup={toggleGroup}
         isActive={isActive}
-        logout={logout}
       />
 
       <AnimatePresence>
@@ -393,7 +402,6 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
                   openGroups={openGroups}
                   toggleGroup={toggleGroup}
                   isActive={isActive}
-                  logout={logout}
                   onNavigate={onMobileClose}
                 />
                 <button
