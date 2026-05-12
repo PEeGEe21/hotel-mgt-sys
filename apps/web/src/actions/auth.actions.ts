@@ -13,6 +13,14 @@ export type AuthResult =
   | { success: true; user: AuthUser; hotel: any }
   | { success: false; message: string; field?: 'email' | 'password' | 'general' };
 
+export type ForgotPasswordResult =
+  | { success: true; message: string; resetUrl?: string }
+  | { success: false; message: string; field?: 'email' | 'general' };
+
+export type ResetPasswordResult =
+  | { success: true; message: string }
+  | { success: false; message: string; field?: 'password' | 'general' };
+
 // ─── Login ─────────────────────────────────────────────────────────────────────
 export async function loginAction(email: string, password: string): Promise<AuthResult> {
   // Basic validation server-side (Zod can be added here later)
@@ -54,6 +62,95 @@ export async function loginAction(email: string, password: string): Promise<Auth
       },
       // message: data.message ?? 'Login successful',
       hotel: data.hotel ?? null,
+    };
+  } catch {
+    return {
+      success: false,
+      message: 'Could not reach the server. Check your connection.',
+      field: 'general',
+    };
+  }
+}
+
+// ─── Forgot / reset password ─────────────────────────────────────────────────
+export async function requestPasswordResetAction(
+  email: string,
+): Promise<ForgotPasswordResult> {
+  if (!email) {
+    return { success: false, message: 'Email is required.', field: 'email' };
+  }
+
+  if (!email.includes('@')) {
+    return { success: false, message: 'Enter a valid email address.', field: 'email' };
+  }
+
+  try {
+    const response = await apiFetch('/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+    const message =
+      data?.message ?? 'If an account exists for that email, a reset link has been sent.';
+
+    if (!response.ok) {
+      return {
+        success: false,
+        message,
+        field: 'general',
+      };
+    }
+
+    return {
+      success: true,
+      message,
+      resetUrl: data?.resetUrl,
+    };
+  } catch {
+    return {
+      success: true,
+      message: 'If an account exists for that email, a reset link has been sent.',
+    };
+  }
+}
+
+export async function resetPasswordAction(
+  token: string,
+  newPassword: string,
+): Promise<ResetPasswordResult> {
+  if (!token) {
+    return { success: false, message: 'This reset link is missing a token.', field: 'general' };
+  }
+
+  if (!newPassword || newPassword.length < 8) {
+    return {
+      success: false,
+      message: 'Password must be at least 8 characters.',
+      field: 'password',
+    };
+  }
+
+  try {
+    const response = await apiFetch('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ token, newPassword }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+    const message = data?.message ?? 'Password reset successfully.';
+
+    if (!response.ok) {
+      return {
+        success: false,
+        message,
+        field: 'general',
+      };
+    }
+
+    return {
+      success: true,
+      message,
     };
   } catch {
     return {

@@ -15,6 +15,7 @@ import {
   DrawerOverlay,
   DrawerTitle,
 } from '@/components/ui/drawer';
+import { openFinancePaymentsExport } from '@/hooks/useProxyActions';
 
 type PaymentMethod =
   | 'Cash'
@@ -179,10 +180,6 @@ export default function PaymentsPage() {
     ? new Date(data.range.from).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
     : '—';
 
-  const handleExport = () => {
-    window.open('/api/proxy/finance/payments/export', '_blank', 'noopener,noreferrer');
-  };
-
   const handleRecordPayment = async () => {
     await recordPayment.mutateAsync({
       invoiceId: paymentForm.invoiceId,
@@ -221,7 +218,7 @@ export default function PaymentsPage() {
           </div>
           <div className="flex gap-2">
             <button
-              onClick={handleExport}
+              onClick={openFinancePaymentsExport}
               className="flex items-center gap-2 rounded-lg border border-[#1e2536] bg-[#161b27] px-3 py-2 text-sm font-medium text-slate-300 transition-all hover:border-slate-500"
             >
               <Download size={13} /> Export

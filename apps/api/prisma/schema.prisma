@@ -181,7 +181,9 @@ model Hotel {
   autoCreateCheckoutHousekeepingTasks Boolean  @default(true)
   housekeepingFollowUpEnabled         Boolean  @default(false)
   housekeepingFollowUpGraceHours      Int      @default(2)
+  contractExpiryWarningDays           Int      @default(60)
   invoiceTemplateSettings             Json?
+  hrContractSettings                  Json?
   createdAt                           DateTime @default(now())
   updatedAt                           DateTime @updatedAt
 
@@ -209,11 +211,18 @@ model Hotel {
   companies               Company[]
   groupBookings           GroupBooking[]
   departments             Department[]
+  jobTitles               JobTitle[]
   inventoryCategories     InventoryCategory[]
   posProductCategories    PosProductCategory[]
   suppliers               Supplier[]
   shiftTemplates          ShiftTemplate[]
   roomTypeConfigs         RoomTypeConfig[]
+  hrContracts             HrContract[]
+  hrContractDocuments     HrContractDocument[]
+  hrContractApprovalRoutes HrContractApprovalRoute[]
+  hrContractApprovals     HrContractApproval[]
+  hrContractAuditLogs     HrContractAuditLog[]
+  compensationHistory     StaffCompensationHistory[]
   invoices                Invoice[]
   payments                Payment[]
   rolePermissions         RolePermission[]
@@ -571,6 +580,7 @@ model Staff {
   id                String    @id @default(uuid())
   userId            String    @unique
   hotelId           String
+  jobTitleId        String?
   employeeCode      String    @unique
   firstName         String
   lastName          String
@@ -590,6 +600,7 @@ model Staff {
 
   user                          User                  @relation(fields: [userId], references: [id])
   hotel                         Hotel                 @relation(fields: [hotelId], references: [id])
+  jobTitle                      JobTitle?             @relation(fields: [jobTitleId], references: [id])
   operatingTerminals            PosTerminal[]         @relation("CurrentTerminalStaff")
   attendance                    Attendance[]
   leaves                        Leave[]
@@ -606,6 +617,10 @@ model Staff {
   maintenanceRequestsAssigned   MaintenanceRequest[]  @relation("MaintenanceRequestAssignedTo")
   facilityComplaintsReported    FacilityComplaint[]   @relation("FacilityComplaintReportedBy")
   facilityInspectionsScheduled  FacilityInspection[]  @relation("FacilityInspectionScheduledBy")
+  hrContracts                   HrContract[]
+  compensationHistory           StaffCompensationHistory[]
+
+  @@index([hotelId, jobTitleId])
 }
 
 model Attendance {
@@ -654,9 +669,210 @@ model Department {
   updatedAt   DateTime @updatedAt
 
   hotel Hotel @relation(fields: [hotelId], references: [id])
+  hrContracts HrContract[]
+  jobTitles JobTitle[]
 
   @@unique([hotelId, name])
   @@index([hotelId])
+}
+
+model JobTitle {
+  id          String   @id @default(uuid())
+  hotelId     String
+  departmentId String?
+  name        String
+  description String?
+  color       String   @default("bg-cyan-500")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  hotel       Hotel       @relation(fields: [hotelId], references: [id])
+  department  Department? @relation(fields: [departmentId], references: [id])
+  staff       Staff[]
+
+  @@unique([hotelId, name])
+  @@index([hotelId])
+  @@index([hotelId, departmentId])
+}
+
+// ─── HR CONTRACTS ────────────────────────────────────────────────────────────
+
+model HrContract {
+  id                    String   @id @default(uuid())
+  hotelId               String
+  staffId               String
+  departmentId          String?
+  positionTitle         String
+  staffNameSnapshot     String
+  employeeCodeSnapshot  String
+  departmentSnapshot    String
+  positionSnapshot      String
+  contractNo            String   @unique
+  type                  String
+  status                String   @default("DRAFT")
+  startDate             DateTime
+  endDate               DateTime?
+  salary                Decimal
+  currency              String   @default("NGN")
+  probationEndDate      DateTime?
+  reportingManagerStaffId String?
+  notes                 String?
+  renewedFromContractId String?
+  submittedAt           DateTime?
+  submittedByUserId     String?
+  approvedAt            DateTime?
+  approvedByUserId      String?
+  approvalComment       String?
+  signedAt              DateTime?
+  signedByUserId        String?
+  activatedAt           DateTime?
+  rejectedAt            DateTime?
+  rejectedByUserId      String?
+  rejectionReason       String?
+  terminationDate       DateTime?
+  terminationReason     String?
+  terminatedByUserId    String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  hotel                 Hotel                    @relation(fields: [hotelId], references: [id])
+  staff                 Staff                    @relation(fields: [staffId], references: [id])
+  department            Department?              @relation(fields: [departmentId], references: [id])
+  renewedFromContract   HrContract?              @relation("HrContractRenewalChain", fields: [renewedFromContractId], references: [id])
+  renewedContracts      HrContract[]             @relation("HrContractRenewalChain")
+  compensationHistory   StaffCompensationHistory[]
+  documents             HrContractDocument[]
+  approvals             HrContractApproval[]
+  auditLogs             HrContractAuditLog[]
+
+  @@index([hotelId])
+  @@index([hotelId, staffId])
+  @@index([hotelId, departmentId])
+  @@index([hotelId, status])
+  @@index([hotelId, type])
+  @@index([hotelId, endDate])
+  @@index([hotelId, terminationDate])
+  @@index([renewedFromContractId])
+  @@index([hotelId, submittedAt])
+  @@index([hotelId, approvedAt])
+  @@index([hotelId, signedAt])
+}
+
+model HrContractApprovalRoute {
+  id          String   @id @default(uuid())
+  hotelId     String?
+  contractType String?
+  isDefault   Boolean  @default(false)
+  name        String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  hotel       Hotel?                      @relation(fields: [hotelId], references: [id])
+  steps       HrContractApprovalRouteStep[]
+
+  @@index([hotelId, isDefault, isActive])
+  @@index([hotelId, contractType, isActive])
+}
+
+model HrContractApprovalRouteStep {
+  id        String   @id @default(uuid())
+  routeId    String
+  stepOrder Int
+  role      String
+  required  Boolean  @default(true)
+  userId    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  route     HrContractApprovalRoute @relation(fields: [routeId], references: [id], onDelete: Cascade)
+
+  @@unique([routeId, stepOrder])
+  @@index([routeId])
+}
+
+model HrContractApproval {
+  id            String   @id @default(uuid())
+  hotelId       String
+  contractId    String
+  routeName     String?
+  stepOrder     Int
+  role          String
+  required      Boolean  @default(true)
+  assignedUserId String?
+  status        String   @default("PENDING")
+  comment       String?
+  actedAt       DateTime?
+  actedByUserId String?
+  createdAt     DateTime @default(now())
+
+  hotel         Hotel      @relation(fields: [hotelId], references: [id])
+  contract      HrContract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@index([hotelId, contractId, stepOrder])
+  @@index([contractId])
+}
+
+model HrContractAuditLog {
+  id           String   @id @default(uuid())
+  hotelId      String
+  contractId   String
+  actorUserId  String?
+  action       String
+  fromStatus   String?
+  toStatus     String?
+  metadata     Json?
+  createdAt    DateTime @default(now())
+
+  hotel        Hotel      @relation(fields: [hotelId], references: [id])
+  contract     HrContract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@index([hotelId, contractId, createdAt])
+  @@index([contractId])
+}
+
+model StaffCompensationHistory {
+  id             String   @id @default(uuid())
+  hotelId        String
+  staffId        String
+  contractId     String?
+  amount         Decimal
+  currency       String   @default("NGN")
+  effectiveFrom  DateTime
+  effectiveTo    DateTime?
+  reason         String?
+  createdByUserId String?
+  createdAt      DateTime @default(now())
+
+  hotel          Hotel      @relation(fields: [hotelId], references: [id])
+  staff          Staff      @relation(fields: [staffId], references: [id])
+  contract       HrContract? @relation(fields: [contractId], references: [id])
+
+  @@index([hotelId])
+  @@index([hotelId, staffId, effectiveFrom])
+  @@index([contractId])
+}
+
+model HrContractDocument {
+  id              String   @id @default(uuid())
+  hotelId         String
+  contractId      String
+  documentType    String
+  source          String   @default("UPLOADED")
+  fileName        String
+  storageKey      String?
+  fileUrl         String
+  mimeType        String?
+  fileSizeBytes   Int?
+  uploadedByUserId String?
+  uploadedAt      DateTime @default(now())
+
+  hotel           Hotel      @relation(fields: [hotelId], references: [id])
+  contract        HrContract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@index([hotelId])
+  @@index([contractId])
+  @@index([hotelId, contractId, uploadedAt])
 }
 
 // ─── INVENTORY CATEGORIES ────────────────────────────────────────────────────

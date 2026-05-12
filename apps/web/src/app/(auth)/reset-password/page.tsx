@@ -4,6 +4,7 @@ import { FormEvent, Suspense, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, CheckCircle2, Eye, EyeOff, Hotel, Lock } from 'lucide-react';
+import { resetPasswordAction } from '@/actions/auth.actions';
 
 export default function ResetPasswordPage() {
   return (
@@ -34,15 +35,9 @@ function ResetPasswordContent() {
 
     setLoading(true);
     try {
-      const response = await fetch('/api/proxy/auth/reset-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, newPassword: password }),
-      });
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(data.message ?? 'Could not reset password.');
+      const result = await resetPasswordAction(token, password);
+      if (!result.success) {
+        throw new Error(result.message ?? 'Could not reset password.');
       }
 
       setSuccess(true);

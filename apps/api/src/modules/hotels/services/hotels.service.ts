@@ -98,6 +98,40 @@ export class HotelsService {
     };
   }
 
+  private buildDefaultHrContractSettings() {
+    return {
+      template: {
+        accentColor: '#1d4ed8',
+        headerTitle: 'Employment Contract',
+        footerNote:
+          'This generated document is the system copy of the contract summary. Signed copies and supporting documents should be attached to the contract record.',
+        introductionText:
+          'This employment contract records the current staff assignment, compensation, and contract terms approved by the hotel.',
+        showSignatureLines: true,
+      },
+      documentPolicy: {
+        requiredDocumentTypes: ['SIGNED_CONTRACT'],
+        allowSupportingDocuments: true,
+        requireSignedContractUpload: true,
+        requireGeneratedContractPdf: true,
+      },
+      numbering: {
+        contractNumberPrefix: 'CTR',
+        renewalNumberPrefix: 'REN',
+      },
+      notifications: {
+        approvalTurnNotificationsEnabled: true,
+        approvalTurnRoleFallbackEnabled: true,
+        expiryDigestEnabled: true,
+        staleApprovalDigestEnabled: true,
+        staleSignatureDigestEnabled: true,
+        staleApprovalReminderDays: 3,
+        staleSignatureReminderDays: 3,
+        digestRecipientRoles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER'],
+      },
+    };
+  }
+
   private coerceInvoiceTemplateSettings(value: unknown) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
       return this.buildDefaultInvoiceTemplateSettings();
@@ -127,6 +161,136 @@ export class HotelsService {
           : defaults.showTaxBreakdown,
       showNotes:
         typeof raw.showNotes === 'boolean' ? raw.showNotes : defaults.showNotes,
+    };
+  }
+
+  private coerceHrContractSettings(value: unknown) {
+    const defaults = this.buildDefaultHrContractSettings();
+
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return defaults;
+    }
+
+    const raw = value as Record<string, unknown>;
+    const rawTemplate =
+      raw.template && typeof raw.template === 'object' && !Array.isArray(raw.template)
+        ? (raw.template as Record<string, unknown>)
+        : {};
+    const rawDocumentPolicy =
+      raw.documentPolicy &&
+      typeof raw.documentPolicy === 'object' &&
+      !Array.isArray(raw.documentPolicy)
+        ? (raw.documentPolicy as Record<string, unknown>)
+        : {};
+    const rawNumbering =
+      raw.numbering && typeof raw.numbering === 'object' && !Array.isArray(raw.numbering)
+        ? (raw.numbering as Record<string, unknown>)
+        : {};
+    const rawNotifications =
+      raw.notifications && typeof raw.notifications === 'object' && !Array.isArray(raw.notifications)
+        ? (raw.notifications as Record<string, unknown>)
+        : {};
+
+    const requiredDocumentTypes = Array.isArray(rawDocumentPolicy.requiredDocumentTypes)
+      ? rawDocumentPolicy.requiredDocumentTypes
+          .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+          .map((item) => item.trim().toUpperCase())
+      : defaults.documentPolicy.requiredDocumentTypes;
+
+    return {
+      template: {
+        accentColor:
+          typeof rawTemplate.accentColor === 'string' && rawTemplate.accentColor.trim()
+            ? rawTemplate.accentColor.trim()
+            : defaults.template.accentColor,
+        headerTitle:
+          typeof rawTemplate.headerTitle === 'string' && rawTemplate.headerTitle.trim()
+            ? rawTemplate.headerTitle.trim()
+            : defaults.template.headerTitle,
+        footerNote:
+          typeof rawTemplate.footerNote === 'string' && rawTemplate.footerNote.trim()
+            ? rawTemplate.footerNote.trim()
+            : defaults.template.footerNote,
+        introductionText:
+          typeof rawTemplate.introductionText === 'string' &&
+          rawTemplate.introductionText.trim()
+            ? rawTemplate.introductionText.trim()
+            : defaults.template.introductionText,
+        showSignatureLines:
+          typeof rawTemplate.showSignatureLines === 'boolean'
+            ? rawTemplate.showSignatureLines
+            : defaults.template.showSignatureLines,
+      },
+      documentPolicy: {
+        requiredDocumentTypes: requiredDocumentTypes.length
+          ? requiredDocumentTypes
+          : defaults.documentPolicy.requiredDocumentTypes,
+        allowSupportingDocuments:
+          typeof rawDocumentPolicy.allowSupportingDocuments === 'boolean'
+            ? rawDocumentPolicy.allowSupportingDocuments
+            : defaults.documentPolicy.allowSupportingDocuments,
+        requireSignedContractUpload:
+          typeof rawDocumentPolicy.requireSignedContractUpload === 'boolean'
+            ? rawDocumentPolicy.requireSignedContractUpload
+            : defaults.documentPolicy.requireSignedContractUpload,
+        requireGeneratedContractPdf:
+          typeof rawDocumentPolicy.requireGeneratedContractPdf === 'boolean'
+            ? rawDocumentPolicy.requireGeneratedContractPdf
+            : defaults.documentPolicy.requireGeneratedContractPdf,
+      },
+      numbering: {
+        contractNumberPrefix:
+          typeof rawNumbering.contractNumberPrefix === 'string' &&
+          rawNumbering.contractNumberPrefix.trim()
+            ? rawNumbering.contractNumberPrefix.trim().toUpperCase()
+            : defaults.numbering.contractNumberPrefix,
+        renewalNumberPrefix:
+          typeof rawNumbering.renewalNumberPrefix === 'string' &&
+          rawNumbering.renewalNumberPrefix.trim()
+            ? rawNumbering.renewalNumberPrefix.trim().toUpperCase()
+            : defaults.numbering.renewalNumberPrefix,
+      },
+      notifications: {
+        approvalTurnNotificationsEnabled:
+          typeof rawNotifications.approvalTurnNotificationsEnabled === 'boolean'
+            ? rawNotifications.approvalTurnNotificationsEnabled
+            : defaults.notifications.approvalTurnNotificationsEnabled,
+        approvalTurnRoleFallbackEnabled:
+          typeof rawNotifications.approvalTurnRoleFallbackEnabled === 'boolean'
+            ? rawNotifications.approvalTurnRoleFallbackEnabled
+            : defaults.notifications.approvalTurnRoleFallbackEnabled,
+        expiryDigestEnabled:
+          typeof rawNotifications.expiryDigestEnabled === 'boolean'
+            ? rawNotifications.expiryDigestEnabled
+            : defaults.notifications.expiryDigestEnabled,
+        staleApprovalDigestEnabled:
+          typeof rawNotifications.staleApprovalDigestEnabled === 'boolean'
+            ? rawNotifications.staleApprovalDigestEnabled
+            : defaults.notifications.staleApprovalDigestEnabled,
+        staleSignatureDigestEnabled:
+          typeof rawNotifications.staleSignatureDigestEnabled === 'boolean'
+            ? rawNotifications.staleSignatureDigestEnabled
+            : defaults.notifications.staleSignatureDigestEnabled,
+        staleApprovalReminderDays:
+          typeof rawNotifications.staleApprovalReminderDays === 'number' &&
+          Number.isFinite(rawNotifications.staleApprovalReminderDays) &&
+          rawNotifications.staleApprovalReminderDays >= 1 &&
+          rawNotifications.staleApprovalReminderDays <= 30
+            ? Math.trunc(rawNotifications.staleApprovalReminderDays)
+            : defaults.notifications.staleApprovalReminderDays,
+        staleSignatureReminderDays:
+          typeof rawNotifications.staleSignatureReminderDays === 'number' &&
+          Number.isFinite(rawNotifications.staleSignatureReminderDays) &&
+          rawNotifications.staleSignatureReminderDays >= 1 &&
+          rawNotifications.staleSignatureReminderDays <= 30
+            ? Math.trunc(rawNotifications.staleSignatureReminderDays)
+            : defaults.notifications.staleSignatureReminderDays,
+        digestRecipientRoles: Array.isArray(rawNotifications.digestRecipientRoles)
+          ? rawNotifications.digestRecipientRoles
+              .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+              .map((item) => item.trim().toUpperCase())
+          : defaults.notifications.digestRecipientRoles,
+      },
     };
   }
 
@@ -247,6 +411,7 @@ export class HotelsService {
     return {
       ...hotel,
       invoiceTemplateSettings: this.coerceInvoiceTemplateSettings(hotel.invoiceTemplateSettings),
+      hrContractSettings: this.coerceHrContractSettings((hotel as any).hrContractSettings),
       cronSettings: {
         attendanceAbsenceScanEnabled:
           attendanceCronSetting?.enabled ?? this.buildDefaultCronSettings().attendanceAbsenceScanEnabled,
@@ -365,7 +530,7 @@ export class HotelsService {
 
   async updateProfile(hotelId: string, dto: UpdateHotelDto) {
     await this.getProfile(hotelId);
-    const { cronSettings, invoiceTemplateSettings, ...hotelData } = dto;
+    const { cronSettings, invoiceTemplateSettings, hrContractSettings, ...hotelData } = dto;
 
     await this.prisma.$transaction(async (tx) => {
       await tx.hotel.update({
@@ -378,7 +543,13 @@ export class HotelsService {
                   this.coerceInvoiceTemplateSettings(invoiceTemplateSettings) as Prisma.InputJsonValue,
               }
             : {}),
-        },
+          ...(hrContractSettings
+            ? {
+                hrContractSettings:
+                  this.coerceHrContractSettings(hrContractSettings) as Prisma.InputJsonValue,
+              }
+            : {}),
+        } as any,
       });
 
       if (cronSettings) {

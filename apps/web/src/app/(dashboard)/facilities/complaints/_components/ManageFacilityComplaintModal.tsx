@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
-import { Dialog, DialogContent, DialogOverlay, DialogTitle } from '@/components/ui/dialog';
 import {
   Drawer,
   DrawerContent,

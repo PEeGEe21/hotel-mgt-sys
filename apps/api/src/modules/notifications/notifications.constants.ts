@@ -13,6 +13,8 @@ export const NOTIFICATION_EVENTS = [
   'maintenanceEscalation',
   'attendanceAlert',
   'dailyDigest',
+  'hrContractExpiry',
+  'hrContractApproval',
   'systemAlerts',
 ] as const;
 
@@ -33,6 +35,8 @@ export const NOTIFICATION_EVENT_PERMISSIONS: Record<NotificationEvent, string> =
   maintenanceEscalation: 'view:facilities',
   attendanceAlert: 'view:attendance',
   dailyDigest: 'view:settings',
+  hrContractExpiry: 'view:hr',
+  hrContractApproval: 'view:hr',
   systemAlerts: 'view:settings',
 };
 
@@ -54,5 +58,7 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: Record<
   maintenanceEscalation: { channelEmail: true, channelInApp: true, channelPush: true },
   attendanceAlert: { channelEmail: false, channelInApp: false, channelPush: false },
   dailyDigest: { channelEmail: true, channelInApp: true, channelPush: false },
+  hrContractExpiry: { channelEmail: true, channelInApp: true, channelPush: false },
+  hrContractApproval: { channelEmail: true, channelInApp: true, channelPush: false },
   systemAlerts: { channelEmail: true, channelInApp: true, channelPush: true },
 };

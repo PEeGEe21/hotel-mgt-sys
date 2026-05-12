@@ -1,0 +1,66 @@
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  IsDateString,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Min,
+} from 'class-validator';
+
+export class UpdateHrContractDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  departmentId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  positionTitle?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  type?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  startDate?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  endDate?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  salary?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  currency?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  probationEndDate?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  reportingManagerStaffId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  notes?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  status?: string;
+}

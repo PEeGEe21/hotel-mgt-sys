@@ -36,6 +36,8 @@ import { RealtimeModule } from './modules/realtime/realtime.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { RedisModule } from './common/redis/redis.module';
 import { MonitoringModule } from './common/monitoring/monitoring.module';
+import { HrContractsModule } from './modules/hr-contracts/hr-contracts.module';
+import { JobTitlesModule } from './modules/job-titles/job-titles.module';
 
 @Module({
   imports: [
@@ -92,6 +94,8 @@ import { MonitoringModule } from './common/monitoring/monitoring.module';
     MailingModule,
     RealtimeModule,
     DashboardModule,
+    HrContractsModule,
+    JobTitlesModule,
   ],
   providers: [PermissionsGuard, RolesGuard],
 })

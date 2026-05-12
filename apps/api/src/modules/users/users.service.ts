@@ -67,6 +67,7 @@ export class UsersService {
       createdAt: u.createdAt.toISOString(),
       department: u.staff?.department ?? null,
       position: u.staff?.position ?? null,
+      jobTitleId: u.staff?.jobTitleId ?? null,
       permissionGrants: u.permissionGrants ?? [],
       permissionDenies: u.permissionDenies ?? [],
       isOnline: presenceMap.get(u.id)?.isOnline ?? false,
@@ -122,6 +123,7 @@ export class UsersService {
         createdAt: u.createdAt.toISOString(),
         department: u.staff?.department ?? null,
         position: u.staff?.position ?? null,
+        jobTitleId: u.staff?.jobTitleId ?? null,
         permissionGrants: u.permissionGrants ?? [],
         permissionDenies: u.permissionDenies ?? [],
         isOnline: presenceMap.get(u.id)?.isOnline ?? false,
@@ -164,6 +166,16 @@ export class UsersService {
     if (employeeExists) throw new BadRequestException('Employee code already exists.');
 
     const passwordHash = await bcrypt.hash(dto.password, 12);
+    const jobTitle =
+      dto.jobTitleId?.trim()
+        ? await this.prisma.jobTitle.findFirst({
+            where: { id: dto.jobTitleId.trim(), hotelId: resolvedHotelId },
+            include: { department: { select: { name: true } } },
+          })
+        : null;
+    if (dto.jobTitleId && !jobTitle) {
+      throw new BadRequestException('Job title not found.');
+    }
 
     return this.prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
@@ -182,8 +194,9 @@ export class UsersService {
           employeeCode: dto.employeeCode,
           firstName: dto.firstName,
           lastName: dto.lastName,
-          department: dto.department,
-          position: dto.position,
+          department: dto.department || jobTitle?.department?.name || '',
+          position: jobTitle?.name || dto.position,
+          jobTitleId: jobTitle?.id || null,
           phone: dto.phone ?? null,
           hireDate: new Date(),
           salary: 0,
@@ -222,6 +235,19 @@ export class UsersService {
       if (employeeExists) throw new BadRequestException('Employee code already exists.');
     }
 
+    const jobTitle =
+      dto.jobTitleId !== undefined
+        ? dto.jobTitleId?.trim()
+          ? await this.prisma.jobTitle.findFirst({
+              where: { id: dto.jobTitleId.trim(), hotelId: resolvedHotelId },
+              include: { department: { select: { name: true } } },
+            })
+          : null
+        : undefined;
+    if (dto.jobTitleId !== undefined && dto.jobTitleId && !jobTitle) {
+      throw new BadRequestException('Job title not found.');
+    }
+
     return this.prisma.$transaction(async (tx) => {
       const updatedUser = await tx.user.update({
         where: { id: user.id },
@@ -238,8 +264,14 @@ export class UsersService {
           data: {
             firstName: dto.firstName ?? user.staff.firstName,
             lastName: dto.lastName ?? user.staff.lastName,
-            department: dto.department ?? user.staff.department,
-            position: dto.position ?? user.staff.position,
+            department:
+              dto.department !== undefined
+                ? dto.department
+                : jobTitle
+                  ? jobTitle.department?.name || user.staff.department
+                  : user.staff.department,
+            position: dto.position !== undefined ? dto.position : jobTitle?.name || user.staff.position,
+            jobTitleId: dto.jobTitleId !== undefined ? jobTitle?.id || null : user.staff.jobTitleId,
             employeeCode: dto.employeeCode ?? user.staff.employeeCode,
             phone: dto.phone ?? user.staff.phone,
           },

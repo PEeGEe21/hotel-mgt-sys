@@ -41,6 +41,11 @@ import {
 } from '@/hooks/useReservations';
 import { useReservationFolioItems } from '@/hooks/useFolioItems';
 import TableScroll from '@/components/ui/table-scroll';
+import {
+  loadReservationReceiptIntoWindow,
+  openReservationReceipt,
+  openReservationReceiptWindow,
+} from '@/hooks/useProxyActions';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmtMoney(n: number) {
@@ -243,7 +248,7 @@ function RecordPaymentModal({
     if (!amountValue || amountValue <= 0) return setError('Amount is required.');
     if (amountValue > balance) return setError('Amount exceeds outstanding balance.');
     setError('');
-    const receiptWindow = window.open('', 'receipt', 'width=420,height=620');
+    const receiptWindow = openReservationReceiptWindow();
     try {
       const result = await recordPayment.mutateAsync({
         amount: amountValue,
@@ -256,7 +261,8 @@ function RecordPaymentModal({
       if (receiptWindow) {
         const paymentId = result?.payment?.id ?? result?.id;
         if (paymentId) {
-          receiptWindow.location.href = `/api/proxy/reservations/${reservation.id}/payments/${paymentId}/receipt`;
+          loadReservationReceiptIntoWindow(receiptWindow, reservation.id, paymentId);
+          // receiptWindow.location.href = `/api/proxy/reservations/${reservation.id}/payments/${paymentId}/receipt`;
         } else {
           receiptWindow.close();
         }
@@ -461,12 +467,14 @@ export default function ReservationDetailPage() {
   const folioTotal = folioItems.reduce((s, f) => s + Number(f.amount), 0);
   const s = STATUS_CONFIG[res.status];
   const payments =
-    res.invoices?.flatMap((inv) =>
-      inv.payments?.map((p) => ({ ...p, invoiceNo: inv.invoiceNo })) ?? [],
+    res.invoices?.flatMap(
+      (inv) => inv.payments?.map((p) => ({ ...p, invoiceNo: inv.invoiceNo })) ?? [],
     ) ?? [];
   const latestPayment =
     payments.length > 0
-      ? payments.slice().sort((a, b) => new Date(b.paidAt).getTime() - new Date(a.paidAt).getTime())[0]
+      ? payments
+          .slice()
+          .sort((a, b) => new Date(b.paidAt).getTime() - new Date(a.paidAt).getTime())[0]
       : null;
 
   // Timeline from reservation events (derived from available data)
@@ -805,12 +813,13 @@ export default function ReservationDetailPage() {
               )}
               {latestPayment && (
                 <button
-                  onClick={() =>
-                    window.open(
-                      `/api/proxy/reservations/${res.id}/payments/${latestPayment.id}/receipt`,
-                      'receipt',
-                      'width=420,height=620',
-                    )
+                  onClick={
+                    () => openReservationReceipt(res.id, latestPayment.id)
+                    // window.open(
+                    //   `/api/proxy/reservations/${res.id}/payments/${latestPayment.id}/receipt`,
+                    //   'receipt',
+                    //   'width=420,height=620',
+                    // )
                   }
                   className="mt-3 w-full border border-[#1e2536] text-slate-300 hover:text-white rounded-lg py-2 text-xs font-medium transition-colors"
                 >
@@ -873,7 +882,7 @@ export default function ReservationDetailPage() {
                 {fmt(res.checkOut)}
               </p>
             </div>
-            <div className='flex items-center gap-2'>
+            <div className="flex items-center gap-2">
               <button
                 onClick={() => setShowFolio(true)}
                 className="flex items-center gap-1.5 text-xs bg-blue-500/15 text-blue-400 hover:bg-blue-500/25 px-3 py-1.5 rounded-lg font-medium transition-colors"
@@ -897,52 +906,54 @@ export default function ReservationDetailPage() {
           ) : folioItems.length > 0 ? (
             <div className="bg-[#161b27] border border-[#1e2536] rounded-xl overflow-hidden">
               <TableScroll>
-              <table className="w-full">
-                <thead className="border-b border-[#1e2536] bg-[#0f1117]/50">
-                  <tr>
-                    {['S/N', 'Date', 'Description', 'Category', 'Qty', 'Amount'].map((h) => (
-                      <th
-                        key={h}
-                        className="text-xs text-slate-500 uppercase tracking-wider font-medium px-4 py-3 text-left whitespace-nowrap"
-                      >
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#1e2536]">
-                  {folioItems.map((f, i) => (
-                    <tr key={f.id} className="hover:bg-white/[0.02] transition-colors">
-                      <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">
-                        {i + 1}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">
-                        {fmt(f.createdAt)}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-slate-300">{f.description}</td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`text-xs px-2 py-0.5 rounded-full font-medium ${FOLIO_STYLE[f.category] ?? 'bg-slate-500/15 text-slate-400'}`}
+                <table className="w-full">
+                  <thead className="border-b border-[#1e2536] bg-[#0f1117]/50">
+                    <tr>
+                      {['S/N', 'Date', 'Description', 'Category', 'Qty', 'Amount'].map((h) => (
+                        <th
+                          key={h}
+                          className="text-xs text-slate-500 uppercase tracking-wider font-medium px-4 py-3 text-left whitespace-nowrap"
                         >
-                          {f.category}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-xs text-slate-500">
-                        {(f as any).quantity ?? 1}
-                      </td>
-                      <td
-                        className={`px-4 py-3 text-sm font-semibold ${Number(f.amount) < 0 ? 'text-emerald-400' : 'text-slate-200'}`}
-                      >
-                        {Number(f.amount) < 0 ? '-' : ''}
-                        {fmtMoney(Math.abs(Number(f.amount)))}
-                        {Number(f.amount) < 0 && (
-                          <span className="text-xs font-normal text-slate-500 ml-1">(payment)</span>
-                        )}
-                      </td>
+                          {h}
+                        </th>
+                      ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-[#1e2536]">
+                    {folioItems.map((f, i) => (
+                      <tr key={f.id} className="hover:bg-white/[0.02] transition-colors">
+                        <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">
+                          {i + 1}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">
+                          {fmt(f.createdAt)}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-slate-300">{f.description}</td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`text-xs px-2 py-0.5 rounded-full font-medium ${FOLIO_STYLE[f.category] ?? 'bg-slate-500/15 text-slate-400'}`}
+                          >
+                            {f.category}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-xs text-slate-500">
+                          {(f as any).quantity ?? 1}
+                        </td>
+                        <td
+                          className={`px-4 py-3 text-sm font-semibold ${Number(f.amount) < 0 ? 'text-emerald-400' : 'text-slate-200'}`}
+                        >
+                          {Number(f.amount) < 0 ? '-' : ''}
+                          {fmtMoney(Math.abs(Number(f.amount)))}
+                          {Number(f.amount) < 0 && (
+                            <span className="text-xs font-normal text-slate-500 ml-1">
+                              (payment)
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </TableScroll>
               <div className="px-5 py-3 bg-[#0f1117]/40 border-t border-[#1e2536] flex items-center justify-between">
                 <div>
@@ -1005,7 +1016,9 @@ export default function ReservationDetailPage() {
       )}
 
       {showFolio && <AddFolioModal reservationId={resId} onClose={() => setShowFolio(false)} />}
-      {showPayment && <RecordPaymentModal reservation={res} onClose={() => setShowPayment(false)} />}
+      {showPayment && (
+        <RecordPaymentModal reservation={res} onClose={() => setShowPayment(false)} />
+      )}
     </div>
   );
 }

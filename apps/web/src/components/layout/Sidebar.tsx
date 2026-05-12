@@ -35,6 +35,7 @@ import {
   MessageCircleCode,
   AlarmClock,
   X,
+  History,
 } from 'lucide-react';
 import { useAppStore } from '@/store/app.store';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -102,13 +103,16 @@ const nav: NavEntry[] = [
   },
   {
     label: 'HR',
-    href: '/hr',
+    href: '/hr/overview',
     icon: UserCog,
     permission: 'view:staff',
     children: [
+      { label: 'Overview', href: '/hr/overview', icon: BookOpen },
       { label: 'User Accounts', href: '/hr/accounts', icon: UserCog },
       { label: 'Permissions', href: '/hr/permissions', icon: Shield },
       { label: 'Contracts', href: '/hr/contracts', icon: FileText },
+      { label: 'Audit Logs', href: '/hr/audit-logs', icon: History },
+      { label: 'Settings', href: '/hr/settings', icon: Settings },
       { label: 'Payroll', href: '/hr/payroll', icon: Receipt, disabled: true, badge: 'Soon' },
     ],
   },

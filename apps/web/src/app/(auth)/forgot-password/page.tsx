@@ -3,6 +3,7 @@
 import { FormEvent, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Hotel, Mail } from 'lucide-react';
+import { requestPasswordResetAction } from '@/actions/auth.actions';
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
@@ -17,15 +18,9 @@ export default function ForgotPasswordPage() {
     setDevResetUrl(null);
 
     try {
-      const response = await fetch('/api/proxy/auth/forgot-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
-      });
-      const data = await response.json().catch(() => ({}));
-
-      setMessage(data.message ?? 'If an account exists for that email, a reset link has been sent.');
-      if (data.resetUrl) setDevResetUrl(data.resetUrl);
+      const result = await requestPasswordResetAction(email);
+      setMessage(result.message);
+      if (result.success && result.resetUrl) setDevResetUrl(result.resetUrl);
     } catch {
       setMessage('If an account exists for that email, a reset link has been sent.');
     } finally {

@@ -50,6 +50,44 @@ export class UpdateHotelInvoiceTemplateSettingsDto {
   @ApiPropertyOptional() @IsBoolean() @IsOptional() showNotes?: boolean;
 }
 
+export class UpdateHotelHrContractTemplateSettingsDto {
+  @ApiPropertyOptional() @IsString() @IsOptional() accentColor?: string;
+  @ApiPropertyOptional() @IsString() @IsOptional() headerTitle?: string;
+  @ApiPropertyOptional() @IsString() @IsOptional() footerNote?: string;
+  @ApiPropertyOptional() @IsString() @IsOptional() introductionText?: string;
+  @ApiPropertyOptional() @IsBoolean() @IsOptional() showSignatureLines?: boolean;
+}
+
+export class UpdateHotelHrContractDocumentPolicySettingsDto {
+  @ApiPropertyOptional({ type: [String] }) @IsArray() @IsString({ each: true }) @IsOptional() requiredDocumentTypes?: string[];
+  @ApiPropertyOptional() @IsBoolean() @IsOptional() allowSupportingDocuments?: boolean;
+  @ApiPropertyOptional() @IsBoolean() @IsOptional() requireSignedContractUpload?: boolean;
+  @ApiPropertyOptional() @IsBoolean() @IsOptional() requireGeneratedContractPdf?: boolean;
+}
+
+export class UpdateHotelHrContractNumberingSettingsDto {
+  @ApiPropertyOptional() @IsString() @IsOptional() contractNumberPrefix?: string;
+  @ApiPropertyOptional() @IsString() @IsOptional() renewalNumberPrefix?: string;
+}
+
+export class UpdateHotelHrContractNotificationSettingsDto {
+  @ApiPropertyOptional() @IsBoolean() @IsOptional() approvalTurnNotificationsEnabled?: boolean;
+  @ApiPropertyOptional() @IsBoolean() @IsOptional() approvalTurnRoleFallbackEnabled?: boolean;
+  @ApiPropertyOptional() @IsBoolean() @IsOptional() expiryDigestEnabled?: boolean;
+  @ApiPropertyOptional() @IsBoolean() @IsOptional() staleApprovalDigestEnabled?: boolean;
+  @ApiPropertyOptional() @IsBoolean() @IsOptional() staleSignatureDigestEnabled?: boolean;
+  @ApiPropertyOptional() @IsInt() @Min(1) @Max(30) @IsOptional() staleApprovalReminderDays?: number;
+  @ApiPropertyOptional() @IsInt() @Min(1) @Max(30) @IsOptional() staleSignatureReminderDays?: number;
+  @ApiPropertyOptional({ type: [String] }) @IsArray() @IsString({ each: true }) @IsOptional() digestRecipientRoles?: string[];
+}
+
+export class UpdateHotelHrContractSettingsDto {
+  @ApiPropertyOptional({ type: UpdateHotelHrContractTemplateSettingsDto }) @ValidateNested() @Type(() => UpdateHotelHrContractTemplateSettingsDto) @IsOptional() template?: UpdateHotelHrContractTemplateSettingsDto;
+  @ApiPropertyOptional({ type: UpdateHotelHrContractDocumentPolicySettingsDto }) @ValidateNested() @Type(() => UpdateHotelHrContractDocumentPolicySettingsDto) @IsOptional() documentPolicy?: UpdateHotelHrContractDocumentPolicySettingsDto;
+  @ApiPropertyOptional({ type: UpdateHotelHrContractNumberingSettingsDto }) @ValidateNested() @Type(() => UpdateHotelHrContractNumberingSettingsDto) @IsOptional() numbering?: UpdateHotelHrContractNumberingSettingsDto;
+  @ApiPropertyOptional({ type: UpdateHotelHrContractNotificationSettingsDto }) @ValidateNested() @Type(() => UpdateHotelHrContractNotificationSettingsDto) @IsOptional() notifications?: UpdateHotelHrContractNotificationSettingsDto;
+}
+
 export class UpdateHotelDto {
   @ApiPropertyOptional() @IsString() @IsOptional() name?: string;
   @ApiPropertyOptional() @IsString() @IsOptional() address?: string;
@@ -79,6 +117,8 @@ export class UpdateHotelDto {
   @ApiPropertyOptional() @IsBoolean() @IsOptional() autoCreateCheckoutHousekeepingTasks?: boolean;
   @ApiPropertyOptional() @IsBoolean() @IsOptional() housekeepingFollowUpEnabled?: boolean;
   @ApiPropertyOptional() @IsInt() @Min(1) @Max(168) @IsOptional() housekeepingFollowUpGraceHours?: number;
+  @ApiPropertyOptional() @IsInt() @Min(1) @Max(365) @IsOptional() contractExpiryWarningDays?: number;
   @ApiPropertyOptional({ type: UpdateHotelInvoiceTemplateSettingsDto }) @ValidateNested() @Type(() => UpdateHotelInvoiceTemplateSettingsDto) @IsOptional() invoiceTemplateSettings?: UpdateHotelInvoiceTemplateSettingsDto;
+  @ApiPropertyOptional({ type: UpdateHotelHrContractSettingsDto }) @ValidateNested() @Type(() => UpdateHotelHrContractSettingsDto) @IsOptional() hrContractSettings?: UpdateHotelHrContractSettingsDto;
   @ApiPropertyOptional({ type: UpdateHotelCronSettingsDto }) @ValidateNested() @Type(() => UpdateHotelCronSettingsDto) @IsOptional() cronSettings?: UpdateHotelCronSettingsDto;
 }

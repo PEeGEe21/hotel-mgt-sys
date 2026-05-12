@@ -36,6 +36,7 @@ export type HotelProfile = {
   autoCreateCheckoutHousekeepingTasks: boolean;
   housekeepingFollowUpEnabled?: boolean;
   housekeepingFollowUpGraceHours?: number;
+  contractExpiryWarningDays?: number;
   invoiceTemplateSettings?: {
     accentColor: string;
     headerTitle: string;
@@ -43,6 +44,35 @@ export type HotelProfile = {
     showLogo: boolean;
     showTaxBreakdown: boolean;
     showNotes: boolean;
+  };
+  hrContractSettings?: {
+    template: {
+      accentColor: string;
+      headerTitle: string;
+      footerNote: string;
+      introductionText: string;
+      showSignatureLines: boolean;
+    };
+    documentPolicy: {
+      requiredDocumentTypes: string[];
+      allowSupportingDocuments: boolean;
+      requireSignedContractUpload: boolean;
+      requireGeneratedContractPdf: boolean;
+    };
+    numbering: {
+      contractNumberPrefix: string;
+      renewalNumberPrefix: string;
+    };
+    notifications: {
+      approvalTurnNotificationsEnabled: boolean;
+      approvalTurnRoleFallbackEnabled: boolean;
+      expiryDigestEnabled: boolean;
+      staleApprovalDigestEnabled: boolean;
+      staleSignatureDigestEnabled: boolean;
+      staleApprovalReminderDays: number;
+      staleSignatureReminderDays: number;
+      digestRecipientRoles: string[];
+    };
   };
   cronSettings?: {
     attendanceAbsenceScanEnabled: boolean;
@@ -164,7 +194,9 @@ export function useUpdateHotelProfile() {
         autoCreateCheckoutHousekeepingTasks: data.autoCreateCheckoutHousekeepingTasks,
         housekeepingFollowUpEnabled: data.housekeepingFollowUpEnabled,
         housekeepingFollowUpGraceHours: data.housekeepingFollowUpGraceHours,
+        contractExpiryWarningDays: data.contractExpiryWarningDays,
         invoiceTemplateSettings: data.invoiceTemplateSettings,
+        hrContractSettings: data.hrContractSettings,
         cronSettings: data.cronSettings,
       });
       openToast('success', 'Hotel profile updated');

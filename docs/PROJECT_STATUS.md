@@ -177,7 +177,6 @@ Done recently:
 - hotel-level `emailAutoRetryEnabled` setting is now wired through schema/settings flow and defaults `off`
 - notification `pinnedAt` / `archivedAt` columns are now in place so state no longer depends on JSON metadata
 
-Still pending:
 - better notification content across event titles/messages, urgency levels, and metadata summaries across all event types
 
 - [~] Realtime WebSocket/SSE
@@ -345,8 +344,7 @@ Notes: creating, filtering
 
 - [x] Finance Payments.
 
-- [ ] HR 
-Notes: Contracts, 
+- [x] HR Contracts, 
 
 - Future implementation
    - Payroll

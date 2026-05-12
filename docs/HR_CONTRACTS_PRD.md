@@ -62,6 +62,107 @@ Current implementation in [hr/contracts/page.tsx](/var/www/html/hotel-os/apps/we
 - has no backend contracts module
 - has no document storage, PDF generation, notification, approval, or audit support
 
+### 5.1 Implementation Status
+
+Current delivery status:
+
+- Phase 1 complete in code:
+  - contracts persistence
+  - compensation history persistence
+  - live contracts list page
+  - contract creation
+  - contract detail view
+  - derived status calculation
+  - plain-text download placeholder
+- Phase 2 complete in code:
+  - contract document model
+  - document upload/list/view wiring in contract details
+  - uploaded document metadata persistence
+  - pragmatic document references using stored URLs and data URLs
+- Phase 3 started in code:
+  - generated contract PDF download
+  - canonical generated contract document persisted against the contract
+- Phase 4 started in code:
+  - early termination action with termination date and reason
+  - terminated contracts retain explicit termination metadata
+- Renewal workflow implemented in code:
+  - renew action creates a linked successor contract
+  - prior contract is marked superseded
+  - renewal chain is queryable from contract details
+- Approval workflow implemented in code:
+  - submit for approval
+  - approve
+  - reject with reason
+  - contract-level submission and approval metadata
+- Approval route configuration and multi-step chains implemented in code:
+  - hotel approval routes can be created and updated
+  - contract-type routes resolve before hotel default routes
+  - approval submission creates ordered approval steps on the contract
+  - approval and rejection now act against the current pending step
+- Audit/history polish implemented in code:
+  - contract actions now write audit events
+  - contract detail surfaces a history timeline
+  - `HR > Audit Logs` provides a searchable cross-contract history page
+- Notifications implemented in code:
+  - expiring contract digest notifications
+  - stale pending-approval digest notifications
+  - stale awaiting-signature digest notifications
+  - immediate approver-turn notifications when a contract reaches the next approval step
+  - manual notifications scan trigger
+- HR IA split implemented in code:
+  - `HR > Overview` now backed by dedicated reporting queries and widgets
+  - `HR > Settings` scaffold with tabbed settings structure
+  - approval route management moved out of contracts into settings
+- HR settings implemented in code:
+  - notification settings panel
+  - contract template settings panel
+  - contract document policy settings panel
+- Reporting dashboards implemented in code:
+  - dedicated HR overview reporting query
+  - summary KPI cards for staff, coverage, approvals, renewals, and terminations
+  - department coverage and salary exposure widgets
+  - contract status/type mix widgets
+  - compensation change trend widget
+  - expiring contracts, approval queue, and recent activity widgets
+- Deeper reporting slices implemented in code:
+  - approval performance by role
+  - department contract health
+  - document compliance reporting
+- Lifecycle hardening implemented in code:
+  - `Awaiting Signature` is now a real lifecycle state
+  - sign action activates contracts and records signature metadata
+  - submission/signing now enforce contract document policy
+  - direct `ACTIVE` creation and renewal paths now respect document-policy restrictions
+  - generic contract edit no longer allows arbitrary manual status transitions
+
+### 5.2 Where We Are Now
+
+The module now supports a workable operational baseline:
+
+- HR can create contracts against real staff records
+- the system snapshots staff, department, position, and salary context onto the contract
+- compensation history is queryable separately for analytics
+- contract status is derived from lifecycle state and end dates
+- HR can open contract details, upload supporting files, and view uploaded documents
+
+The core contract lifecycle now covers generated PDFs, early termination, renewals, configurable approval routes, multi-step approval chains, contract audit history, HR contract notifications, and a dedicated `HR > Overview` reporting dashboard alongside `HR > Settings`.
+
+The latest pass also closes the main lifecycle bypasses: contracts now move through explicit approval/signature actions, document policy is enforced at submission and activation, and direct activation is blocked when hotel policy requires pre-existing paperwork that cannot yet exist.
+
+### 5.3 What Comes Next
+
+Recommended next build order after the current hardening pass:
+
+1. Restrict which contract fields remain editable once a contract leaves `DRAFT` or `REJECTED`
+2. Decide whether direct `ACTIVE` creation should remain available at all under relaxed hotel policies, or be removed entirely in favor of draft-first workflows
+3. Add stronger document workflow helpers such as explicit required-document checklists and “generate before submit” affordances
+4. Expand reporting further with approval SLA trends, renewal conversion, and department-by-department contract history over longer windows
+
+### 5.4 Backlog / To-Do
+
+- Link contract salary and compensation history more clearly into the staff page so HR can see current contract-backed pay context from the staff profile
+- Add a dedicated contract documents tab in staff details so generated and uploaded files have their own focused surface alongside the staff record
+
 ## 6. Product Goals
 
 ### 6.1 Operational Reliability
@@ -541,6 +642,16 @@ The list page should include:
 - `Renew`
 - `Terminate`
 
+Future IA note:
+
+- when reporting dashboards are introduced, they should live under a separate `HR > Overview` or `HR > Dashboard` screen rather than inside the contracts page
+- when HR settings are introduced, approval route configuration should move out of the contracts page into `HR > Settings`, with its own `Approval Routes` tab
+
+Current status:
+
+- `HR > Overview` now exists as the reporting home scaffold
+- `HR > Settings` now exists and owns approval route configuration
+
 ### 11.2 New Contract Form
 
 The form should save real data and include:
@@ -676,12 +787,14 @@ Suggested recurring jobs:
 ### 14.1 Screens Needed
 
 - contracts list page
+- hr overview/dashboard page for HR reporting and staffing summaries
 - new/edit contract drawer or page
 - contract detail page
 - renewal modal
 - termination modal
 - document upload modal
 - contract PDF preview page or modal
+- hr settings page with tabs, including an `Approval Routes` tab
 
 Staff self-service viewing is deferred to a later phase and should not block the admin and HR rollout.
 
@@ -731,17 +844,38 @@ Minimum reports:
 - contract snapshots
 - compensation history writes
 
+Status:
+
+- Implemented
+
 ### Phase 2: Documents
 
 - file storage integration
 - upload/view/download
 - document tab
 
+Status:
+
+- Implemented in code
+- current implementation path stores document references on the contract and exposes upload/list/view behavior
+- external object storage integration can follow without changing the contract document model
+- remaining follow-up inside this phase:
+- move from data URL support to real object storage
+- add generated document records alongside manual uploads
+- add delete/replace controls with audit logging
+
 ### Phase 3: Generated PDFs
 
 - contract template engine
 - offer/renewal/termination generation
 - canonical PDF storage
+
+Status:
+
+- In progress
+- core contract PDF download is implemented
+- generated PDFs are persisted as canonical generated contract documents
+- renewal and termination template variants remain next inside this phase
 
 ### Phase 4: Lifecycle Automation
 
@@ -750,6 +884,14 @@ Minimum reports:
 - termination flow
 - audit log
 
+Status:
+
+- expiry logic partially implemented for derived contract list status
+- termination action is implemented with explicit date and reason capture
+- renewal flow is implemented with linked successor contracts and superseded predecessors
+- basic approval actions, route configuration, multi-step chains, and audit history are implemented
+- notifications are implemented in a first pass; future HR IA split into `Overview` and `Settings` remains next-step work
+
 ### Phase 5: Notifications and Approval
 
 - approval chain
@@ -757,10 +899,18 @@ Minimum reports:
 - email and in-app notifications
 - contract type route resolution with hotel default fallback
 
+Status:
+
+- Not started
+
 ### Phase 6: Reporting
 
 - summary dashboards
 - staffing and salary analytics
+
+Status:
+
+- Not started
 
 ## 18. Build Priority
 

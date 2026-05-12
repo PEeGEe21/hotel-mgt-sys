@@ -1,0 +1,2 @@
+ALTER TABLE "Hotel"
+ADD COLUMN "contractExpiryWarningDays" INTEGER NOT NULL DEFAULT 60;

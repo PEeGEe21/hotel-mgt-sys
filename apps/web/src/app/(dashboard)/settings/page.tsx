@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useMemo, useState } from 'react';
 import {
   Building2,
   Users,
@@ -15,6 +16,7 @@ import {
   ShoppingCart,
   Table,
   Bell,
+  Search,
   KeyRound,
   ShieldCheck,
   Mail,
@@ -181,14 +183,38 @@ const sections = [
 
 export default function SettingsPage() {
   const { isAdmin, isManagement } = usePermissions();
+  const [search, setSearch] = useState('');
 
-  const visible = sections.filter((s) => !s.adminOnly || isAdmin);
+  const visible = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return sections.filter((section) => {
+      if (section.adminOnly && !isAdmin) return false;
+      if (!query) return true;
+      return (
+        section.label.toLowerCase().includes(query) ||
+        section.description.toLowerCase().includes(query) ||
+        section.href.toLowerCase().includes(query)
+      );
+    });
+  }, [isAdmin, search]);
 
   return (
     <div className="space-y-6 max-w-full">
-      <div>
-        <h1 className="text-2xl font-bold text-white tracking-tight">Settings</h1>
-        <p className="text-slate-500 text-sm mt-0.5">Configure your hotel system</p>
+      <div className='flex items-center justify-between gap-2 flex-wrap'>
+        <div>
+          <h1 className="text-2xl font-bold text-white tracking-tight">Settings</h1>
+          <p className="text-slate-500 text-sm mt-0.5">Configure your hotel system</p>
+        </div>
+
+        <div className="flex items-center gap-2 rounded-xl border border-[#1e2536] bg-[#161b27] px-3 py-2.5">
+          <Search size={14} className="text-slate-500 shrink-0" />
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search settings..."
+            className="w-full bg-transparent text-sm text-slate-200 outline-none placeholder:text-slate-600"
+          />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

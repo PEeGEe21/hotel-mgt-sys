@@ -11,6 +11,7 @@ export class UpdateUserAccountDto {
   @ApiPropertyOptional() @IsString() @MinLength(2) @IsOptional() lastName?: string;
   @ApiPropertyOptional() @IsString() @MinLength(2) @IsOptional() department?: string;
   @ApiPropertyOptional() @IsString() @MinLength(2) @IsOptional() position?: string;
+  @ApiPropertyOptional() @IsString() @IsOptional() jobTitleId?: string;
   @ApiPropertyOptional() @IsString() @MinLength(2) @IsOptional() employeeCode?: string;
   @ApiPropertyOptional() @IsString() @IsOptional() phone?: string;
 }

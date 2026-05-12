@@ -19,6 +19,7 @@ export type ApiStaff = {
   id: string;
   hotelId: string;
   userId: string;
+  jobTitleId?: string | null;
   employeeCode: string;
   firstName: string;
   lastName: string;
@@ -53,6 +54,7 @@ export type CreateStaffInput = {
   email: string;
   department: string;
   position: string;
+  jobTitleId?: string;
   role: StaffRole;
   hireDate: string;
   phone?: string;

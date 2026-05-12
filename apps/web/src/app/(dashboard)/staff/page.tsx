@@ -31,6 +31,7 @@ import { useDebounce } from '@/hooks/useDebounce';
 import Pagination from '@/components/ui/pagination';
 import TableScroll from '@/components/ui/table-scroll';
 import { usePresenceRealtime } from '@/hooks/usePresenceRealtime';
+import { useJobTitles } from '@/hooks/useJobTitles';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const CLOCK_STATUS_STYLE: Record<string, string> = {
@@ -61,12 +62,14 @@ function AddStaffModal({
 }) {
   const createStaff = useCreateStaff();
   const { data: roles = [] } = useRoles();
+  const { data: jobTitles = [] } = useJobTitles();
   const [form, setForm] = useState<CreateStaffInput>({
     firstName: '',
     lastName: '',
     email: '',
     department: '',
     position: '',
+    jobTitleId: '',
     role: 'STAFF',
     hireDate: new Date().toISOString().slice(0, 10),
     phone: '',
@@ -76,6 +79,12 @@ function AddStaffModal({
   const [created, setCreated] = useState<{ employeeCode: string } | null>(null);
 
   const set = (k: keyof CreateStaffInput, v: any) => setForm((f) => ({ ...f, [k]: v }));
+
+  const visibleJobTitles = form.department
+    ? jobTitles.filter(
+        (jobTitle) => !jobTitle.departmentName || jobTitle.departmentName === form.department,
+      )
+    : jobTitles;
 
   const handleSave = async () => {
     if (!form.firstName.trim()) return setError('First name is required.');
@@ -211,10 +220,33 @@ function AddStaffModal({
                   <input
                     value={form.position}
                     onChange={(e) => set('position', e.target.value)}
+                    readOnly={!!form.jobTitleId}
                     placeholder="Head Receptionist"
                     className={inputCls}
                   />
                 </div>
+              </div>
+
+              <div>
+                <Label>Job Title</Label>
+                <select
+                  value={form.jobTitleId}
+                  onChange={(e) => {
+                    const selected = jobTitles.find((jobTitle) => jobTitle.id === e.target.value);
+                    set('jobTitleId', e.target.value);
+                    if (selected?.departmentName) set('department', selected.departmentName);
+                    if (selected?.name) set('position', selected.name);
+                  }}
+                  className={inputCls}
+                >
+                  <option value="">Select…</option>
+                  {visibleJobTitles.map((jobTitle) => (
+                    <option key={jobTitle.id} value={jobTitle.id}>
+                      {jobTitle.name}
+                      {jobTitle.departmentName ? ` · ${jobTitle.departmentName}` : ''}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               {/* Role selector */}

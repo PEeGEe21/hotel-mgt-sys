@@ -92,13 +92,13 @@ export default function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
                   <Settings size={14} /> Settings
                 </Link>
               </DropdownMenuItem> */}
-              <DropdownMenuSeparator className="bg-[#161b27]" />
-              <DropdownMenuItem asChild>
+              <DropdownMenuSeparator className="bg-[#1e2536]" />
+              <div className="p-1">
                 <SignOutButton
                   compact
-                  className="flex w-full items-center gap-2 text-red-400 focus:text-red-400 cursor-pointer hover:!bg-white/5 outline-none focus-visible:outline-none"
+                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-red-400 transition-colors hover:bg-white/5"
                 />
-              </DropdownMenuItem>
+              </div>
             </DropdownMenuContent>
           </DropdownMenu>
         )}

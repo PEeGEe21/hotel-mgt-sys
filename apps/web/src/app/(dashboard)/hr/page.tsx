@@ -1,20 +1,34 @@
 'use client';
 
 import Link from 'next/link';
-import { UserCog, FileText, Receipt, ShieldCheck, DollarSign } from 'lucide-react';
+import {
+  BookOpen,
+  UserCog,
+  FileText,
+  Receipt,
+  Settings,
+  ShieldCheck,
+  DollarSign,
+  History,
+} from 'lucide-react';
 
 export default function HRPage() {
   return (
     <div className="space-y-6 max-w-3xl">
       <div>
         <h1 className="text-2xl font-bold text-white tracking-tight">Human Resources</h1>
-        <p className="text-slate-500 text-sm mt-0.5">Manage user access, contracts and payroll</p>
+        <p className="text-slate-500 text-sm mt-0.5">
+          Overview, contract operations, access control, and future HR reporting
+        </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {[
+          { label: 'Overview', description: 'Track contract health, approvals, and staffing signals', href: '/hr/overview', icon: BookOpen, color: 'text-cyan-400', bg: 'bg-cyan-500/10 border-cyan-500/20' },
           { label: 'User Accounts', description: 'Create logins and assign system roles to staff members', href: '/hr/accounts', icon: UserCog, color: 'text-blue-400', bg: 'bg-blue-500/10 border-blue-500/20' },
           { label: 'Contracts', description: 'Manage staff employment contracts and documents', href: '/hr/contracts', icon: FileText, color: 'text-violet-400', bg: 'bg-violet-500/10 border-violet-500/20' },
+          { label: 'Audit Logs', description: 'Search HR contract history across approvals, renewals, and documents', href: '/hr/audit-logs', icon: History, color: 'text-rose-400', bg: 'bg-rose-500/10 border-rose-500/20' },
+          { label: 'Settings', description: 'Approval routes and future HR-specific configuration', href: '/hr/settings', icon: Settings, color: 'text-amber-400', bg: 'bg-amber-500/10 border-amber-500/20' },
           { label: 'Payroll', description: 'Salary records, payment history and payslips', href: '/hr/payroll', icon: Receipt, color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20', disabled: true, badge: 'Coming soon' },
         ].map(({ label, description, href, icon: Icon, color, bg, disabled, badge }) => (
           disabled ? (

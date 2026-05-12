@@ -19,6 +19,7 @@ export type UserAccount = {
   createdAt: string;
   department: string | null;
   position: string | null;
+  jobTitleId?: string | null;
   permissionGrants: string[];
   permissionDenies: string[];
   isOnline?: boolean;
@@ -33,6 +34,7 @@ export type UserAccountInput = {
   lastName: string;
   department: string;
   position: string;
+  jobTitleId?: string;
   employeeCode: string;
   phone?: string;
 };
@@ -45,6 +47,7 @@ export type UserAccountUpdate = Partial<{
   lastName: string;
   department: string;
   position: string;
+  jobTitleId: string;
   employeeCode: string;
   phone: string;
 }>;

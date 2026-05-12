@@ -51,7 +51,7 @@ export default function SignOutButton({
       </button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogOverlay className="bg-black/50 backdrop-blur-sm data-[state=open]:animate-fadeIn" />
+        <DialogOverlay className="bg-black/70 backdrop-blur-sm data-[state=open]:animate-fadeIn" />
         <DialogContent
           showCloseButton={false}
           className="max-w-md rounded-2xl border border-[#1e2536] bg-[#161b27] p-0 text-slate-200"

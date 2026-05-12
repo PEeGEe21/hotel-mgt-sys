@@ -11,6 +11,7 @@ export class CreateUserAccountDto {
   @ApiProperty() @IsString() @MinLength(2) lastName!: string;
   @ApiProperty() @IsString() @MinLength(2) department!: string;
   @ApiProperty() @IsString() @MinLength(2) position!: string;
+  @ApiPropertyOptional() @IsString() @IsOptional() jobTitleId?: string;
   @ApiProperty() @IsString() @MinLength(2) employeeCode!: string;
 
   @ApiPropertyOptional() @IsString() @IsOptional() phone?: string;

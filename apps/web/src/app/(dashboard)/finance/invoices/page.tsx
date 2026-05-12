@@ -32,6 +32,7 @@ import {
   DrawerOverlay,
   DrawerTitle,
 } from '@/components/ui/drawer';
+import { openFinanceInvoicePrint, openFinanceInvoicesExport } from '@/hooks/useProxyActions';
 
 type InvoiceStatus = 'Unpaid' | 'Partial' | 'Paid' | 'Overdue' | 'Refunded';
 type SourceType = 'MANUAL' | 'RESERVATION' | 'POS' | 'FACILITY' | 'REQUISITION';
@@ -436,14 +437,6 @@ export default function InvoicesPage() {
         ? 'Partial'
         : 'Unpaid';
 
-  const handleExport = () => {
-    window.open('/api/proxy/finance/invoices/export', '_blank', 'noopener,noreferrer');
-  };
-
-  const handlePrint = (id: string) => {
-    window.open(`/api/proxy/finance/invoices/${id}/print`, 'invoice', 'width=960,height=720');
-  };
-
   const handleOpenEdit = (invoiceId: string) => {
     const invoice = invoices.find((item) => item.id === invoiceId);
     if (!invoice) return;
@@ -553,7 +546,7 @@ export default function InvoicesPage() {
           </div>
           <div className="flex gap-2">
             <button
-              onClick={handleExport}
+              onClick={openFinanceInvoicesExport}
               className="flex items-center gap-2 rounded-lg border border-[#1e2536] bg-[#161b27] px-3 py-2 text-sm font-medium text-slate-300 transition-all hover:border-slate-500"
             >
               <Download size={13} /> Export
@@ -744,7 +737,7 @@ export default function InvoicesPage() {
                               Edit
                             </button>
                             <button
-                              onClick={() => handlePrint(invoice.id)}
+                              onClick={() => openFinanceInvoicePrint(invoice.id)}
                               className="inline-flex items-center gap-1 rounded-lg border border-[#1e2536] bg-white/5 px-2.5 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:bg-white/10"
                             >
                               <Printer size={12} />

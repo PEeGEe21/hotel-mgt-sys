@@ -4,8 +4,6 @@ import { useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import {
   ArrowLeft,
-  Phone,
-  Mail,
   Briefcase,
   Calendar,
   DollarSign,
@@ -20,9 +18,9 @@ import {
   Loader2,
   X,
   Check,
-  KeyRound,
   BedDouble,
   RotateCcw,
+  Download,
 } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import {
@@ -35,7 +33,9 @@ import {
   type CreateStaffInput,
   type StaffRole,
 } from '@/hooks/staff/useStaff';
-import openToast from '@/components/ToastComponent';
+import { useHrContracts } from '@/hooks/hr/useHrContracts';
+import { formatDate, formatFileSize, formatMoney, titleizeStatus } from '@/utils/hr/contracts-utils';
+import { openHrContractDownload } from '@/hooks/useProxyActions';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmt(iso: string) {
@@ -256,7 +256,7 @@ function EditStaffModal({ staff, onClose }: { staff: ApiStaff; onClose: () => vo
 }
 
 // ─── Tab ──────────────────────────────────────────────────────────────────────
-type Tab = 'overview' | 'attendance' | 'leaves' | 'tasks';
+type Tab = 'overview' | 'contracts' | 'documents' | 'attendance' | 'leaves' | 'tasks';
 function TabBtn({
   label,
   icon: Icon,
@@ -286,6 +286,10 @@ export default function StaffDetailPage() {
   const staffId = id as string;
 
   const { data: staff, isLoading, isError } = useStaffMember(staffId);
+  const contractsQuery = useHrContracts({
+    staffId,
+    limit: 50,
+  });
   const deactivate = useDeactivateStaff(staffId);
   const reactivate = useReactivateStaff(staffId);
   const resetPwd = useResetStaffPassword(staffId);
@@ -317,6 +321,29 @@ export default function StaffDetailPage() {
   const leaves = staff.leaves ?? [];
   const tasks = staff.tasks ?? [];
   const isActive = staff.user.isActive;
+  const contracts = contractsQuery.data?.contracts ?? [];
+  const currentContract =
+    contracts.find((contract) =>
+      ['ACTIVE', 'EXPIRING_SOON', 'APPROVED', 'PENDING_APPROVAL', 'AWAITING_SIGNATURE'].includes(
+        contract.derivedStatus,
+      ),
+    ) ?? contracts[0] ?? null;
+  const contractDocuments = contracts
+    .flatMap((contract) =>
+      (contract.documents ?? []).map((document) => ({
+        ...document,
+        contractId: contract.id,
+        contractNo: contract.contractNo,
+        contractStatus: contract.derivedStatus,
+      })),
+    )
+    .sort(
+      (left, right) => new Date(right.uploadedAt).getTime() - new Date(left.uploadedAt).getTime(),
+    );
+  const contractBackedSalary =
+    currentContract?.latestCompensation?.amount ?? currentContract?.salary ?? null;
+  const contractBackedCurrency =
+    currentContract?.latestCompensation?.currency ?? currentContract?.currency ?? 'NGN';
 
   // Compute today's hours from attendance
   const today = new Date();
@@ -449,9 +476,9 @@ export default function StaffDetailPage() {
             bg: 'bg-violet-500/10 border-violet-500/20',
           },
           {
-            label: 'Salary',
-            value: Number(staff.salary) > 0 ? `₦${Number(staff.salary).toLocaleString()}` : '—',
-            sub: 'per month',
+            label: 'Contract Salary',
+            value: contractBackedSalary ? formatMoney(contractBackedSalary, contractBackedCurrency) : '—',
+            sub: currentContract ? `${titleizeStatus(currentContract.derivedStatus)} contract` : 'No contract linked',
             icon: DollarSign,
             color: 'text-emerald-400',
             bg: 'bg-emerald-500/10 border-emerald-500/20',
@@ -483,6 +510,18 @@ export default function StaffDetailPage() {
           icon={UserCheck}
           active={tab === 'overview'}
           onClick={() => setTab('overview')}
+        />
+        <TabBtn
+          label="Contracts"
+          icon={Briefcase}
+          active={tab === 'contracts'}
+          onClick={() => setTab('contracts')}
+        />
+        <TabBtn
+          label="Documents"
+          icon={FileText}
+          active={tab === 'documents'}
+          onClick={() => setTab('documents')}
         />
         <TabBtn
           label="Attendance"
@@ -524,7 +563,7 @@ export default function StaffDetailPage() {
                   { label: 'Employee No', value: staff.employeeCode },
                   { label: 'Hire Date', value: fmt(staff.hireDate) },
                   {
-                    label: 'Salary',
+                    label: 'Staff Salary',
                     value:
                       Number(staff.salary) > 0
                         ? `₦${Number(staff.salary).toLocaleString()}/mo`
@@ -542,6 +581,65 @@ export default function StaffDetailPage() {
                   </div>
                 ))}
               </div>
+            </div>
+
+            <div className="bg-[#161b27] border border-[#1e2536] rounded-xl p-5">
+              <p className="text-xs text-slate-500 uppercase tracking-wider font-medium mb-4">
+                Contract Compensation
+              </p>
+              {currentContract ? (
+                <div className="grid grid-cols-2 gap-x-8 gap-y-3">
+                  <div>
+                    <p className="text-xs text-slate-600">Current Contract</p>
+                    <p className="mt-0.5 text-sm font-medium text-slate-200">
+                      {currentContract.contractNo}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-600">Status</p>
+                    <p className="mt-0.5 text-sm font-medium text-slate-200">
+                      {titleizeStatus(currentContract.derivedStatus)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-600">Contract Salary</p>
+                    <p className="mt-0.5 text-sm font-medium text-emerald-300">
+                      {formatMoney(contractBackedSalary ?? currentContract.salary, contractBackedCurrency)}
+                      /mo
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-600">Effective From</p>
+                    <p className="mt-0.5 text-sm font-medium text-slate-200">
+                      {formatDate(
+                        currentContract.latestCompensation?.effectiveFrom ?? currentContract.startDate,
+                      )}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-600">Contract Window</p>
+                    <p className="mt-0.5 text-sm font-medium text-slate-200">
+                      {formatDate(currentContract.startDate)} to {formatDate(currentContract.endDate)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-600">Comp Source</p>
+                    <p className="mt-0.5 text-sm font-medium text-slate-200">
+                      {currentContract.latestCompensation ? 'Compensation history' : 'Contract snapshot'}
+                    </p>
+                  </div>
+                </div>
+              ) : contractsQuery.isLoading ? (
+                <div className="py-6 text-center">
+                  <Loader2 size={18} className="mx-auto mb-2 animate-spin text-slate-600" />
+                  <p className="text-sm text-slate-500">Loading contract compensation…</p>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-dashed border-[#1e2536] px-4 py-8 text-center">
+                  <DollarSign size={20} className="mx-auto mb-2 text-slate-700" />
+                  <p className="text-sm text-slate-500">No HR contract found for this staff member.</p>
+                </div>
+              )}
             </div>
 
             {/* Recent attendance */}
@@ -649,6 +747,132 @@ export default function StaffDetailPage() {
               )}
             </div>
           </div>
+        </div>
+      )}
+
+      {tab === 'contracts' && (
+        <div className="bg-[#161b27] border border-[#1e2536] rounded-xl overflow-hidden">
+          <div className="px-5 py-4 border-b border-[#1e2536]">
+            <p className="text-sm font-semibold text-white">HR Contracts</p>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Contract-backed salary, status, and effective dates for this staff member.
+            </p>
+          </div>
+          {contractsQuery.isLoading ? (
+            <div className="py-12 text-center">
+              <Loader2 size={28} className="animate-spin text-slate-600 mx-auto mb-2" />
+              <p className="text-sm text-slate-500">Loading staff contracts…</p>
+            </div>
+          ) : contracts.length > 0 ? (
+            <table className="w-full">
+              <thead className="border-b border-[#1e2536] bg-[#0f1117]/50">
+                <tr>
+                  {['Contract', 'Type', 'Status', 'Salary', 'Start Date', 'End Date', ''].map(
+                    (heading) => (
+                      <th
+                        key={heading}
+                        className="text-xs text-slate-500 uppercase tracking-wider font-medium px-4 py-3 text-left"
+                      >
+                        {heading}
+                      </th>
+                    ),
+                  )}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#1e2536]">
+                {contracts.map((contract) => (
+                  <tr key={contract.id} className="hover:bg-white/[0.02] transition-colors">
+                    <td className="px-4 py-3">
+                      <p className="text-sm font-medium text-slate-200">{contract.contractNo}</p>
+                      <p className="text-xs text-slate-500">{contract.employeeCodeSnapshot}</p>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-slate-300">
+                      {titleizeStatus(contract.type)}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-slate-300">
+                      {titleizeStatus(contract.derivedStatus)}
+                    </td>
+                    <td className="px-4 py-3 text-sm font-medium text-emerald-300">
+                      {formatMoney(
+                        contract.latestCompensation?.amount ?? contract.salary,
+                        contract.latestCompensation?.currency ?? contract.currency,
+                      )}
+                      /mo
+                    </td>
+                    <td className="px-4 py-3 text-xs text-slate-400">{formatDate(contract.startDate)}</td>
+                    <td className="px-4 py-3 text-xs text-slate-400">{formatDate(contract.endDate)}</td>
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => openHrContractDownload(contract.id)}
+                        className="inline-flex items-center gap-1 rounded-lg bg-white/5 px-3 py-2 text-xs font-medium text-slate-200 transition-colors hover:bg-white/10"
+                      >
+                        <Download size={12} />
+                        PDF
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div className="py-12 text-center">
+              <Briefcase size={28} className="text-slate-700 mx-auto mb-2" />
+              <p className="text-slate-500 text-sm">No HR contracts linked to this staff member</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab === 'documents' && (
+        <div className="bg-[#161b27] border border-[#1e2536] rounded-xl overflow-hidden">
+          <div className="px-5 py-4 border-b border-[#1e2536]">
+            <p className="text-sm font-semibold text-white">Contract Documents</p>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Generated PDFs and uploaded HR contract files attached to this staff member.
+            </p>
+          </div>
+          {contractsQuery.isLoading ? (
+            <div className="py-12 text-center">
+              <Loader2 size={28} className="animate-spin text-slate-600 mx-auto mb-2" />
+              <p className="text-sm text-slate-500">Loading contract documents…</p>
+            </div>
+          ) : contractDocuments.length > 0 ? (
+            <div className="p-5 space-y-3">
+              {contractDocuments.map((document) => (
+                <div
+                  key={document.id}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-[#1e2536] px-3 py-3"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-slate-200">{document.fileName}</p>
+                    <p className="text-xs text-slate-500">
+                      {document.contractNo} · {titleizeStatus(document.documentType)} ·{' '}
+                      {titleizeStatus(document.contractStatus)} · Uploaded {formatDate(document.uploadedAt)}
+                      {formatFileSize(document.fileSizeBytes)
+                        ? ` · ${formatFileSize(document.fileSizeBytes)}`
+                        : ''}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-full bg-slate-500/15 px-2.5 py-1 text-[11px] font-medium text-slate-300">
+                      {titleizeStatus(document.source)}
+                    </span>
+                    <button
+                      onClick={() => window.open(document.fileUrl, '_blank', 'noopener,noreferrer')}
+                      className="rounded-lg bg-white/5 px-3 py-2 text-xs font-medium text-slate-200 transition-colors hover:bg-white/10"
+                    >
+                      View
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="py-12 text-center">
+              <FileText size={28} className="text-slate-700 mx-auto mb-2" />
+              <p className="text-slate-500 text-sm">No contract documents found for this staff member</p>
+            </div>
+          )}
         </div>
       )}
 

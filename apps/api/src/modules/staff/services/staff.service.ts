@@ -77,6 +77,18 @@ export class StaffService {
     private readonly presenceService: RealtimePresenceService,
   ) {}
 
+  private async ensureJobTitle(hotelId: string, jobTitleId?: string | null) {
+    if (!jobTitleId) return null;
+    const jobTitle = await this.prisma.jobTitle.findFirst({
+      where: { id: jobTitleId, hotelId },
+      include: {
+        department: { select: { id: true, name: true } },
+      },
+    });
+    if (!jobTitle) throw new NotFoundException('Job title not found.');
+    return jobTitle;
+  }
+
   private async setPinWithClient(
     prisma: PrismaService | any,
     hotelId: string,
@@ -295,6 +307,17 @@ export class StaffService {
       throw new ConflictException('Could not generate a unique employee code. Please try again.');
     }
 
+    const jobTitle = await this.ensureJobTitle(hotelId, dto.jobTitleId?.trim() || null);
+    const position = jobTitle?.name || dto.position;
+    const department = dto.department || jobTitle?.department?.name || '';
+
+    if (!department.trim()) {
+      throw new BadRequestException('Department is required.');
+    }
+    if (!position.trim()) {
+      throw new BadRequestException('Position is required.');
+    }
+
     const passwordHash = await bcrypt.hash('password', 10);
 
     return this.prisma.$transaction(async (tx) => {
@@ -317,8 +340,9 @@ export class StaffService {
           firstName: dto.firstName,
           lastName: dto.lastName,
           phone: dto.phone,
-          department: dto.department,
-          position: dto.position,
+          department,
+          position,
+          jobTitleId: jobTitle?.id || null,
           salary: dto.salary ?? 0,
           hireDate: new Date(dto.hireDate),
         },
@@ -338,6 +362,11 @@ export class StaffService {
     const staff = await this.prisma.staff.findFirst({ where: { id, hotelId } });
     if (!staff) throw new NotFoundException('Staff member not found.');
 
+    const jobTitle =
+      dto.jobTitleId !== undefined
+        ? await this.ensureJobTitle(hotelId, dto.jobTitleId?.trim() || null)
+        : undefined;
+
     // If email changed, update user too
     const staffUpdate = this.prisma.staff.update({
       where: { id },
@@ -345,8 +374,14 @@ export class StaffService {
         firstName: dto.firstName,
         lastName: dto.lastName,
         phone: dto.phone,
-        department: dto.department,
-        position: dto.position,
+        department:
+          dto.department !== undefined
+            ? dto.department
+            : jobTitle
+              ? jobTitle.department?.name || staff.department
+              : undefined,
+        position: dto.position !== undefined ? dto.position : jobTitle?.name || undefined,
+        jobTitleId: dto.jobTitleId !== undefined ? jobTitle?.id || null : undefined,
         salary: dto.salary,
       },
       include: STAFF_INCLUDE,
