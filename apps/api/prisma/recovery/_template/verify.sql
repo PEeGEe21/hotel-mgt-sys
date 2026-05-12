@@ -1,0 +1,3 @@
+-- Post-recovery verification SQL goes here.
+-- Example checks:
+-- SELECT 1;

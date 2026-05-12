@@ -1,0 +1,11 @@
+name = "hotel-os-alert-router"
+main = "src/index.js"
+compatibility_date = "2026-05-12"
+
+[vars]
+# Optional shared secret. If set, requests must be sent to:
+# https://<your-worker-domain>/<ALERT_ROUTER_TOKEN>
+ALERT_ROUTER_TOKEN = "replace-with-random-token"
+
+# Set SLACK_WEBHOOK_URL as a Worker secret, not in plain text vars:
+# wrangler secret put SLACK_WEBHOOK_URL

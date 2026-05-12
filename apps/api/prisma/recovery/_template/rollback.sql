@@ -1,0 +1,2 @@
+-- Reviewed rollback SQL goes here.
+-- Keep this file migration-specific and production-safe.

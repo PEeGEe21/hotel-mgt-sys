@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-05-06
+Last updated: 2026-05-12
 
 ## Next Up
 
@@ -11,6 +11,7 @@ Done recently:
 - Redis-backed presence tracking and logout-driven presence cleanup
 - websocket presence sync now invalidates staff/account views in near real time
 - standardized `pos.orders.sync` realtime payload added for POS order lifecycle events
+- standardized `pos.prep.sync` realtime payload added for prep-board item lifecycle events
 - dashboard POS views now invalidate live from websocket order sync instead of relying mainly on short polling
 - standardized `housekeeping.tasks.sync` and `facilities.maintenance.sync` hotel-scoped realtime payloads added
 - housekeeping dashboard/task board and facilities maintenance board now invalidate live from websocket sync events
@@ -20,29 +21,29 @@ Done recently:
 - `settings/realtime` now includes per-hotel alert enablement, cooldown, retention, and module-specific stale-threshold controls
 - `settings/realtime` now includes seven-day trends and module health summaries for persisted realtime diagnostics
 
-In progress:
+Future backlog:
 - optional expansion of standardized realtime payload conventions to additional future live workflows
-
-Still pending:
 - broader cross-module realtime event strategy beyond the currently tracked operational modules
 
 ## Confirmed Open Work
 
-In progress:
-1. Realtime expansion beyond notifications/presence
-   cross-module realtime event conventions beyond the current operational modules
-2. Scheduler and Redis production hardening
-   scheduler/email retry recovery completion, broader Redis-backed caching/session/distributed support, and deeper rollout hardening
-3. Notification model/settings cleanup
-   hotel-level default-off auto email retry setting verification and migration of notification pin/archive state from metadata into first-class columns
+Current priority:
+1. Production deployment-platform wiring
+   production runtime env wiring for release metadata and alerting, plus deploy-platform image rollout wiring
 
-Still pending:
-1. Production monitoring and operational safety
-   external alert routing, deploy-platform image rollout wiring, and migration-specific recovery scripts
-2. Notification and reminder polish
-   richer event copy/urgency/metadata consistency and deeper timed workflows such as finance collections, room blocks, and digest variants
-3. Broader workflow and module backlog
-   connection pooling, E2E coverage, invoices/payments/HR backlog, and duplicate/legacy page cleanup
+Technical follow-up:
+1. Connection pooling
+2. E2E testing coverage
+3. Proxy routing cleanup
+
+Backlog:
+1. Payroll PAYE + pension
+2. Inventory Purchase Orders tab
+3. Transactional email template library polish
+4. Global currency/date formatting consistency
+5. UI-only action audit and wiring
+6. Duplicate/legacy page cleanup (`page2.tsx`, `page3.tsx`, `v2`)
+7. Optional alert-router layer in front of Slack for future multi-destination or payload-transform needs
 
 ## POS / Kitchen Flow
 
@@ -175,6 +176,7 @@ Done recently:
 - daily and management digests now also surface grouped room-block review pressure plus critical/final collections counts
 
 - hotel-level `emailAutoRetryEnabled` setting is now wired through schema/settings flow and defaults `off`
+- transactional email auto-retry now respects the hotel-level default-off setting with retry-state logging for recovery visibility
 - notification `pinnedAt` / `archivedAt` columns are now in place so state no longer depends on JSON metadata
 
 - better notification content across event titles/messages, urgency levels, and metadata summaries across all event types
@@ -186,10 +188,16 @@ Done recently:
 - Redis-backed presence tracking and logout-driven presence cleanup
 - websocket presence sync now invalidates staff/account views in near real time
 - standardized `pos.orders.sync` realtime payload added for POS order lifecycle events
+- standardized `pos.prep.sync` realtime payload added for prep-board item lifecycle events
 - dashboard POS views now invalidate live from websocket order sync instead of relying mainly on short polling
-- housekeeping/facilities live task board updates
-- kitchen display realtime updates are wired at the order/prep event level, but deeper board polish/observability remains
-- broader cross-module realtime event strategy and admin observability
+- standardized `housekeeping.tasks.sync` and `facilities.maintenance.sync` hotel-scoped payloads added
+- housekeeping/facilities dashboards now invalidate live from websocket sync events
+- kitchen display realtime updates are wired at the prep event level with board observability
+- admin realtime diagnostics now cover persisted history, module health, stale thresholds, cooldowns, and alerting controls
+
+Future backlog:
+- optional expansion of standardized realtime payload conventions to additional future live workflows
+- broader cross-module realtime event strategy beyond the currently tracked operational modules
 
 - [x] Mobile Responsiveness
 Note: sidebar now slides in on mobile/tablet with a toggle button and close controls.
@@ -206,15 +214,12 @@ Note: manifest-driven standalone web-app support is in place.
 - [x] Dashboard loading, empty, and error state standardization
 - [ ] UI-only action audit and wiring
 - [ ] Duplicate/legacy page cleanup (`page2.tsx`, `page3.tsx`, `v2`)
+- [ ] Optional alert-router layer in front of Slack for future multi-destination or payload-transform needs
 
 ## Production Readiness
 
-- [~] Rate limiting
-Done recently:
-- configurable API rate limiting added with `RATE_LIMIT_WINDOW_MS` and `RATE_LIMIT_MAX`
-
-Still pending:
-- Redis-backed or distributed rate limiting
+- [x] Rate limiting
+Notes: configurable API rate limiting is in place with `RATE_LIMIT_WINDOW_MS` and `RATE_LIMIT_MAX`, backed by Redis for distributed enforcement.
 
 - [x] CORS policy
 Notes: whitelist-based CORS added via `CORS_ORIGINS` / `FRONTEND_URL`.
@@ -238,19 +243,21 @@ Notes: JWT auth, role and permission guards, and hotel-scoped controller/service
 - [~] Error monitoring
 Done recently:
 - webhook-based alert hooks now exist for startup failures, degraded readiness, unhandled promise rejections, uncaught exceptions, and HTTP 500-class unhandled errors
+- Slack alert delivery is now verified end-to-end with the monitoring test helper
 
 Still pending:
-- wiring the webhook into a real incident destination
+- production runtime wiring for release metadata and alert destination
 - tuning escalation policy
 - [~] Uptime + alert monitoring
 Done recently:
 - `/api/v1/health/live` and `/api/v1/health/ready` are in place
 - readiness now checks both PostgreSQL and Redis
 - release metadata is exposed for deploy verification
+- manual Slack alert verification via `pnpm monitoring:test` is now in place
 
 Still pending:
 - external uptime monitor wiring
-- actual alert routing
+- production uptime/alert platform wiring
 
 - [x] Health check endpoints
 Notes: added `/api/v1/health`, `/api/v1/health/live`, `/api/v1/health/ready`.
@@ -271,9 +278,14 @@ Still pending:
 - [~] Database migration rollback scripts
 Done recently:
 - migration recovery runbook guidance is documented
+- reviewed recovery artifacts now exist for:
+  - `20260326003824_add_ledger_accounts_journal`
+  - `20260506120000_add_realtime_diagnostics_tables`
+  - `20260506120223_add_notification_state_and_hotel_email_retry_setting`
+  - `20260508130000_add_finance_invoice_customization_and_requisition_link`
 
 Still pending:
-- migration-specific recovery SQL/scripts for high-risk schema changes
+- extend migration-specific recovery SQL/scripts to additional future high-risk schema changes
 
 ## Infrastructure
 
@@ -281,10 +293,11 @@ Still pending:
 Done recently:
 - Redis foundation is wired into Bull
 - shared app-level Redis service exists for realtime presence/pub-sub
+- Redis-backed auth session storage is in place
+- Redis-backed cache services are in use for shared aggregates
+- Redis-backed distributed rate limiting is in place
 
 Still pending:
-- broader caching/session use
-- distributed rate limiting
 - production rollout hardening
 
 - [~] Background jobs / scheduler
@@ -315,14 +328,6 @@ Done recently:
 - realtime presence tracking added so staff and HR account views can show who is currently online
 - websocket presence sync now invalidates staff/account views in near real time across Redis-backed events
 - logout and logout-all now clear Redis presence directly so online status drops reliably when a user signs out
-
-In progress:
-- scheduler-driven retry/failure recovery completion for important transactional mail
-- broader Redis-backed production hardening for caching, session, and distributed job support
-
-Still pending:
-- expand timed workflows further into deeper finance collections, room blocks, and manager digest variants
-
 - [ ] Connection pooling
 
 - [x] Response compression
@@ -363,9 +368,10 @@ Notes: correlation IDs, mail-log drill-ins, and richer workflow metadata now spa
 - [~] Realtime event naming/payload conventions across modules
 Done recently:
 - standardized payload shape is now in use for POS order sync
+- standardized payload shape is now in use for POS prep, housekeeping task, and facilities maintenance sync events
 
-In progress:
-- extending the same contract across other live modules
+Future backlog:
+- extend the same contract to additional future live modules
 - [~] Realtime presence / online state
 Done recently:
 - Redis-backed presence is live for staff and HR account views

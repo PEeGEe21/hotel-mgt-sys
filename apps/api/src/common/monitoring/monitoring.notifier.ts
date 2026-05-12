@@ -11,6 +11,12 @@ type MonitoringPayload = {
   details?: Record<string, unknown>;
 };
 
+type SlackWebhookPayload = {
+  text: string;
+  blocks: Array<Record<string, unknown>>;
+  attachments: Array<Record<string, unknown>>;
+};
+
 function readString(key: string) {
   const value = process.env[key];
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
@@ -27,6 +33,84 @@ function getMonitoringConfig() {
     releaseVersion: readString('RELEASE_VERSION'),
     releaseCommitSha: readString('RELEASE_COMMIT_SHA'),
     dedupMs: Number.isFinite(dedupMs) && dedupMs > 0 ? dedupMs : 5 * 60 * 1000,
+  };
+}
+
+function normalizeText(value: unknown, fallback = '—') {
+  if (value === null || value === undefined) return fallback;
+  const text = String(value).trim();
+  return text || fallback;
+}
+
+function truncate(value: unknown, max = 2800) {
+  const text = normalizeText(value, '');
+  if (text.length <= max) return text;
+  return `${text.slice(0, max - 3)}...`;
+}
+
+function severityColor(level: MonitoringLevel) {
+  switch (level) {
+    case 'critical':
+      return '#d92d20';
+    case 'warning':
+      return '#f79009';
+    default:
+      return '#2563eb';
+  }
+}
+
+function buildSlackPayload(payload: MonitoringPayload): SlackWebhookPayload {
+  const detailLines = Object.entries(payload.details ?? {})
+    .filter(([, value]) => value !== undefined)
+    .slice(0, 12)
+    .map(
+      ([key, value]) =>
+        `*${key}*: ${truncate(typeof value === 'string' ? value : JSON.stringify(value), 400)}`,
+    );
+
+  return {
+    text: `[${payload.level.toUpperCase()}] ${payload.event}: ${payload.message}`,
+    blocks: [
+      {
+        type: 'header',
+        text: {
+          type: 'plain_text',
+          text: `HotelOS ${payload.level.toUpperCase()} alert`,
+        },
+      },
+      {
+        type: 'section',
+        fields: [
+          { type: 'mrkdwn', text: `*Event*\n${normalizeText(payload.event)}` },
+          { type: 'mrkdwn', text: `*Environment*\n${normalizeText(payload.environment)}` },
+          { type: 'mrkdwn', text: `*Release*\n${normalizeText(payload.releaseVersion, 'unknown')}` },
+          { type: 'mrkdwn', text: `*Commit*\n${normalizeText(payload.releaseCommitSha, 'unknown')}` },
+        ],
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `*Message*\n${truncate(payload.message, 2500)}`,
+        },
+      },
+      {
+        type: 'context',
+        elements: [{ type: 'mrkdwn', text: `Timestamp: ${normalizeText(payload.timestamp)}` }],
+      },
+      ...(detailLines.length
+        ? [
+            {
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: `*Details*\n${detailLines.join('\n')}`,
+              },
+            },
+          ]
+        : []),
+    ],
+    attachments: [{ color: severityColor(payload.level) }],
   };
 }
 
@@ -52,14 +136,19 @@ class MonitoringNotifier {
     if (!config.alertWebhookUrl) return;
 
     try {
-      await fetch(config.alertWebhookUrl, {
+      const response = await fetch(config.alertWebhookUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'User-Agent': 'hotel-os-monitoring/1.0',
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(buildSlackPayload(payload)),
       });
+
+      if (!response.ok) {
+        const body = await response.text();
+        throw new Error(`Slack webhook rejected alert with HTTP ${response.status}: ${body || '<empty body>'}`);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       process.stderr.write(

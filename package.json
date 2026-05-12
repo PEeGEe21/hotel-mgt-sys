@@ -8,6 +8,7 @@
     "lint": "turbo run lint",
     "test": "turbo run test",
     "release:metadata": "node scripts/print-release-metadata.mjs",
+    "monitoring:test": "node scripts/send-monitoring-test-alert.mjs",
     "db:migrate": "cd apps/api && npx prisma migrate dev",
     "db:studio": "cd apps/api && npx prisma studio",
     "db:seed": "cd apps/api && npx prisma db seed"

@@ -59,8 +59,20 @@ pnpm dev
   - `GET /api/v1/health/ready`
 - Release metadata helper:
   - `pnpm release:metadata`
+- Monitoring test helper:
+  - `pnpm monitoring:test`
 - Monitoring and rollback runbook:
   - [docs/operations/monitoring-and-recovery.md](docs/operations/monitoring-and-recovery.md)
+- Alert routing notes:
+  - [docs/operations/alert-routing.md](docs/operations/alert-routing.md)
+- Optional Cloudflare Workers alert-router deploy guide:
+  - [docs/operations/platform-cloudflare-workers-alert-router.md](docs/operations/platform-cloudflare-workers-alert-router.md)
+- Production rollout checklist:
+  - [docs/operations/production-rollout-checklist.md](docs/operations/production-rollout-checklist.md)
+- Render-specific deployment notes:
+  - [docs/operations/platform-render.md](docs/operations/platform-render.md)
+- Migration recovery scaffolding:
+  - [apps/api/prisma/recovery/README.md](apps/api/prisma/recovery/README.md)
 
 ## Modules
 

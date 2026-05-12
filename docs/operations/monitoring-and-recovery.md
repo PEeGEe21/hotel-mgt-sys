@@ -2,12 +2,12 @@
 
 ## Monitoring Foundation
 
-The API now supports optional webhook-based critical alerts and richer health metadata.
+The API now supports optional Slack webhook-based critical alerts and richer health metadata.
 
 Set these environment variables in production:
 
 ```env
-MONITORING_ALERT_WEBHOOK_URL=https://your-alert-router.example.com/hotelos
+MONITORING_ALERT_WEBHOOK_URL=https://hooks.slack.com/services/AAA/BBB/CCC
 MONITORING_ALERT_DEDUP_MS=300000
 DEPLOYMENT_ENVIRONMENT=production
 RELEASE_VERSION=1.0.0
@@ -21,6 +21,18 @@ Critical alerts are emitted for:
 - uncaught exceptions
 - unhandled promise rejections
 - HTTP 500-class unhandled exceptions
+
+To verify alert delivery manually:
+
+```bash
+MONITORING_ALERT_WEBHOOK_URL=https://hooks.slack.com/services/AAA/BBB/CCC \
+DEPLOYMENT_ENVIRONMENT=production \
+RELEASE_VERSION=manual-test \
+RELEASE_COMMIT_SHA=test123 \
+pnpm monitoring:test
+```
+
+This sends a safe Slack-formatted test alert using the same release/environment metadata shape as the runtime notifier.
 
 ## Uptime Checks
 
@@ -39,6 +51,13 @@ Recommended alert conditions:
 - `ready` returns non-200 for 2 consecutive checks
 - p95 readiness latency exceeds your agreed threshold
 - no successful readiness checks for 5 minutes
+
+Recommended verification after Slack webhook setup:
+
+- run `pnpm monitoring:test`
+- confirm the alert arrives in the destination system
+- confirm the alert includes environment and release metadata
+- confirm on-call routing/deduplication behaves as expected
 
 ## Release Metadata
 
@@ -135,7 +154,7 @@ npx prisma migrate status
 
 The repo now has the monitoring hooks and documented recovery flow, but these still require environment/platform wiring:
 
-- actual webhook destination for alerts
+- actual Slack webhook destination for alerts
 - deployment platform wiring to consume the GHCR image tags
 - automated backup verification
-- runtime injection of monitoring webhook secret on the target platform
+- runtime injection of the Slack webhook on the target platform

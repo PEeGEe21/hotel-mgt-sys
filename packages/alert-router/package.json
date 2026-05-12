@@ -1,0 +1,7 @@
+{
+  "name": "@hotel-os/alert-router",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.js"
+}

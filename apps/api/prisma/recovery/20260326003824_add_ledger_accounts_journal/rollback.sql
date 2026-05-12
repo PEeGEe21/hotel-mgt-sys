@@ -1,0 +1,20 @@
+BEGIN;
+
+-- Preserve ledger data before removing the live schema.
+CREATE TABLE IF NOT EXISTS "Account_backup_20260326003824" AS
+SELECT *
+FROM "Account";
+
+CREATE TABLE IF NOT EXISTS "JournalEntry_backup_20260326003824" AS
+SELECT *
+FROM "JournalEntry";
+
+CREATE TABLE IF NOT EXISTS "JournalLine_backup_20260326003824" AS
+SELECT *
+FROM "JournalLine";
+
+DROP TABLE IF EXISTS "JournalLine" CASCADE;
+DROP TABLE IF EXISTS "JournalEntry" CASCADE;
+DROP TABLE IF EXISTS "Account" CASCADE;
+
+COMMIT;
