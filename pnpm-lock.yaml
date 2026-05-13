@@ -101,6 +101,9 @@ importers:
       pdfkit:
         specifier: ^0.18.0
         version: 0.18.0
+      prisma:
+        specifier: ^5.0.0
+        version: 5.22.0
       socket.io:
         specifier: ^4.0.0
         version: 4.8.3
@@ -126,9 +129,6 @@ importers:
       '@types/passport-local':
         specifier: ^1.0.0
         version: 1.0.38
-      prisma:
-        specifier: ^5.0.0
-        version: 5.22.0
       ts-node:
         specifier: ^10.9.0
         version: 10.9.2(@types/node@20.19.37)(typescript@5.9.3)
@@ -271,6 +271,8 @@ importers:
       typescript:
         specifier: ^5.4.0
         version: 5.9.3
+
+  packages/alert-router: {}
 
   packages/shared-types: {}
 
