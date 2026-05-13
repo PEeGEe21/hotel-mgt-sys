@@ -1,0 +1,50 @@
+services:
+  - type: web
+    name: hotelos-api
+    runtime: image
+    plan: starter
+    region: oregon
+    autoDeploy: false
+    healthCheckPath: /api/v1/health/ready
+    image:
+      url: ghcr.io/PEeGEe21/hotelos-api:production-current
+      creds:
+        fromRegistryCreds:
+          name: hotelos-ghcr
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "4000"
+      - key: DEPLOYMENT_ENVIRONMENT
+        value: production
+      - key: RELEASE_VERSION
+        value: production-current
+      - key: RELEASE_COMMIT_SHA
+        value: unknown
+      - key: MONITORING_ALERT_DEDUP_MS
+        value: "300000"
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_REFRESH_SECRET
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: WEB_PUSH_PUBLIC_KEY
+        sync: false
+      - key: WEB_PUSH_PRIVATE_KEY
+        sync: false
+      - key: WEB_PUSH_SUBJECT
+        sync: false
+      - key: MONITORING_ALERT_WEBHOOK_URL
+        sync: false

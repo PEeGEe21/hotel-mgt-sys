@@ -77,11 +77,13 @@ export RELEASE_COMMIT_SHA="$(git rev-parse --short HEAD)"
 export DEPLOYMENT_ENVIRONMENT="production"
 ```
 
-GitHub Actions now computes these values automatically for CI and deploy workflows. The deploy workflow also publishes immutable GHCR tags for:
+GitHub Actions now computes these values automatically for CI and deploy workflows. The deploy workflow also publishes immutable GHCR tags for the API service:
 
 - release number + short SHA
 - short SHA
 - `production-current`
+
+If the repository has `RENDER_API_KEY` and `RENDER_API_SERVICE_ID` secrets configured, the deploy workflow also pushes those release values into the Render API service env vars before triggering the image rollout.
 
 ## Docker Tagging Strategy
 
@@ -96,8 +98,6 @@ Recommended pattern:
 ```text
 hotelos-api:2026.05.01-1
 hotelos-api:abc1234
-hotelos-web:2026.05.01-1
-hotelos-web:abc1234
 ```
 
 Never deploy production from a mutable tag alone.
@@ -113,7 +113,7 @@ If a release is unhealthy:
 
 1. confirm failure through `/api/v1/health/ready`
 2. identify the last known good image tag
-3. redeploy the previous API and web image tags
+3. redeploy the previous API image tag
 4. verify release metadata on health endpoints after rollback
 5. only then re-enable traffic or background job confidence checks
 
@@ -154,7 +154,11 @@ npx prisma migrate status
 
 The repo now has the monitoring hooks and documented recovery flow, but these still require environment/platform wiring:
 
-- actual Slack webhook destination for alerts
-- deployment platform wiring to consume the GHCR image tags
 - automated backup verification
-- runtime injection of the Slack webhook on the target platform
+- external uptime monitor wiring
+
+Completed wiring now includes:
+
+- actual deployment-platform image rollout wiring for the Render API service
+- runtime injection of release metadata on Render during deploy
+- runtime injection of the alert webhook destination on the Render API service during deploy

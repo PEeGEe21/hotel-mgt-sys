@@ -39,6 +39,8 @@ jobs:
       RELEASE_VERSION: ${{ needs.release-metadata.outputs.release_version }}
       RELEASE_COMMIT_SHA: ${{ needs.release-metadata.outputs.release_commit_sha }}
       DEPLOYMENT_ENVIRONMENT: ${{ needs.release-metadata.outputs.deployment_environment }}
+    outputs:
+      api_image_url: ${{ steps.api-image.outputs.image_url }}
     steps:
       - uses: actions/checkout@v4
       - name: Set up Docker Buildx
@@ -58,15 +60,6 @@ jobs:
             type=raw,value=${{ needs.release-metadata.outputs.release_tag }}
             type=raw,value=${{ needs.release-metadata.outputs.release_commit_sha }}
             type=raw,value=production-current
-      - name: Extract web image metadata
-        id: web-meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/hotelos-web
-          tags: |
-            type=raw,value=${{ needs.release-metadata.outputs.release_tag }}
-            type=raw,value=${{ needs.release-metadata.outputs.release_commit_sha }}
-            type=raw,value=production-current
       - name: Build and push API image
         uses: docker/build-push-action@v6
         with:
@@ -79,21 +72,35 @@ jobs:
             RELEASE_VERSION=${{ env.RELEASE_VERSION }}
             RELEASE_COMMIT_SHA=${{ env.RELEASE_COMMIT_SHA }}
             DEPLOYMENT_ENVIRONMENT=${{ env.DEPLOYMENT_ENVIRONMENT }}
-      - name: Build and push web image
-        uses: docker/build-push-action@v6
+      - name: Capture API image URL
+        id: api-image
+        run: echo "image_url=ghcr.io/${{ github.repository_owner }}/hotelos-api:${{ needs.release-metadata.outputs.release_tag }}" >> "$GITHUB_OUTPUT"
+
+  deploy-render:
+    needs: [release-metadata, build-and-push-images]
+    if: ${{ secrets.RENDER_API_KEY != '' && secrets.RENDER_API_SERVICE_ID != '' }}
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_VERSION: ${{ needs.release-metadata.outputs.release_version }}
+      RELEASE_COMMIT_SHA: ${{ needs.release-metadata.outputs.release_commit_sha }}
+      DEPLOYMENT_ENVIRONMENT: ${{ needs.release-metadata.outputs.deployment_environment }}
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      RENDER_API_SERVICE_ID: ${{ secrets.RENDER_API_SERVICE_ID }}
+      RENDER_API_IMAGE_URL: ${{ needs.build-and-push-images.outputs.api_image_url }}
+      MONITORING_ALERT_WEBHOOK_URL: ${{ secrets.MONITORING_ALERT_WEBHOOK_URL }}
+      MONITORING_ALERT_DEDUP_MS: ${{ vars.MONITORING_ALERT_DEDUP_MS || '300000' }}
+      RENDER_WAIT_FOR_LIVE: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          context: .
-          file: ./apps/web/Dockerfile
-          push: true
-          tags: ${{ steps.web-meta.outputs.tags }}
-          labels: ${{ steps.web-meta.outputs.labels }}
-          build-args: |
-            RELEASE_VERSION=${{ env.RELEASE_VERSION }}
-            RELEASE_COMMIT_SHA=${{ env.RELEASE_COMMIT_SHA }}
-            DEPLOYMENT_ENVIRONMENT=${{ env.DEPLOYMENT_ENVIRONMENT }}
+          node-version: '20'
+      - name: Roll out release to Render
+        run: node scripts/render-rollout.mjs
 
   deploy-summary:
-    needs: [release-metadata, build-and-push-images]
+    needs: [release-metadata, build-and-push-images, deploy-render]
+    if: ${{ always() && needs.build-and-push-images.result == 'success' && (needs.deploy-render.result == 'success' || needs.deploy-render.result == 'skipped') }}
     runs-on: ubuntu-latest
     steps:
       - name: Deployment summary
@@ -105,11 +112,17 @@ jobs:
             echo "- Release commit: ${{ needs.release-metadata.outputs.release_commit_sha }}"
             echo "- Environment: ${{ needs.release-metadata.outputs.deployment_environment }}"
             echo "- API image tag: ghcr.io/${{ github.repository_owner }}/hotelos-api:${{ needs.release-metadata.outputs.release_tag }}"
-            echo "- Web image tag: ghcr.io/${{ github.repository_owner }}/hotelos-web:${{ needs.release-metadata.outputs.release_tag }}"
+            echo "- Frontend deploy: handled separately by Vercel"
+            echo "- Render rollout: ${{ needs.deploy-render.result }}"
             echo ""
-            echo "Set these runtime env vars on the deployment platform:"
+            echo "Render API rollout runs automatically when these repository secrets are set:"
+            echo "- RENDER_API_KEY"
+            echo "- RENDER_API_SERVICE_ID"
+            echo "- MONITORING_ALERT_WEBHOOK_URL"
+            echo ""
+            echo "Runtime env vars applied during rollout:"
             echo "- RELEASE_VERSION=${{ needs.release-metadata.outputs.release_version }}"
             echo "- RELEASE_COMMIT_SHA=${{ needs.release-metadata.outputs.release_commit_sha }}"
             echo "- DEPLOYMENT_ENVIRONMENT=${{ needs.release-metadata.outputs.deployment_environment }}"
-            echo "- MONITORING_ALERT_WEBHOOK_URL=\${{ secrets.MONITORING_ALERT_WEBHOOK_URL }}"
+            echo "- MONITORING_ALERT_DEDUP_MS=${{ vars.MONITORING_ALERT_DEDUP_MS || '300000' }}"
           } >> "$GITHUB_STEP_SUMMARY"

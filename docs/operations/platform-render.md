@@ -11,13 +11,14 @@ If the project moves away from Render later, replace this file with a new platfo
 
 ## Recommended Service Shape
 
-Use separate Render services for:
+Use Render for:
 
 - API service
-- Web service
 - worker/scheduler service if background jobs need isolated runtime control
 - PostgreSQL
 - Redis
+
+The repo now includes a Render Blueprint starter at [render.yaml](/var/www/html/hotel-os/render.yaml:1) for the API image-backed service.
 
 ## Runtime Environment Variables
 
@@ -40,6 +41,32 @@ Set these on the relevant Render services:
 
 Set `CORS_ORIGINS` and `FRONTEND_URL` to the final web app URL.
 
+When using the GitHub Actions rollout job, these are updated automatically on every deploy:
+
+- `RELEASE_VERSION`
+- `RELEASE_COMMIT_SHA`
+- `DEPLOYMENT_ENVIRONMENT`
+- `MONITORING_ALERT_DEDUP_MS`
+
+The API service also receives `MONITORING_ALERT_WEBHOOK_URL` during rollout.
+
+Keep the remaining production secrets directly on Render as synced or manually managed service env vars.
+
+## Render Credential + Service Setup
+
+Before turning on automated rollouts:
+
+1. add a GHCR registry credential in Render named `hotelos-ghcr`
+2. create or sync the API service as an image-backed service
+3. point it at:
+   - `ghcr.io/<owner>/hotelos-api`
+4. note the Render service ID for the API service
+5. add these GitHub repository secrets:
+   - `RENDER_API_KEY`
+   - `RENDER_API_SERVICE_ID`
+   - `MONITORING_ALERT_WEBHOOK_URL`
+6. optionally add GitHub repository variable `MONITORING_ALERT_DEDUP_MS`
+
 ## Deployment Model
 
 Recommended pattern:
@@ -48,6 +75,12 @@ Recommended pattern:
 - publish them to GHCR
 - deploy the chosen image version to Render
 - keep the previous known-good image tag available for rollback
+
+Current repo automation:
+
+- `.github/workflows/deploy.yml` builds and pushes the immutable API image
+- if the Render secrets above exist, the same workflow updates runtime release metadata and triggers the Render API image deploy
+- the rollout script used by CI is [scripts/render-rollout.mjs](/var/www/html/hotel-os/scripts/render-rollout.mjs:1)
 
 ## Health Checks
 
@@ -67,10 +100,9 @@ If scheduler and queue processing must stay reliable during web/API restarts, us
 Rollback should mean:
 
 1. choose the last known good API image tag
-2. choose the last known good web image tag
-3. redeploy those versions
-4. verify `/api/v1/health/ready`
-5. verify release metadata now matches the rolled-back release
+2. redeploy that version
+3. verify `/api/v1/health/ready`
+4. verify release metadata now matches the rolled-back release
 
 If rollback involves a risky Prisma change, follow the recovery artifact flow in:
 
@@ -83,6 +115,7 @@ If rollback involves a risky Prisma change, follow the recovery artifact flow in
 - confirm health check path is set to readiness, not only liveness
 - confirm release metadata env vars are updated on each deploy
 - confirm alert webhook secret/destination is configured
+- confirm the services are image-backed and can pull from the `hotelos-ghcr` Render registry credential
 - confirm at least one rollback image version is documented
 
 ## Migration Handling

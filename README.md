@@ -65,6 +65,8 @@ pnpm dev
   - [docs/operations/monitoring-and-recovery.md](docs/operations/monitoring-and-recovery.md)
 - Alert routing notes:
   - [docs/operations/alert-routing.md](docs/operations/alert-routing.md)
+- Render Blueprint / image-backed service template:
+  - [render.yaml](render.yaml)
 - Optional Cloudflare Workers alert-router deploy guide:
   - [docs/operations/platform-cloudflare-workers-alert-router.md](docs/operations/platform-cloudflare-workers-alert-router.md)
 - Production rollout checklist:

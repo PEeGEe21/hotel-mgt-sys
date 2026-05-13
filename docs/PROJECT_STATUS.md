@@ -246,7 +246,6 @@ Done recently:
 - Slack alert delivery is now verified end-to-end with the monitoring test helper
 
 Still pending:
-- production runtime wiring for release metadata and alert destination
 - tuning escalation policy
 - [~] Uptime + alert monitoring
 Done recently:
@@ -254,6 +253,7 @@ Done recently:
 - readiness now checks both PostgreSQL and Redis
 - release metadata is exposed for deploy verification
 - manual Slack alert verification via `pnpm monitoring:test` is now in place
+- Render rollout wiring now updates release metadata env vars and alert destination during production deploys
 
 Still pending:
 - external uptime monitor wiring
@@ -271,9 +271,9 @@ Done recently:
 - immutable GHCR image tags
 - Dockerfiles for API/web
 - rollback runbook documentation
+- Render API rollout wiring for production release metadata and alert destination
 
 Still pending:
-- platform-specific rollout wiring
 - rollback automation
 - [~] Database migration rollback scripts
 Done recently:
