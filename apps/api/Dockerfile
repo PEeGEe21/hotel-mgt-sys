@@ -1,4 +1,4 @@
-FROM node:20-alpine AS base
+FROM node:20-bookworm-slim AS base
 WORKDIR /app
 RUN corepack enable
 
@@ -20,7 +20,7 @@ ENV DEPLOYMENT_ENVIRONMENT=$DEPLOYMENT_ENVIRONMENT
 RUN pnpm --filter @hotel-os/api exec prisma generate
 RUN pnpm --filter @hotel-os/api build
 
-FROM node:20-alpine AS runtime
+FROM node:20-bookworm-slim AS runtime
 WORKDIR /app
 RUN corepack enable
 ENV NODE_ENV=production
