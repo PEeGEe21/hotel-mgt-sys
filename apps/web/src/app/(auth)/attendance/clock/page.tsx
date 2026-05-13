@@ -25,10 +25,12 @@ type KioskResponse = KioskStatus & {
   record?: { id: string; type: 'CLOCK_IN' | 'CLOCK_OUT'; timestamp: string };
 };
 
-const API_BASE = process.env.API_URL || 'http://localhost:4000/api/v1';
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_URL ||
+  process.env.API_URL ||
+  'http://localhost:4000/api/v1';
 
 async function postJson<T>(path: string, body: unknown): Promise<T> {
-  console.log(API_BASE, 'API_BASE');
   const res = await fetch(`${API_BASE}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

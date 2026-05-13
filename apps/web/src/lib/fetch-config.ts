@@ -3,8 +3,11 @@
 import { cookies } from 'next/headers';
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
-const API_URL = process.env.API_URL || 'http://localhost:4000/api/v1';
-const IS_PROD        = process.env.NODE_ENV === 'production';
+const API_URL =
+  process.env.API_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  'http://localhost:4000/api/v1';
+const IS_PROD = process.env.NODE_ENV === 'production';
 const COOKIE_ACCESS = 'hotel_access_token';
 const COOKIE_REFRESH = 'hotel_refresh_token';
 
