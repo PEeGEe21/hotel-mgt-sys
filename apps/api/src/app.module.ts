@@ -38,6 +38,7 @@ import { RedisModule } from './common/redis/redis.module';
 import { MonitoringModule } from './common/monitoring/monitoring.module';
 import { HrContractsModule } from './modules/hr-contracts/hr-contracts.module';
 import { JobTitlesModule } from './modules/job-titles/job-titles.module';
+import { RootController } from './root.controller';
 
 @Module({
   imports: [
@@ -97,6 +98,7 @@ import { JobTitlesModule } from './modules/job-titles/job-titles.module';
     HrContractsModule,
     JobTitlesModule,
   ],
+  controllers: [RootController],
   providers: [PermissionsGuard, RolesGuard],
 })
 export class AppModule {}
