@@ -22,6 +22,7 @@ RUN pnpm --filter @hotel-os/api build
 
 FROM node:20-bookworm-slim AS runtime
 WORKDIR /app
+RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 RUN corepack enable
 ENV NODE_ENV=production
 ARG RELEASE_VERSION=dev
