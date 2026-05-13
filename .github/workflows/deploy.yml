@@ -78,7 +78,6 @@ jobs:
 
   deploy-render:
     needs: [release-metadata, build-and-push-images]
-    if: ${{ secrets.RENDER_API_KEY != '' && secrets.RENDER_API_SERVICE_ID != '' }}
     runs-on: ubuntu-latest
     env:
       RELEASE_VERSION: ${{ needs.release-metadata.outputs.release_version }}
@@ -91,11 +90,25 @@ jobs:
       MONITORING_ALERT_DEDUP_MS: ${{ vars.MONITORING_ALERT_DEDUP_MS || '300000' }}
       RENDER_WAIT_FOR_LIVE: 'true'
     steps:
+      - name: Check Render rollout configuration
+        id: config
+        shell: bash
+        run: |
+          if [[ -n "${RENDER_API_KEY}" && -n "${RENDER_API_SERVICE_ID}" ]]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+            echo "Render rollout is configured."
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "Render rollout is not configured; skipping API deploy."
+          fi
       - uses: actions/checkout@v4
+        if: steps.config.outputs.configured == 'true'
       - uses: actions/setup-node@v4
+        if: steps.config.outputs.configured == 'true'
         with:
           node-version: '20'
       - name: Roll out release to Render
+        if: steps.config.outputs.configured == 'true'
         run: node scripts/render-rollout.mjs
 
   deploy-summary:
