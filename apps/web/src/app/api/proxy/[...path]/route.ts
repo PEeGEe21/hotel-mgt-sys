@@ -31,10 +31,13 @@ async function handler(
   };
 
   const res = await fetch(targetUrl, init);
+  const body = await res.arrayBuffer();
   const resHeaders = new Headers(res.headers);
   resHeaders.delete('content-encoding');
+  resHeaders.delete('content-length');
+  resHeaders.delete('transfer-encoding');
 
-  return new NextResponse(res.body, {
+  return new NextResponse(body, {
     status: res.status,
     headers: resHeaders,
   });

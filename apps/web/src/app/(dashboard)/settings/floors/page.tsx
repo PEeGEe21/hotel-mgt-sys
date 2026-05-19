@@ -208,7 +208,7 @@ function DeleteConfirm({ floor, onClose }: { floor: ApiFloor; onClose: () => voi
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function FloorsSettingsPage() {
-  const { data: floors = [], isLoading } = useFloors();
+  const { data: floors = [], isLoading, isError, error } = useFloors();
   const [showAdd, setShowAdd] = useState(false);
   const [editFloor, setEditFloor] = useState<ApiFloor | null>(null);
   const [deleteFloor, setDeleteFloor] = useState<ApiFloor | null>(null);
@@ -236,6 +236,14 @@ export default function FloorsSettingsPage() {
         {isLoading ? (
           <div className="flex items-center justify-center h-32">
             <Loader2 size={20} className="animate-spin text-slate-500" />
+          </div>
+        ) : isError ? (
+          <div className="flex flex-col items-center justify-center h-40 gap-2 px-6 text-center">
+            <Layers size={28} className="text-red-400" />
+            <p className="text-red-400 text-sm">Could not load floors.</p>
+            <p className="text-slate-500 text-xs">
+              {error instanceof Error ? error.message : 'Request failed'}
+            </p>
           </div>
         ) : floors.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-40 gap-2">
