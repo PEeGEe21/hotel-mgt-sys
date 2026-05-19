@@ -166,7 +166,7 @@ function SidebarContent({
           </>
         ) : (
           <>
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-blue-500 to-violet-600">
+            <div className={`flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br ${hotel?.logo || 'from-blue-500 to-violet-600'}`}>
               {hotel?.logo ? (
                 <img src={hotel.logo} alt={hotel.name} className="h-full w-full object-cover" />
               ) : (
