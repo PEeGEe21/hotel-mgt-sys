@@ -447,7 +447,7 @@ function FacilityTypesTab() {
           <Plus size={15} /> Add Type
         </button>
       </div>
-      <div className="bg-[#161b27] border border-[#1e2536] rounded-xl overflow-hidden">
+      <div className="bg-[#161b27] border border-[#1e2536] rounded-xl overflow-x-auto !whitespace-nowrap">
         <table className="w-full">
           <thead className="border-b border-[#1e2536] bg-[#0f1117]/50">
             <tr>
@@ -625,7 +625,7 @@ function FacilityLocationsTab() {
           <Plus size={15} /> Add Location
         </button>
       </div>
-      <div className="bg-[#161b27] border border-[#1e2536] rounded-xl overflow-hidden">
+      <div className="bg-[#161b27] border border-[#1e2536] rounded-xl overflow-x-auto !whitespace-nowrap">
         <table className="w-full">
           <thead className="border-b border-[#1e2536] bg-[#0f1117]/50">
             <tr>
@@ -813,7 +813,7 @@ function FacilityDepartmentsTab() {
           <Plus size={15} /> Add Department
         </button>
       </div>
-      <div className="bg-[#161b27] border border-[#1e2536] rounded-xl overflow-hidden">
+      <div className="bg-[#161b27] border border-[#1e2536] rounded-xl overflow-x-auto !whitespace-nowrap">
         <table className="w-full">
           <thead className="border-b border-[#1e2536] bg-[#0f1117]/50">
             <tr>

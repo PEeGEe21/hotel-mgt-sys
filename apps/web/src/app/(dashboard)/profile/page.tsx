@@ -859,7 +859,7 @@ function NotificationsTab() {
 
   const visibleKeys = (Object.keys(prefs) as NotificationEvent[]).filter((key) => {
     const required = eventPermissions[key];
-    return !required || can(required);
+    return Boolean(labels[key]) && (!required || can(required));
   });
   const canSendTestNotification = can('manage:settings');
   const lastPushTestResult = pushStatus?.lastTestResult ?? null;
@@ -900,7 +900,7 @@ function NotificationsTab() {
             )}
             {!isLoading &&
               visibleKeys.map((key, i, arr) => {
-                const { label, sub } = labels[key] ?? '';
+                const { label, sub } = labels[key] ?? { label: key, sub: '' };
                 const p = prefs[key];
                 return (
                   <div
@@ -1004,7 +1004,7 @@ function NotificationsTab() {
                   >
                     {visibleKeys.map((key) => (
                       <option key={key} value={key}>
-                        {labels[key].label}
+                        {labels[key]?.label ?? key}
                       </option>
                     ))}
                   </select>

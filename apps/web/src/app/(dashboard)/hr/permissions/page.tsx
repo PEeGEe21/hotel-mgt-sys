@@ -222,9 +222,9 @@ function PermissionEditor({
   const isLocked = user.role === 'SUPER_ADMIN';
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex h-full flex-col">
       {/* User header */}
-      <div className="flex items-center gap-4 px-6 py-5 border-b border-[#1e2536]">
+      <div className="flex items-center gap-3 border-b border-[#1e2536] px-4 py-4 md:gap-4 md:px-6 md:py-5">
         <div className="w-11 h-11 rounded-full bg-gradient-to-br from-blue-500/30 to-violet-500/30 border border-white/10 flex items-center justify-center text-base font-bold text-white shrink-0">
           {user.name
             .split(' ')
@@ -251,7 +251,7 @@ function PermissionEditor({
       </div>
 
       {/* Legend */}
-      <div className="flex items-center gap-4 px-6 py-2.5 bg-[#0f1117]/40 border-b border-[#1e2536]">
+      <div className="flex flex-wrap items-center gap-2 border-b border-[#1e2536] bg-[#0f1117]/40 px-4 py-2.5 md:gap-4 md:px-6">
         <p className="text-[10px] text-slate-600 uppercase tracking-wider font-medium">Legend</p>
         {[
           { label: 'From role', cls: 'bg-slate-500/10 border-slate-500/20 text-slate-400' },
@@ -268,13 +268,13 @@ function PermissionEditor({
             {label}
           </span>
         ))}
-        <span className="text-[10px] text-slate-600 ml-auto">
+        <span className="text-[10px] text-slate-600 md:ml-auto">
           Click to cycle · {totalOverrides} override{totalOverrides !== 1 ? 's' : ''}
         </span>
       </div>
 
       {/* Permission groups */}
-      <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
+      <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4 md:px-6">
         {PERMISSION_GROUPS.map((group) => {
           const open = openGroups[group.key] !== false;
           const groupGrants = group.permissions.filter((p) => grants.includes(p.key)).length;
@@ -305,7 +305,7 @@ function PermissionEditor({
               {open && (
                 <div className="border-t border-[#1e2536]">
                   {/* Column headers */}
-                  <div className="grid grid-cols-[1fr_100px_100px] gap-2 px-4 py-2 border-b border-[#1e2536]">
+                  <div className="hidden border-b border-[#1e2536] px-4 py-2 md:grid md:grid-cols-[1fr_100px_100px] md:gap-2">
                     <span className="text-[10px] text-slate-600 uppercase tracking-wider">
                       Permission
                     </span>
@@ -324,35 +324,74 @@ function PermissionEditor({
                     return (
                       <div
                         key={pKey}
-                        className={`grid grid-cols-[1fr_100px_100px] items-center gap-2 px-4 py-2.5 border-b border-[#1e2536]/50 last:border-0 hover:bg-white/[0.01] transition-colors`}
+                        className="border-b border-[#1e2536]/50 last:border-0 hover:bg-white/[0.01] transition-colors"
                       >
-                        <div>
-                          <p
-                            className={`text-sm font-medium ${effectiveHas ? 'text-slate-200' : 'text-slate-600'}`}
-                          >
-                            {label}
-                          </p>
-                          <p className="text-xs text-slate-600 mt-0.5">{description}</p>
+                        <div className="space-y-3 px-4 py-3 md:hidden">
+                          <div>
+                            <p
+                              className={`text-sm font-medium ${effectiveHas ? 'text-slate-200' : 'text-slate-600'}`}
+                            >
+                              {label}
+                            </p>
+                            <p className="mt-0.5 text-xs text-slate-600">{description}</p>
+                          </div>
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div className="space-y-1">
+                              <p className="text-[10px] uppercase tracking-wider text-slate-600">
+                                Role Default
+                              </p>
+                              {fromRole ? (
+                                <span className="flex items-center gap-1 text-xs text-slate-500">
+                                  <CheckCircle2 size={12} className="text-slate-600" /> Yes
+                                </span>
+                              ) : (
+                                <span className="flex items-center gap-1 text-xs text-slate-700">
+                                  <X size={12} /> No
+                                </span>
+                              )}
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-[10px] uppercase tracking-wider text-slate-600">
+                                This User
+                              </p>
+                              <div className="w-32">
+                                <PermToggle
+                                  state={state}
+                                  fromRole={fromRole}
+                                  onChange={(s) => setState(pKey, s)}
+                                  locked={isLocked}
+                                />
+                              </div>
+                            </div>
+                          </div>
                         </div>
-                        {/* Role default indicator */}
-                        <div className="flex justify-center">
-                          {fromRole ? (
-                            <span className="flex items-center gap-1 text-xs text-slate-500">
-                              <CheckCircle2 size={12} className="text-slate-600" /> Yes
-                            </span>
-                          ) : (
-                            <span className="flex items-center gap-1 text-xs text-slate-700">
-                              <X size={12} /> No
-                            </span>
-                          )}
+                        <div className="hidden items-center gap-2 px-4 py-2.5 md:grid md:grid-cols-[1fr_100px_100px]">
+                          <div>
+                            <p
+                              className={`text-sm font-medium ${effectiveHas ? 'text-slate-200' : 'text-slate-600'}`}
+                            >
+                              {label}
+                            </p>
+                            <p className="mt-0.5 text-xs text-slate-600">{description}</p>
+                          </div>
+                          <div className="flex justify-center">
+                            {fromRole ? (
+                              <span className="flex items-center gap-1 text-xs text-slate-500">
+                                <CheckCircle2 size={12} className="text-slate-600" /> Yes
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-1 text-xs text-slate-700">
+                                <X size={12} /> No
+                              </span>
+                            )}
+                          </div>
+                          <PermToggle
+                            state={state}
+                            fromRole={fromRole}
+                            onChange={(s) => setState(pKey, s)}
+                            locked={isLocked}
+                          />
                         </div>
-                        {/* User override */}
-                        <PermToggle
-                          state={state}
-                          fromRole={fromRole}
-                          onChange={(s) => setState(pKey, s)}
-                          locked={isLocked}
-                        />
                       </div>
                     );
                   })}
@@ -364,8 +403,8 @@ function PermissionEditor({
       </div>
 
       {/* Footer */}
-      <div className="px-6 py-4 border-t border-[#1e2536] flex items-center gap-3">
-        <div className="flex items-center gap-3 text-xs text-slate-500 flex-1">
+      <div className="flex flex-col gap-3 border-t border-[#1e2536] px-4 py-4 md:flex-row md:items-center md:px-6">
+        <div className="flex flex-1 flex-wrap items-center gap-3 text-xs text-slate-500">
           <span className="flex items-center gap-1 text-emerald-400">
             <Check size={11} /> {effective.length} effective permissions
           </span>
@@ -378,7 +417,7 @@ function PermissionEditor({
         {totalOverrides > 0 && (
           <button
             onClick={resetAll}
-            className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 bg-white/5 hover:bg-white/10 px-3 py-2 rounded-lg font-medium transition-colors"
+            className="flex items-center justify-center gap-1.5 rounded-lg bg-white/5 px-3 py-2 text-xs font-medium text-slate-400 transition-colors hover:bg-white/10 hover:text-slate-200"
           >
             <RotateCcw size={12} /> Reset all
           </button>
@@ -386,7 +425,7 @@ function PermissionEditor({
         <button
           onClick={handleSave}
           disabled={saving}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${saved ? 'bg-emerald-600 text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'} disabled:opacity-70`}
+          className={`flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-all ${saved ? 'bg-emerald-600 text-white' : 'bg-blue-600 text-white hover:bg-blue-500'} disabled:opacity-70`}
         >
           {saving ? (
             <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -455,13 +494,15 @@ export default function UserPermissionsPage() {
   };
 
   return (
-    <div className="flex gap-0 h-[calc(100vh-64px)] -m-6">
+    <div className="-m-4 flex min-h-[calc(100vh-64px)] flex-col gap-0 md:-m-6 md:h-[calc(100vh-64px)] md:flex-row">
       {/* Left — user list */}
       <div
-        className={`flex flex-col border-r border-[#1e2536] transition-all ${selected ? 'w-80 shrink-0' : 'flex-1'}`}
+        className={`flex flex-col border-b border-[#1e2536] transition-all md:border-b-0 md:border-r ${
+          selected ? 'hidden md:flex md:w-80 md:shrink-0' : 'flex-1'
+        }`}
       >
         {/* Header */}
-        <div className="px-6 py-5 border-b border-[#1e2536]">
+        <div className="border-b border-[#1e2536] px-4 py-4 md:px-6 md:py-5">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h1 className="text-xl font-bold text-white tracking-tight">User Permissions</h1>
@@ -564,7 +605,7 @@ export default function UserPermissionsPage() {
 
       {/* Right — permission editor */}
       {selected ? (
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex min-h-[calc(100vh-64px)] flex-1 flex-col overflow-hidden md:min-h-0">
           <PermissionEditor
             key={selected.id}
             user={selected}
@@ -573,7 +614,7 @@ export default function UserPermissionsPage() {
           />
         </div>
       ) : (
-        <div className="flex-1 flex items-center justify-center">
+        <div className="hidden flex-1 items-center justify-center md:flex">
           <div className="text-center">
             <div className="w-16 h-16 rounded-2xl bg-[#161b27] border border-[#1e2536] flex items-center justify-center mx-auto mb-4">
               <Shield size={28} className="text-slate-600" />

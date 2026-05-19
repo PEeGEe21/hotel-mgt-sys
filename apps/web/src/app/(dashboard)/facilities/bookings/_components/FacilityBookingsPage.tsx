@@ -19,6 +19,7 @@ import {
   DrawerOverlay,
   DrawerTitle,
 } from '@/components/ui/drawer';
+import TableScroll from '@/components/ui/table-scroll';
 
 const statusStyle: Record<string, string> = {
   PENDING: 'bg-amber-500/15 text-amber-400',
@@ -242,101 +243,103 @@ export default function FacilityBookingsPage() {
           )}
         </div>
 
-        <div className="bg-[#161b27] border border-[#1e2536] rounded-xl overflow-hidden">
-          <table className="w-full min-w-[900px]">
-            <thead className="border-b border-[#1e2536] bg-[#0f1117]/50">
-              <tr>
-                {[
-                  '#',
-                  'Facility',
-                  'Guest',
-                  'Room',
-                  'Start',
-                  'End',
-                  'Charge',
-                  'Amount',
-                  'Status',
-                  'Paid',
-                  '',
-                ].map((h) => (
-                  <th
-                    key={h}
-                    className="text-xs text-slate-500 uppercase tracking-wider font-medium px-4 py-3 text-left whitespace-nowrap"
+        <div className="bg-[#161b27] border border-[#1e2536] rounded-xl">
+          <TableScroll>
+            <table className="w-full min-w-[900px]">
+              <thead className="border-b border-[#1e2536] bg-[#0f1117]/50">
+                <tr>
+                  {[
+                    '#',
+                    'Facility',
+                    'Guest',
+                    'Room',
+                    'Start',
+                    'End',
+                    'Charge',
+                    'Amount',
+                    'Status',
+                    'Paid',
+                    '',
+                  ].map((h) => (
+                    <th
+                      key={h}
+                      className="text-xs text-slate-500 uppercase tracking-wider font-medium px-4 py-3 text-left whitespace-nowrap"
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {bookings.length === 0 && (
+                  <tr className="border-b border-[#1e2536] last:border-0 text-center">
+                    <td colSpan={11} className="px-4 py-3 text-sm text-slate-500">
+                      {isLoading ? 'Loading bookings' : 'No bookings found'}
+                    </td>
+                  </tr>
+                )}
+                {bookings.map((b, i) => (
+                  <tr
+                    key={b.id}
+                    className="border-b border-[#1e2536] last:border-0 hover:bg-white/[0.02] transition-colors"
                   >
-                    {h}
-                  </th>
+                    <td className="px-4 py-3 text-sm text-slate-500">{i + 1}</td>
+                    <td className="px-4 py-3 text-sm font-medium text-slate-200 whitespace-nowrap">
+                      {b?.facility?.name}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-slate-400 whitespace-nowrap">
+                      {b.guestName}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">
+                      {b.roomNo ?? '—'}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-slate-400 whitespace-nowrap">
+                      {toDate(b.startTime)} {toTime(b.startTime)}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-slate-400 whitespace-nowrap">
+                      {toDate(b.endTime)} {toTime(b.endTime)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`text-xs px-2.5 py-1 rounded-full font-medium ${chargeStyle[b.chargeType] ?? 'bg-slate-500/15 text-slate-400'}`}
+                      >
+                        {b.chargeType}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-slate-200 whitespace-nowrap">
+                      ₦{b.amount.toLocaleString()}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`text-xs px-2.5 py-1 rounded-full font-medium ${statusStyle[b.status] ?? 'bg-slate-500/15 text-slate-400'}`}
+                      >
+                        {b.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {b.isPaid ? (
+                        <BadgeCheck size={16} className="text-emerald-400" />
+                      ) : (
+                        <CircleSlash size={16} className="text-slate-500" />
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => {
+                          setCancelTarget(b);
+                          setShowCancel(true);
+                        }}
+                        disabled={b.status === 'CANCELLED' || cancelBooking.isPending}
+                        className="text-xs bg-red-500/15 text-red-400 hover:bg-red-500/25 px-2 py-1 rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Cancel
+                      </button>
+                    </td>
+                  </tr>
                 ))}
-              </tr>
-            </thead>
-            <tbody>
-              {bookings.length === 0 && (
-                <tr className="border-b border-[#1e2536] last:border-0 text-center">
-                  <td colSpan={11} className="px-4 py-3 text-sm text-slate-500">
-                    {isLoading ? 'Loading bookings' : 'No bookings found'}
-                  </td>
-                </tr>
-              )}
-              {bookings.map((b, i) => (
-                <tr
-                  key={b.id}
-                  className="border-b border-[#1e2536] last:border-0 hover:bg-white/[0.02] transition-colors"
-                >
-                  <td className="px-4 py-3 text-sm text-slate-500">{i + 1}</td>
-                  <td className="px-4 py-3 text-sm font-medium text-slate-200 whitespace-nowrap">
-                    {b?.facility?.name}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-slate-400 whitespace-nowrap">
-                    {b.guestName}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">
-                    {b.roomNo ?? '—'}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-slate-400 whitespace-nowrap">
-                    {toDate(b.startTime)} {toTime(b.startTime)}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-slate-400 whitespace-nowrap">
-                    {toDate(b.endTime)} {toTime(b.endTime)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`text-xs px-2.5 py-1 rounded-full font-medium ${chargeStyle[b.chargeType] ?? 'bg-slate-500/15 text-slate-400'}`}
-                    >
-                      {b.chargeType}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-slate-200 whitespace-nowrap">
-                    ₦{b.amount.toLocaleString()}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`text-xs px-2.5 py-1 rounded-full font-medium ${statusStyle[b.status] ?? 'bg-slate-500/15 text-slate-400'}`}
-                    >
-                      {b.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    {b.isPaid ? (
-                      <BadgeCheck size={16} className="text-emerald-400" />
-                    ) : (
-                      <CircleSlash size={16} className="text-slate-500" />
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <button
-                      onClick={() => {
-                        setCancelTarget(b);
-                        setShowCancel(true);
-                      }}
-                      disabled={b.status === 'CANCELLED' || cancelBooking.isPending}
-                      className="text-xs bg-red-500/15 text-red-400 hover:bg-red-500/25 px-2 py-1 rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Cancel
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+              </tbody>
+            </table>
+          </TableScroll>
         </div>
 
         {data?.meta && bookings.length > 0 && (

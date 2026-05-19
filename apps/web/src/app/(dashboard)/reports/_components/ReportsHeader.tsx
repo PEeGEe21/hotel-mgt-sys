@@ -38,7 +38,7 @@ export function ReportsHeader({
         </div>
         <p className="mt-0.5 text-sm text-slate-500">Analytics across all hotel operations</p>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
         <div className="flex items-center gap-2 rounded-lg border border-[#1e2536] bg-[#161b27] px-3 py-2">
           <Filter size={13} className="text-slate-500" />
           <select

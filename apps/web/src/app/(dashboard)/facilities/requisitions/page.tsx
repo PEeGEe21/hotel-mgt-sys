@@ -378,7 +378,7 @@ export default function FacilityRequisitionsPage() {
                             <button
                               onClick={() => createRequisitionInvoice.mutate(r.id)}
                               disabled={createRequisitionInvoice.isPending}
-                              className="text-xs bg-violet-500/15 text-violet-300 hover:bg-violet-500/25 px-2 py-1 rounded-lg transition-colors font-medium disabled:opacity-60"
+                              className="text-xs bg-violet-500/15 text-violet-300 hover:bg-violet-500/25 px-2 py-1 rounded-lg transition-colors font-medium disabled:opacity-60 whitespace-nowrap"
                             >
                               Create Expense Invoice
                             </button>
