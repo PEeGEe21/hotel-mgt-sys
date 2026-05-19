@@ -4,6 +4,7 @@
   "scripts": {
     "build": "prisma generate && nest build",
     "dev": "prisma generate && nest start --watch",
+    "migrate:deploy": "prisma migrate deploy",
     "start": "node dist/main",
     "lint": "node -e \"console.log('API lint is not configured yet; skipping.')\"",
     "test": "node --test",
