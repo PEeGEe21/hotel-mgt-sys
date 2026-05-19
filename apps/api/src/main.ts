@@ -13,8 +13,6 @@ import { monitoringNotifier } from './common/monitoring/monitoring.notifier';
 import { RealtimeIoAdapter } from './modules/realtime/realtime.adapter';
 import { RedisService } from './common/redis/redis.service';
 
-const bodyParser = require('body-parser');
-
 async function bootstrap() {
   const logger = new StructuredLogger();
   process.on('uncaughtException', (error) => {
@@ -42,8 +40,8 @@ async function bootstrap() {
   app.enableCors(buildCorsOptions(configService));
   app.useWebSocketAdapter(new RealtimeIoAdapter(app, configService));
   // Profile avatars and similar base64 image fields can exceed Express's default 100kb JSON limit.
-  app.use(bodyParser.json({ limit: '5mb' }));
-  app.use(bodyParser.urlencoded({ extended: true, limit: '5mb' }));
+  (app as any).useBodyParser('json', { limit: '5mb' });
+  (app as any).useBodyParser('urlencoded', { extended: true, limit: '5mb' });
   app.use(createRequestLoggingMiddleware(logger));
   app.use(compression());
   app.use(
