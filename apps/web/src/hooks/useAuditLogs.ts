@@ -54,7 +54,25 @@ export function useAuditLogs(filters: AuditLogFilters = {}) {
       if (filters.targetUserId) params.set('targetUserId', filters.targetUserId);
       if (filters.search) params.set('search', filters.search);
       const { data } = await api.get(`/audit-logs?${params}`);
-      return data;
+      const logs = Array.isArray(data?.logs) ? data.logs : [];
+      return {
+        logs,
+        total: typeof data?.total === 'number' ? data.total : logs.length,
+        page: typeof data?.page === 'number' ? data.page : filters.page ?? 1,
+        limit: typeof data?.limit === 'number' ? data.limit : filters.limit ?? logs.length,
+        totalPages: typeof data?.totalPages === 'number' ? data.totalPages : 1,
+        meta:
+          data?.meta && typeof data.meta === 'object'
+            ? data.meta
+            : {
+                total: logs.length,
+                current_page: filters.page ?? 1,
+                per_page: filters.limit ?? logs.length,
+                last_page: 1,
+                from: logs.length ? 1 : 0,
+                to: logs.length,
+              },
+      };
     },
     staleTime: 30_000,
   });

@@ -247,12 +247,51 @@ function buildParams(range: ReportRange) {
   return params;
 }
 
+function normalizeOverview(data: any, range: ReportRange): ReportsOverview {
+  return {
+    range: data?.range ?? { from: range.from ?? '', to: range.to ?? '' },
+    summary: {
+      revenueTotal: typeof data?.summary?.revenueTotal === 'number' ? data.summary.revenueTotal : 0,
+      occupancyRate:
+        typeof data?.summary?.occupancyRate === 'number' ? data.summary.occupancyRate : 0,
+      occupiedRooms:
+        typeof data?.summary?.occupiedRooms === 'number' ? data.summary.occupiedRooms : 0,
+      totalRooms: typeof data?.summary?.totalRooms === 'number' ? data.summary.totalRooms : 0,
+      adr: typeof data?.summary?.adr === 'number' ? data.summary.adr : 0,
+      outstandingFolios:
+        typeof data?.summary?.outstandingFolios === 'number' ? data.summary.outstandingFolios : 0,
+      outstandingCount:
+        typeof data?.summary?.outstandingCount === 'number' ? data.summary.outstandingCount : 0,
+    },
+    revenueChart: Array.isArray(data?.revenueChart) ? data.revenueChart : [],
+    guestSourceData: Array.isArray(data?.guestSourceData) ? data.guestSourceData : [],
+  };
+}
+
 export function useRevenueReport(range: ReportRange = {}, options: ReportQueryOptions = {}) {
   return useQuery<RevenueReport>({
     queryKey: ['reports', 'revenue', range],
     queryFn: async () => {
       const { data } = await api.get(`/reports/revenue?${buildParams(range)}`);
-      return data;
+      return {
+        range: data?.range ?? { from: range.from ?? '', to: range.to ?? '' },
+        summary: {
+          invoiceTotal: typeof data?.summary?.invoiceTotal === 'number' ? data.summary.invoiceTotal : 0,
+          paidAmount: typeof data?.summary?.paidAmount === 'number' ? data.summary.paidAmount : 0,
+          outstanding: typeof data?.summary?.outstanding === 'number' ? data.summary.outstanding : 0,
+          count: typeof data?.summary?.count === 'number' ? data.summary.count : 0,
+          byStream: {
+            rooms: typeof data?.summary?.byStream?.rooms === 'number' ? data.summary.byStream.rooms : 0,
+            fnb: typeof data?.summary?.byStream?.fnb === 'number' ? data.summary.byStream.fnb : 0,
+            events: typeof data?.summary?.byStream?.events === 'number' ? data.summary.byStream.events : 0,
+          },
+        },
+        byType: Array.isArray(data?.byType) ? data.byType : [],
+        byStatus: Array.isArray(data?.byStatus) ? data.byStatus : [],
+        daily: Array.isArray(data?.daily) ? data.daily : [],
+        streamDaily: Array.isArray(data?.streamDaily) ? data.streamDaily : [],
+        rows: Array.isArray(data?.rows) ? data.rows : [],
+      };
     },
     enabled: options.enabled ?? true,
     staleTime: 30_000,
@@ -265,7 +304,7 @@ export function useReportsOverview(range: ReportRange = {}, options: ReportQuery
     queryKey: ['reports', 'overview', range],
     queryFn: async () => {
       const { data } = await api.get(`/reports/overview?${buildParams(range)}`);
-      return data;
+      return normalizeOverview(data, range);
     },
     enabled: options.enabled ?? true,
     staleTime: 30_000,
@@ -278,7 +317,21 @@ export function useCogsReport(range: ReportRange = {}, options: ReportQueryOptio
     queryKey: ['reports', 'cogs', range],
     queryFn: async () => {
       const { data } = await api.get(`/reports/cogs?${buildParams(range)}`);
-      return data;
+      return {
+        range: data?.range ?? { from: range.from ?? '', to: range.to ?? '' },
+        summary: {
+          totalCost: typeof data?.summary?.totalCost === 'number' ? data.summary.totalCost : 0,
+          totalQuantity: typeof data?.summary?.totalQuantity === 'number' ? data.summary.totalQuantity : 0,
+          count: typeof data?.summary?.count === 'number' ? data.summary.count : 0,
+          costRatio: typeof data?.summary?.costRatio === 'number' ? data.summary.costRatio : 0,
+          grossProfit: typeof data?.summary?.grossProfit === 'number' ? data.summary.grossProfit : 0,
+        },
+        byCategory: Array.isArray(data?.byCategory) ? data.byCategory : [],
+        byItem: Array.isArray(data?.byItem) ? data.byItem : [],
+        daily: Array.isArray(data?.daily) ? data.daily : [],
+        expenseRows: Array.isArray(data?.expenseRows) ? data.expenseRows : [],
+        rows: Array.isArray(data?.rows) ? data.rows : [],
+      };
     },
     enabled: options.enabled ?? true,
     staleTime: 30_000,
@@ -298,7 +351,21 @@ export function useOutstandingFoliosReport(
       if (filters.page) params.set('page', String(filters.page));
       if (filters.limit) params.set('limit', String(filters.limit));
       const { data } = await api.get(`/reports/outstanding-folios?${params}`);
-      return data;
+      const rows = Array.isArray(data?.rows) ? data.rows : [];
+      return {
+        range: data?.range ?? { from: filters.from ?? '', to: filters.to ?? '' },
+        summary: {
+          outstanding: typeof data?.summary?.outstanding === 'number' ? data.summary.outstanding : 0,
+          charges: typeof data?.summary?.charges === 'number' ? data.summary.charges : 0,
+          paidAmount: typeof data?.summary?.paidAmount === 'number' ? data.summary.paidAmount : 0,
+          count: typeof data?.summary?.count === 'number' ? data.summary.count : 0,
+        },
+        rows,
+        total: typeof data?.total === 'number' ? data.total : rows.length,
+        page: typeof data?.page === 'number' ? data.page : filters.page ?? 1,
+        limit: typeof data?.limit === 'number' ? data.limit : filters.limit ?? rows.length,
+        totalPages: typeof data?.totalPages === 'number' ? data.totalPages : 1,
+      };
     },
     enabled: options.enabled ?? true,
     staleTime: 30_000,
@@ -311,7 +378,24 @@ export function useGuestInsightsReport(range: ReportRange = {}, options: ReportQ
     queryKey: ['reports', 'guests', range],
     queryFn: async () => {
       const { data } = await api.get(`/reports/guests?${buildParams(range)}`);
-      return data;
+      return {
+        range: data?.range ?? { from: range.from ?? '', to: range.to ?? '' },
+        summary: {
+          totalGuests: typeof data?.summary?.totalGuests === 'number' ? data.summary.totalGuests : 0,
+          inHouse: typeof data?.summary?.inHouse === 'number' ? data.summary.inHouse : 0,
+          vipGuests: typeof data?.summary?.vipGuests === 'number' ? data.summary.vipGuests : 0,
+          repeatGuests:
+            typeof data?.summary?.repeatGuests === 'number' ? data.summary.repeatGuests : 0,
+          avgStayNights: data?.summary?.avgStayNights ?? '0.0',
+        },
+        sourceData: Array.isArray(data?.sourceData) ? data.sourceData : [],
+        nationalityMix: Array.isArray(data?.nationalityMix) ? data.nationalityMix : [],
+        reservationStatusRows: Array.isArray(data?.reservationStatusRows)
+          ? data.reservationStatusRows
+          : [],
+        guestTrend: Array.isArray(data?.guestTrend) ? data.guestTrend : [],
+        bookingSourceTrend: Array.isArray(data?.bookingSourceTrend) ? data.bookingSourceTrend : [],
+      };
     },
     enabled: options.enabled ?? true,
     staleTime: 30_000,
@@ -324,7 +408,19 @@ export function useStaffInsightsReport(range: ReportRange = {}, options: ReportQ
     queryKey: ['reports', 'staff', range],
     queryFn: async () => {
       const { data } = await api.get(`/reports/staff?${buildParams(range)}`);
-      return data;
+      return {
+        range: data?.range ?? { from: range.from ?? '', to: range.to ?? '' },
+        summary: {
+          totalStaff: typeof data?.summary?.totalStaff === 'number' ? data.summary.totalStaff : 0,
+          attendanceRate:
+            typeof data?.summary?.attendanceRate === 'number' ? data.summary.attendanceRate : 0,
+          avgHoursWorked: data?.summary?.avgHoursWorked ?? '0.0',
+          lateArrivals:
+            typeof data?.summary?.lateArrivals === 'number' ? data.summary.lateArrivals : 0,
+        },
+        attendanceWeek: Array.isArray(data?.attendanceWeek) ? data.attendanceWeek : [],
+        departmentRows: Array.isArray(data?.departmentRows) ? data.departmentRows : [],
+      };
     },
     enabled: options.enabled ?? true,
     staleTime: 30_000,
@@ -337,7 +433,19 @@ export function useInventoryInsightsReport(range: ReportRange = {}, options: Rep
     queryKey: ['reports', 'inventory', range],
     queryFn: async () => {
       const { data } = await api.get(`/reports/inventory?${buildParams(range)}`);
-      return data;
+      return {
+        range: data?.range ?? { from: range.from ?? '', to: range.to ?? '' },
+        summary: {
+          totalItems: typeof data?.summary?.totalItems === 'number' ? data.summary.totalItems : 0,
+          lowStockCount:
+            typeof data?.summary?.lowStockCount === 'number' ? data.summary.lowStockCount : 0,
+          inventoryValue:
+            typeof data?.summary?.inventoryValue === 'number' ? data.summary.inventoryValue : 0,
+          turnoverRate:
+            typeof data?.summary?.turnoverRate === 'number' ? data.summary.turnoverRate : 0,
+        },
+        inventoryAlertRows: Array.isArray(data?.inventoryAlertRows) ? data.inventoryAlertRows : [],
+      };
     },
     enabled: options.enabled ?? true,
     staleTime: 30_000,
@@ -350,7 +458,20 @@ export function useOccupancyInsightsReport(range: ReportRange = {}, options: Rep
     queryKey: ['reports', 'occupancy', range],
     queryFn: async () => {
       const { data } = await api.get(`/reports/occupancy?${buildParams(range)}`);
-      return data;
+      return {
+        range: data?.range ?? { from: range.from ?? '', to: range.to ?? '' },
+        summary: {
+          occupancyRate:
+            typeof data?.summary?.occupancyRate === 'number' ? data.summary.occupancyRate : 0,
+          occupiedRooms:
+            typeof data?.summary?.occupiedRooms === 'number' ? data.summary.occupiedRooms : 0,
+          checkedIn: typeof data?.summary?.checkedIn === 'number' ? data.summary.checkedIn : 0,
+          adr: typeof data?.summary?.adr === 'number' ? data.summary.adr : 0,
+          revPar: typeof data?.summary?.revPar === 'number' ? data.summary.revPar : 0,
+        },
+        occupancyData: Array.isArray(data?.occupancyData) ? data.occupancyData : [],
+        roomTypeRevenue: Array.isArray(data?.roomTypeRevenue) ? data.roomTypeRevenue : [],
+      };
     },
     enabled: options.enabled ?? true,
     staleTime: 30_000,

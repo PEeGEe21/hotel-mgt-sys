@@ -23,7 +23,7 @@ export function useInventoryCategories() {
     queryKey: ['inventory-categories'],
     queryFn: async () => {
       const { data } = await api.get('/inventory-categories');
-      return data;
+      return Array.isArray(data) ? data : [];
     },
   });
 }

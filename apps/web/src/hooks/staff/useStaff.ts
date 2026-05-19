@@ -114,7 +114,7 @@ export function useStaffAll() {
     queryKey: ['staff'],
     queryFn: async () => {
       const { data } = await api.get(`/staff/all`);
-      return data;
+      return Array.isArray(data) ? data : [];
     },
   });
 }

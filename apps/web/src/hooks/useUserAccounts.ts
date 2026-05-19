@@ -99,7 +99,7 @@ export function useAllUserAccounts(search?: string) {
       const params = new URLSearchParams();
       if (search) params.set('search', search);
       const { data } = await api.get(`/users/list?${params}`);
-      return data;
+      return Array.isArray(data) ? data : [];
     },
   });
 }

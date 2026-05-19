@@ -407,7 +407,26 @@ export function useHrContracts(filters: HrContractFilters = {}) {
       if (filters.page) params.set('page', String(filters.page));
       if (filters.limit) params.set('limit', String(filters.limit));
       const { data } = await api.get(`/hr/contracts?${params.toString()}`);
-      return data;
+      const contracts = Array.isArray(data?.contracts) ? data.contracts : [];
+      return {
+        contracts,
+        total: typeof data?.total === 'number' ? data.total : contracts.length,
+        page: typeof data?.page === 'number' ? data.page : filters.page ?? 1,
+        limit: typeof data?.limit === 'number' ? data.limit : filters.limit ?? contracts.length,
+        totalPages: typeof data?.totalPages === 'number' ? data.totalPages : 1,
+        stats: {
+          active: typeof data?.stats?.active === 'number' ? data.stats.active : 0,
+          expiringSoon: typeof data?.stats?.expiringSoon === 'number' ? data.stats.expiringSoon : 0,
+          expired: typeof data?.stats?.expired === 'number' ? data.stats.expired : 0,
+          draft: typeof data?.stats?.draft === 'number' ? data.stats.draft : 0,
+        },
+        settings: {
+          contractExpiryWarningDays:
+            typeof data?.settings?.contractExpiryWarningDays === 'number'
+              ? data.settings.contractExpiryWarningDays
+              : 30,
+        },
+      };
     },
     staleTime: 20_000,
     placeholderData: keepPreviousData,
@@ -430,7 +449,20 @@ export function useHrContractApprovalRoutes() {
     queryKey: ['hr-contract-approval-routes'],
     queryFn: async () => {
       const { data } = await api.get('/hr/contracts/approval-routes');
-      return data;
+      return {
+        routes: Array.isArray(data?.routes) ? data.routes : [],
+        fallback:
+          data?.fallback ??
+          ({
+            id: 'fallback',
+            name: 'Default Approval Route',
+            isDefault: true,
+            isActive: true,
+            createdAt: '',
+            updatedAt: '',
+            steps: [],
+          } as HrContractApprovalRoute),
+      };
     },
   });
 }
@@ -440,7 +472,78 @@ export function useHrContractsOverview() {
     queryKey: ['hr-contracts-overview'],
     queryFn: async () => {
       const { data } = await api.get('/hr/contracts/overview');
-      return data;
+      return {
+        generatedAt: data?.generatedAt ?? '',
+        settings: {
+          contractExpiryWarningDays:
+            typeof data?.settings?.contractExpiryWarningDays === 'number'
+              ? data.settings.contractExpiryWarningDays
+              : 30,
+        },
+        summary: {
+          totalStaff: typeof data?.summary?.totalStaff === 'number' ? data.summary.totalStaff : 0,
+          activeContracts:
+            typeof data?.summary?.activeContracts === 'number' ? data.summary.activeContracts : 0,
+          pendingApprovals:
+            typeof data?.summary?.pendingApprovals === 'number' ? data.summary.pendingApprovals : 0,
+          monthlyCommitment:
+            typeof data?.summary?.monthlyCommitment === 'number' ? data.summary.monthlyCommitment : 0,
+          expiringSoon:
+            typeof data?.summary?.expiringSoon === 'number' ? data.summary.expiringSoon : 0,
+          terminatedLast30Days:
+            typeof data?.summary?.terminatedLast30Days === 'number'
+              ? data.summary.terminatedLast30Days
+              : 0,
+          renewalsLast90Days:
+            typeof data?.summary?.renewalsLast90Days === 'number'
+              ? data.summary.renewalsLast90Days
+              : 0,
+          approvalBacklogOver3Days:
+            typeof data?.summary?.approvalBacklogOver3Days === 'number'
+              ? data.summary.approvalBacklogOver3Days
+              : 0,
+          contractCoveragePct:
+            typeof data?.summary?.contractCoveragePct === 'number'
+              ? data.summary.contractCoveragePct
+              : 0,
+        },
+        headcountByDepartment: Array.isArray(data?.headcountByDepartment) ? data.headcountByDepartment : [],
+        contractStatusDistribution: Array.isArray(data?.contractStatusDistribution)
+          ? data.contractStatusDistribution
+          : [],
+        contractTypeDistribution: Array.isArray(data?.contractTypeDistribution)
+          ? data.contractTypeDistribution
+          : [],
+        compensationTrend: Array.isArray(data?.compensationTrend) ? data.compensationTrend : [],
+        expiringContracts: Array.isArray(data?.expiringContracts) ? data.expiringContracts : [],
+        approvalQueue: Array.isArray(data?.approvalQueue) ? data.approvalQueue : [],
+        approvalPerformance: Array.isArray(data?.approvalPerformance) ? data.approvalPerformance : [],
+        departmentContractHealth: Array.isArray(data?.departmentContractHealth)
+          ? data.departmentContractHealth
+          : [],
+        documentCompliance: {
+          fullyCompliantLiveContracts:
+            typeof data?.documentCompliance?.fullyCompliantLiveContracts === 'number'
+              ? data.documentCompliance.fullyCompliantLiveContracts
+              : 0,
+          contractsMissingGeneratedPdf:
+            typeof data?.documentCompliance?.contractsMissingGeneratedPdf === 'number'
+              ? data.documentCompliance.contractsMissingGeneratedPdf
+              : 0,
+          contractsMissingSignedCopy:
+            typeof data?.documentCompliance?.contractsMissingSignedCopy === 'number'
+              ? data.documentCompliance.contractsMissingSignedCopy
+              : 0,
+          contractsWithMissingRequiredDocs:
+            typeof data?.documentCompliance?.contractsWithMissingRequiredDocs === 'number'
+              ? data.documentCompliance.contractsWithMissingRequiredDocs
+              : 0,
+          flaggedContracts: Array.isArray(data?.documentCompliance?.flaggedContracts)
+            ? data.documentCompliance.flaggedContracts
+            : [],
+        },
+        recentActivity: Array.isArray(data?.recentActivity) ? data.recentActivity : [],
+      };
     },
     staleTime: 20_000,
   });
@@ -456,7 +559,18 @@ export function useHrContractAuditLogs(filters: HrContractAuditLogFilters = {}) 
       if (filters.page) params.set('page', String(filters.page));
       if (filters.limit) params.set('limit', String(filters.limit));
       const { data } = await api.get(`/hr/contracts/audit-logs?${params.toString()}`);
-      return data;
+      const logs = Array.isArray(data?.logs) ? data.logs : [];
+      return {
+        logs,
+        total: typeof data?.total === 'number' ? data.total : logs.length,
+        page: typeof data?.page === 'number' ? data.page : filters.page ?? 1,
+        limit: typeof data?.limit === 'number' ? data.limit : filters.limit ?? logs.length,
+        totalPages: typeof data?.totalPages === 'number' ? data.totalPages : 1,
+        filters: {
+          actions: Array.isArray(data?.filters?.actions) ? data.filters.actions : [],
+          statuses: Array.isArray(data?.filters?.statuses) ? data.filters.statuses : [],
+        },
+      };
     },
     staleTime: 20_000,
     placeholderData: keepPreviousData,

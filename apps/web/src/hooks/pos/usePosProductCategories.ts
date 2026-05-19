@@ -22,7 +22,7 @@ export function usePosProductCategories() {
     queryKey: ['pos-products-categories'],
     queryFn: async () => {
       const { data } = await api.get('/pos/products/categories');
-      return data;
+      return Array.isArray(data) ? data : [];
     },
   });
 }

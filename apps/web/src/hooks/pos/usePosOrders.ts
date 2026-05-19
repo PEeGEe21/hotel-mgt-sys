@@ -145,6 +145,26 @@ type PosOrdersQueryOptions = {
   refetchInterval?: number | false;
 };
 
+function normalizeOrder(order: ApiOrder): ApiOrder {
+  return {
+    ...order,
+    items: Array.isArray(order?.items) ? order.items : [],
+    invoices: Array.isArray(order?.invoices) ? order.invoices : [],
+    prepSummary: {
+      totalRoutedItems: typeof order?.prepSummary?.totalRoutedItems === 'number' ? order.prepSummary.totalRoutedItems : 0,
+      queued: typeof order?.prepSummary?.queued === 'number' ? order.prepSummary.queued : 0,
+      inProgress: typeof order?.prepSummary?.inProgress === 'number' ? order.prepSummary.inProgress : 0,
+      ready: typeof order?.prepSummary?.ready === 'number' ? order.prepSummary.ready : 0,
+      fulfilled: typeof order?.prepSummary?.fulfilled === 'number' ? order.prepSummary.fulfilled : 0,
+      cancelled: typeof order?.prepSummary?.cancelled === 'number' ? order.prepSummary.cancelled : 0,
+      isPrepComplete: order?.prepSummary?.isPrepComplete === true,
+      hasQueuedPrepItems: order?.prepSummary?.hasQueuedPrepItems === true,
+      hasInProgressPrepItems: order?.prepSummary?.hasInProgressPrepItems === true,
+      hasReadyPrepItems: order?.prepSummary?.hasReadyPrepItems === true,
+    },
+  };
+}
+
 // ─── Hooks ────────────────────────────────────────────────────────────────────
 export function usePosOrders(filters: OrderFilters = {}, options: PosOrdersQueryOptions = {}) {
   return useQuery<OrdersResponse>({
@@ -163,7 +183,30 @@ export function usePosOrders(filters: OrderFilters = {}, options: PosOrdersQuery
       if (filters.page) params.set('page', String(filters.page));
       if (filters.limit) params.set('limit', String(filters.limit));
       const { data } = await api.get(`/pos/orders?${params}`);
-      return data;
+      const orders = Array.isArray(data?.orders) ? data.orders.map((order: ApiOrder) => normalizeOrder(order)) : [];
+      return {
+        orders,
+        total: typeof data?.total === 'number' ? data.total : orders.length,
+        page: typeof data?.page === 'number' ? data.page : filters.page ?? 1,
+        totalPages: typeof data?.totalPages === 'number' ? data.totalPages : 1,
+        meta: data?.meta ?? null,
+        stats: {
+          todayRevenue: typeof data?.stats?.todayRevenue === 'number' ? data.stats.todayRevenue : 0,
+          todayCount: typeof data?.stats?.todayCount === 'number' ? data.stats.todayCount : 0,
+          activeOrders: typeof data?.stats?.activeOrders === 'number' ? data.stats.activeOrders : 0,
+          paymentMix:
+            data?.stats?.paymentMix && typeof data.stats.paymentMix === 'object'
+              ? data.stats.paymentMix
+              : {},
+          prepReadyOrders:
+            typeof data?.stats?.prepReadyOrders === 'number' ? data.stats.prepReadyOrders : 0,
+          delayedOrders: typeof data?.stats?.delayedOrders === 'number' ? data.stats.delayedOrders : 0,
+          stationQueues: {
+            kitchen: typeof data?.stats?.stationQueues?.kitchen === 'number' ? data.stats.stationQueues.kitchen : 0,
+            bar: typeof data?.stats?.stationQueues?.bar === 'number' ? data.stats.stationQueues.bar : 0,
+          },
+        },
+      };
     },
     staleTime: 15_000,
     placeholderData: keepPreviousData,
@@ -176,7 +219,7 @@ export function usePosOrder(id: string) {
     queryKey: ['pos-orders', id],
     queryFn: async () => {
       const { data } = await api.get(`/pos/orders/${id}`);
-      return data;
+      return normalizeOrder(data);
     },
     enabled: !!id,
   });
@@ -202,7 +245,21 @@ export function useZReport(options: { posTerminalId?: string; date?: string; sta
       if (options.date) params.set('date', options.date);
       if (options.staffId) params.set('staffId', options.staffId);
       const { data } = await api.get(`/pos/orders/z-report?${params}`);
-      return data;
+      return {
+        date: data?.date ?? options.date ?? '',
+        terminal: data?.terminal ?? '',
+        totalOrders: typeof data?.totalOrders === 'number' ? data.totalOrders : 0,
+        paidOrders: typeof data?.paidOrders === 'number' ? data.paidOrders : 0,
+        unpaidOrders: typeof data?.unpaidOrders === 'number' ? data.unpaidOrders : 0,
+        grossRevenue: typeof data?.grossRevenue === 'number' ? data.grossRevenue : 0,
+        netRevenue: typeof data?.netRevenue === 'number' ? data.netRevenue : 0,
+        totalTax: typeof data?.totalTax === 'number' ? data.totalTax : 0,
+        totalDiscount: typeof data?.totalDiscount === 'number' ? data.totalDiscount : 0,
+        byMethod: data?.byMethod && typeof data.byMethod === 'object' ? data.byMethod : {},
+        byType: data?.byType && typeof data.byType === 'object' ? data.byType : {},
+        topItems: Array.isArray(data?.topItems) ? data.topItems : [],
+        openTables: Array.isArray(data?.openTables) ? data.openTables : [],
+      };
     },
     staleTime: 60_000,
   });

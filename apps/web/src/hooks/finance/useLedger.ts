@@ -77,7 +77,7 @@ export function useAccounts(type?: AccountType) {
     queryFn:  async () => {
       const params = type ? `?type=${type}` : '';
       const { data } = await api.get(`/ledger/accounts${params}`);
-      return data;
+      return Array.isArray(data) ? data : [];
     },
     staleTime: 60_000,
   });
@@ -88,7 +88,16 @@ export function useDayBook(date: string, page = 1) {
     queryKey:        ['ledger-daybook', date, page],
     queryFn:         async () => {
       const { data } = await api.get(`/ledger/day-book?date=${date}&page=${page}&limit=50`);
-      return data;
+      return {
+        date: data?.date ?? date,
+        entries: Array.isArray(data?.entries) ? data.entries : [],
+        summary: {
+          totalEntries: typeof data?.summary?.totalEntries === 'number' ? data.summary.totalEntries : 0,
+          totalDebits: typeof data?.summary?.totalDebits === 'number' ? data.summary.totalDebits : 0,
+          totalCredits: typeof data?.summary?.totalCredits === 'number' ? data.summary.totalCredits : 0,
+        },
+        meta: data?.meta ?? null,
+      };
     },
     staleTime:       30_000,
     placeholderData: keepPreviousData,
@@ -101,7 +110,13 @@ export function useTrialBalance(asOf?: string) {
     queryFn:  async () => {
       const params = asOf ? `?asOf=${asOf}` : '';
       const { data } = await api.get(`/ledger/trial-balance${params}`);
-      return data;
+      return {
+        asOf: data?.asOf ?? asOf ?? '',
+        rows: Array.isArray(data?.rows) ? data.rows : [],
+        totalDebits: typeof data?.totalDebits === 'number' ? data.totalDebits : 0,
+        totalCredits: typeof data?.totalCredits === 'number' ? data.totalCredits : 0,
+        isBalanced: typeof data?.isBalanced === 'boolean' ? data.isBalanced : true,
+      };
     },
     staleTime: 60_000,
   });
@@ -112,7 +127,23 @@ export function useProfitAndLoss(from: string, to: string) {
     queryKey: ['ledger-pnl', from, to],
     queryFn:  async () => {
       const { data } = await api.get(`/ledger/profit-loss?from=${from}&to=${to}`);
-      return data;
+      return {
+        period: data?.period ?? { from, to },
+        revenue: {
+          total: typeof data?.revenue?.total === 'number' ? data.revenue.total : 0,
+          rows: Array.isArray(data?.revenue?.rows) ? data.revenue.rows : [],
+          byCategory:
+            data?.revenue?.byCategory && typeof data.revenue.byCategory === 'object'
+              ? data.revenue.byCategory
+              : {},
+        },
+        expenses: {
+          total: typeof data?.expenses?.total === 'number' ? data.expenses.total : 0,
+          rows: Array.isArray(data?.expenses?.rows) ? data.expenses.rows : [],
+        },
+        netProfit: typeof data?.netProfit === 'number' ? data.netProfit : 0,
+        margin: typeof data?.margin === 'number' ? data.margin : 0,
+      };
     },
     staleTime:       60_000,
     placeholderData: keepPreviousData,

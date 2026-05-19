@@ -21,7 +21,7 @@ export function useFloors() {
     queryKey: ['floors'],
     queryFn: async () => {
       const { data } = await api.get('/floors');
-      return data;
+      return Array.isArray(data) ? data : [];
     },
     staleTime: 60_000, // floors change rarely
   });

@@ -44,7 +44,7 @@ export function usePosTerminals() {
     queryKey: ['pos-terminals'],
     queryFn: async () => {
       const { data } = await api.get('/pos/terminals');
-      return data;
+      return Array.isArray(data) ? data : [];
     },
   });
 }
@@ -54,7 +54,7 @@ export function usePosTerminalGroups() {
     queryKey: ['pos-terminal-groups'],
     queryFn: async () => {
       const { data } = await api.get('/pos/terminals/groups');
-      return data;
+      return Array.isArray(data) ? data : [];
     },
   });
 }

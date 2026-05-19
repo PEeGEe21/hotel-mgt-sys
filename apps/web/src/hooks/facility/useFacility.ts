@@ -91,7 +91,20 @@ export function useFacilities(filters: Filters = {}) {
       if (filters.type) params.set('type', filters.type);
       if (filters.status) params.set('status', filters.status);
       const { data } = await api.get(`${baseUrl}?${params}`);
-      return data;
+      const facilities = Array.isArray(data?.facilities) ? data.facilities : [];
+      return {
+        facilities,
+        stats: {
+          total: typeof data?.stats?.total === 'number' ? data.stats.total : facilities.length,
+          active: typeof data?.stats?.active === 'number' ? data.stats.active : 0,
+          inactive: typeof data?.stats?.inactive === 'number' ? data.stats.inactive : 0,
+          maintenance: typeof data?.stats?.maintenance === 'number' ? data.stats.maintenance : 0,
+        },
+        total: typeof data?.total === 'number' ? data.total : facilities.length,
+        page: typeof data?.page === 'number' ? data.page : filters.page ?? 1,
+        totalPages: typeof data?.totalPages === 'number' ? data.totalPages : 1,
+        meta: data?.meta ?? null,
+      };
     },
     staleTime: 15_000,
     placeholderData: keepPreviousData,

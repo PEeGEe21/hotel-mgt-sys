@@ -23,7 +23,36 @@ export function useRealtimeSettings() {
     queryKey: ['realtime-settings'],
     queryFn: async () => {
       const { data } = await api.get('/realtime/settings');
-      return data;
+      return {
+        alertsEnabled: data?.alertsEnabled === true,
+        alertCooldownMinutes:
+          typeof data?.alertCooldownMinutes === 'number' ? data.alertCooldownMinutes : 180,
+        retentionDays: typeof data?.retentionDays === 'number' ? data.retentionDays : 14,
+        staleThresholds: {
+          notifications:
+            typeof data?.staleThresholds?.notifications === 'number'
+              ? data.staleThresholds.notifications
+              : 120,
+          posOrders:
+            typeof data?.staleThresholds?.posOrders === 'number'
+              ? data.staleThresholds.posOrders
+              : 120,
+          prep:
+            typeof data?.staleThresholds?.prep === 'number' ? data.staleThresholds.prep : 120,
+          housekeeping:
+            typeof data?.staleThresholds?.housekeeping === 'number'
+              ? data.staleThresholds.housekeeping
+              : 120,
+          facilities:
+            typeof data?.staleThresholds?.facilities === 'number'
+              ? data.staleThresholds.facilities
+              : 120,
+          presence:
+            typeof data?.staleThresholds?.presence === 'number'
+              ? data.staleThresholds.presence
+              : 180,
+        },
+      };
     },
     staleTime: 15_000,
   });

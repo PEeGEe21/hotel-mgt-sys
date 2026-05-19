@@ -51,6 +51,14 @@ export type RoomFilters = {
   limit?: number;
 };
 
+function normalizeRoom(room: ApiRoom): ApiRoom {
+  return {
+    ...room,
+    amenities: Array.isArray(room.amenities) ? room.amenities : [],
+    images: Array.isArray(room.images) ? room.images : [],
+  };
+}
+
 // ─── Hooks ────────────────────────────────────────────────────────────────────
 export function useRooms(filters: RoomFilters = {}) {
   return useQuery<RoomsResponse>({
@@ -64,7 +72,15 @@ export function useRooms(filters: RoomFilters = {}) {
       if (filters.page) params.set('page', String(filters.page));
       if (filters.limit) params.set('limit', String(filters.limit));
       const { data } = await api.get(`/rooms?${params}`);
-      return data;
+      const rawRooms = Array.isArray(data?.rooms) ? data.rooms : [];
+      return {
+        rooms: rawRooms.map((room: ApiRoom) => normalizeRoom(room)),
+        total: typeof data?.total === 'number' ? data.total : rawRooms.length,
+        page: typeof data?.page === 'number' ? data.page : filters.page ?? 1,
+        limit: typeof data?.limit === 'number' ? data.limit : filters.limit ?? rawRooms.length,
+        totalPages: typeof data?.totalPages === 'number' ? data.totalPages : 1,
+        stats: data?.stats && typeof data.stats === 'object' ? data.stats : {},
+      };
     },
     staleTime: 30_000,
     placeholderData: keepPreviousData, // no flash between page/filter changes
@@ -76,7 +92,7 @@ export function useRoom(id: string) {
     queryKey: ['rooms', id],
     queryFn: async () => {
       const { data } = await api.get(`/rooms/${id}`);
-      return data;
+      return normalizeRoom(data);
     },
     enabled: !!id,
   });

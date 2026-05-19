@@ -64,7 +64,22 @@ export function useNotifications(options: {
       const { data } = await api.get('/notifications', {
         params: { limit, page, unreadOnly, event, includeArchived, pinnedOnly },
       });
-      return data;
+      const items = Array.isArray(data?.items) ? data.items : [];
+      return {
+        items,
+        unreadCount: typeof data?.unreadCount === 'number' ? data.unreadCount : 0,
+        meta:
+          data?.meta && typeof data.meta === 'object'
+            ? data.meta
+            : {
+                total: items.length,
+                current_page: page,
+                per_page: limit,
+                last_page: 1,
+                from: items.length ? 1 : 0,
+                to: items.length,
+              },
+      };
     },
     staleTime: 20_000,
     refetchInterval: 60_000,

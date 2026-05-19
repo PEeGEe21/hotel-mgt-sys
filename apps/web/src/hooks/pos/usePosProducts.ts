@@ -92,7 +92,15 @@ export function usePosProducts(filters: ProductFilters = {}) {
       if (filters.page) params.set('page', String(filters.page));
       if (filters.limit) params.set('limit', String(filters.limit));
       const { data } = await api.get(`/pos/products?${params}`);
-      return data;
+      const products = Array.isArray(data?.products) ? data.products : [];
+      return {
+        products,
+        total: typeof data?.total === 'number' ? data.total : products.length,
+        page: typeof data?.page === 'number' ? data.page : filters.page ?? 1,
+        totalPages: typeof data?.totalPages === 'number' ? data.totalPages : 1,
+        meta: data?.meta ?? null,
+        categories: Array.isArray(data?.categories) ? data.categories : [],
+      };
     },
     staleTime: 30_000,
     placeholderData: keepPreviousData,
@@ -115,7 +123,7 @@ export function useProductCategories() {
     queryKey: ['pos-products', 'categories'],
     queryFn: async () => {
       const { data } = await api.get('/pos/products/categories');
-      return data;
+      return Array.isArray(data) ? data : [];
     },
     staleTime: 60_000,
   });
@@ -127,7 +135,7 @@ export function useInventoryItemOptions(search?: string) {
     queryFn: async () => {
       const params = search ? `?search=${encodeURIComponent(search)}` : '';
       const { data } = await api.get(`/pos/products/inventory-items${params}`);
-      return data;
+      return Array.isArray(data) ? data : [];
     },
     staleTime: 30_000,
   });

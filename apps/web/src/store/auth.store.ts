@@ -66,8 +66,6 @@ export const useAuthStore = create<AuthState>()(
           return { success: false, message: result.message };
         }
 
-        console.log(result, 'ffs');
-
         set({ user: result.user, isAuthenticated: true, isLoading: false, error: null });
         return { success: true, hotel: result.hotel, user: result.user };
       },

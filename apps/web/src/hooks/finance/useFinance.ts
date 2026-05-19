@@ -165,7 +165,19 @@ export function useFinanceOverview(range: { from?: string; to?: string } = {}) {
       if (range.from) params.set('from', range.from);
       if (range.to) params.set('to', range.to);
       const { data } = await api.get(`/finance/overview?${params.toString()}`);
-      return data;
+      return {
+        range: data?.range ?? { from: range.from ?? '', to: range.to ?? '' },
+        revenue: typeof data?.revenue === 'number' ? data.revenue : 0,
+        expenses: typeof data?.expenses === 'number' ? data.expenses : 0,
+        net: typeof data?.net === 'number' ? data.net : 0,
+        outstanding: typeof data?.outstanding === 'number' ? data.outstanding : 0,
+        changes: {
+          revenue: data?.changes?.revenue ?? null,
+          expenses: data?.changes?.expenses ?? null,
+          net: data?.changes?.net ?? null,
+          outstanding: data?.changes?.outstanding ?? null,
+        },
+      };
     },
     staleTime: 30_000,
     placeholderData: keepPreviousData,
@@ -193,7 +205,15 @@ export function useFinanceInvoices(filters: {
       if (filters.page) params.set('page', String(filters.page));
       if (filters.limit) params.set('limit', String(filters.limit));
       const { data } = await api.get(`/finance/invoices?${params.toString()}`);
-      return data;
+      const invoices = Array.isArray(data?.invoices) ? data.invoices : [];
+      return {
+        range: data?.range ?? { from: filters.from ?? '', to: filters.to ?? '' },
+        invoices,
+        total: typeof data?.total === 'number' ? data.total : invoices.length,
+        page: typeof data?.page === 'number' ? data.page : filters.page ?? 1,
+        limit: typeof data?.limit === 'number' ? data.limit : filters.limit ?? invoices.length,
+        totalPages: typeof data?.totalPages === 'number' ? data.totalPages : 1,
+      };
     },
     staleTime: 20_000,
     placeholderData: keepPreviousData,
@@ -217,7 +237,15 @@ export function useFinancePayments(filters: {
       if (filters.page) params.set('page', String(filters.page));
       if (filters.limit) params.set('limit', String(filters.limit));
       const { data } = await api.get(`/finance/payments?${params.toString()}`);
-      return data;
+      const payments = Array.isArray(data?.payments) ? data.payments : [];
+      return {
+        range: data?.range ?? { from: filters.from ?? '', to: filters.to ?? '' },
+        payments,
+        total: typeof data?.total === 'number' ? data.total : payments.length,
+        page: typeof data?.page === 'number' ? data.page : filters.page ?? 1,
+        limit: typeof data?.limit === 'number' ? data.limit : filters.limit ?? payments.length,
+        totalPages: typeof data?.totalPages === 'number' ? data.totalPages : 1,
+      };
     },
     staleTime: 20_000,
     placeholderData: keepPreviousData,

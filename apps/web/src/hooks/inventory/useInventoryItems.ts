@@ -101,6 +101,23 @@ export type ValuationResponse = {
   items: InventoryItem[];
 };
 
+function normalizeInventoryItem(item: InventoryItem): InventoryItem {
+  return {
+    ...item,
+    quantity: Number(item.quantity ?? 0),
+    minStock: Number(item.minStock ?? 0),
+    costPrice: Number(item.costPrice ?? 0),
+    sellPrice: item.sellPrice == null ? null : Number(item.sellPrice),
+  };
+}
+
+function normalizeStockMovement(movement: StockMovement): StockMovement {
+  return {
+    ...movement,
+    quantity: Number(movement.quantity ?? 0),
+  };
+}
+
 // ─── Hooks ────────────────────────────────────────────────────────────────────
 export function useInventoryList(
   filters: {
@@ -120,7 +137,29 @@ export function useInventoryList(
       if (filters.search) params.set('search', filters.search);
       if (filters.category) params.set('category', filters.category);
       const { data } = await api.get(`/inventory?${params}`);
-      return data;
+      const items = Array.isArray(data?.items) ? data.items.map(normalizeInventoryItem) : [];
+      const lowStockItems = Array.isArray(data?.stats?.lowStockItems) ? data.stats.lowStockItems : [];
+      return {
+        items,
+        meta: data?.meta && typeof data.meta === 'object'
+          ? data.meta
+          : {
+              total: items.length,
+              current_page: filters.page ?? 1,
+              per_page: filters.limit ?? items.length,
+              last_page: 1,
+              from: items.length > 0 ? 1 : 0,
+              to: items.length,
+            },
+        stats: {
+          totalItems: Number(data?.stats?.totalItems ?? items.length),
+          lowStockCount: Number(data?.stats?.lowStockCount ?? lowStockItems.length),
+          totalValue: Number(data?.stats?.totalValue ?? 0),
+          todaySales: Number(data?.stats?.todaySales ?? 0),
+          todayTransactions: Number(data?.stats?.todayTransactions ?? 0),
+          lowStockItems,
+        },
+      };
     },
     enabled: options.enabled ?? true,
     staleTime: 30_000,
@@ -133,7 +172,10 @@ export function useInventoryItem(id: string) {
     queryKey: ['inventory', id],
     queryFn: async () => {
       const { data } = await api.get(`/inventory/${id}`);
-      return data;
+      return {
+        ...normalizeInventoryItem(data),
+        movements: Array.isArray(data?.movements) ? data.movements.map(normalizeStockMovement) : [],
+      };
     },
     enabled: !!id,
   });
@@ -160,7 +202,22 @@ export function useInventoryMovements(
       if (filters.page) params.set('page', String(filters.page));
       if (filters.limit) params.set('limit', String(filters.limit));
       const { data } = await api.get(`/inventory/movements?${params}`);
-      return data;
+      const movements = Array.isArray(data?.movements)
+        ? data.movements.map(normalizeStockMovement)
+        : [];
+      return {
+        movements,
+        meta: data?.meta && typeof data.meta === 'object'
+          ? data.meta
+          : {
+              total: movements.length,
+              current_page: filters.page ?? 1,
+              per_page: filters.limit ?? movements.length,
+              last_page: 1,
+              from: movements.length > 0 ? 1 : 0,
+              to: movements.length,
+            },
+      };
     },
     staleTime: 15_000,
     placeholderData: keepPreviousData,
@@ -172,7 +229,16 @@ export function useInventoryValuation() {
     queryKey: ['inventory-valuation'],
     queryFn: async () => {
       const { data } = await api.get('/inventory/valuation');
-      return data;
+      return {
+        summary: {
+          totalItems: Number(data?.summary?.totalItems ?? 0),
+          totalCost: Number(data?.summary?.totalCost ?? 0),
+          totalValue: Number(data?.summary?.totalValue ?? 0),
+          grossMargin: Number(data?.summary?.grossMargin ?? 0),
+        },
+        byCategory: data?.byCategory && typeof data.byCategory === 'object' ? data.byCategory : {},
+        items: Array.isArray(data?.items) ? data.items.map(normalizeInventoryItem) : [],
+      };
     },
     staleTime: 60_000,
   });

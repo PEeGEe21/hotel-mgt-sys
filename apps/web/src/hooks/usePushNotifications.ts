@@ -80,7 +80,10 @@ export function usePushSettings() {
     queryKey: ['notifications', 'push-settings'],
     queryFn: async () => {
       const { data } = await api.get('/notifications/push/settings');
-      return data;
+      return {
+        enabled: data?.enabled === true,
+        publicKey: typeof data?.publicKey === 'string' ? data.publicKey : null,
+      };
     },
     staleTime: 60_000,
   });
@@ -91,7 +94,29 @@ export function usePushStatus() {
     queryKey: ['notifications', 'push-status'],
     queryFn: async () => {
       const { data } = await api.get('/notifications/push/status');
-      return data;
+      return {
+        summary: {
+          totalSubscriptions:
+            typeof data?.summary?.totalSubscriptions === 'number'
+              ? data.summary.totalSubscriptions
+              : 0,
+          healthySubscriptions:
+            typeof data?.summary?.healthySubscriptions === 'number'
+              ? data.summary.healthySubscriptions
+              : 0,
+          failingSubscriptions:
+            typeof data?.summary?.failingSubscriptions === 'number'
+              ? data.summary.failingSubscriptions
+              : 0,
+          neverTestedSubscriptions:
+            typeof data?.summary?.neverTestedSubscriptions === 'number'
+              ? data.summary.neverTestedSubscriptions
+              : 0,
+        },
+        subscriptions: Array.isArray(data?.subscriptions) ? data.subscriptions : [],
+        recentDeliveries: Array.isArray(data?.recentDeliveries) ? data.recentDeliveries : [],
+        lastTestResult: data?.lastTestResult ?? null,
+      };
     },
     staleTime: 15_000,
   });

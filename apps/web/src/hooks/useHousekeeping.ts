@@ -91,7 +91,16 @@ export function useHKStats() {
     queryKey: ['housekeeping', 'stats'],
     queryFn: async () => {
       const { data } = await api.get('/housekeeping/stats');
-      return data;
+      return {
+        total: typeof data?.total === 'number' ? data.total : 0,
+        pending: typeof data?.pending === 'number' ? data.pending : 0,
+        inProgress: typeof data?.inProgress === 'number' ? data.inProgress : 0,
+        done: typeof data?.done === 'number' ? data.done : 0,
+        blocked: typeof data?.blocked === 'number' ? data.blocked : 0,
+        urgent: typeof data?.urgent === 'number' ? data.urgent : 0,
+        roomStats: data?.roomStats && typeof data.roomStats === 'object' ? data.roomStats : {},
+        floors: Array.isArray(data?.floors) ? data.floors : [],
+      };
     },
     staleTime: 30_000,
     refetchInterval: 60_000, // auto-refresh every minute
@@ -103,7 +112,12 @@ export function useHKStaff() {
     queryKey: ['housekeeping', 'staff'],
     queryFn: async () => {
       const { data } = await api.get('/housekeeping/staff');
-      return data;
+      return Array.isArray(data)
+        ? data.map((member) => ({
+            ...member,
+            tasks: Array.isArray(member?.tasks) ? member.tasks : [],
+          }))
+        : [];
     },
     staleTime: 60_000,
   });
@@ -124,7 +138,13 @@ export function useHKTasks(filters: TaskFilters = {}) {
       if (filters.page) params.set('page', String(filters.page));
       if (filters.limit) params.set('limit', String(filters.limit));
       const { data } = await api.get(`/housekeeping?${params}`);
-      return data;
+      const tasks = Array.isArray(data?.tasks) ? data.tasks : [];
+      return {
+        tasks,
+        total: typeof data?.total === 'number' ? data.total : tasks.length,
+        page: typeof data?.page === 'number' ? data.page : filters.page ?? 1,
+        totalPages: typeof data?.totalPages === 'number' ? data.totalPages : 1,
+      };
     },
     staleTime: 20_000,
     placeholderData: keepPreviousData,

@@ -39,9 +39,17 @@ export function useFacilityLocations(filters: Filters = {}) {
       const params = new URLSearchParams();
       if (filters.search) params.set('search', filters.search);
       if (filters.page) params.set('page', String(filters.page));
-      if (filters.limit) params.set('limit', String(filters.limit));
+      const safeLimit = Math.min(filters.limit ?? 20, 100);
+      if (safeLimit) params.set('limit', String(safeLimit));
       const { data } = await api.get(`${baseUrl}/list?${params}`);
-      return data;
+      const locations = Array.isArray(data?.locations) ? data.locations : [];
+      return {
+        locations,
+        total: typeof data?.total === 'number' ? data.total : locations.length,
+        page: typeof data?.page === 'number' ? data.page : filters.page ?? 1,
+        totalPages: typeof data?.totalPages === 'number' ? data.totalPages : 1,
+        meta: data?.meta ?? null,
+      };
     },
     staleTime: 15_000,
     placeholderData: keepPreviousData,

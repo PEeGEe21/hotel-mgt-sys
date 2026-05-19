@@ -30,7 +30,7 @@ export function useSuppliers() {
     queryKey: ['suppliers'],
     queryFn: async () => {
       const { data } = await api.get('/suppliers');
-      return data;
+      return Array.isArray(data) ? data : [];
     },
   });
 }
