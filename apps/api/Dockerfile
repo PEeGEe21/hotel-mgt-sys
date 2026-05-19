@@ -39,4 +39,4 @@ RUN pnpm install --filter @hotel-os/api... --prod --frozen-lockfile
 RUN pnpm --filter @hotel-os/api exec prisma generate
 COPY --from=build /app/apps/api/dist apps/api/dist
 EXPOSE 4000
-CMD ["pnpm", "--filter", "@hotel-os/api", "start"]
+CMD ["bash", "-lc", "pnpm --filter @hotel-os/api exec prisma migrate deploy && pnpm --filter @hotel-os/api start"]
