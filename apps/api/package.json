@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "scripts": {
     "build": "prisma generate && nest build",
-    "dev": "nest start --watch",
+    "dev": "prisma generate && nest start --watch",
     "start": "node dist/main",
     "lint": "node -e \"console.log('API lint is not configured yet; skipping.')\"",
     "test": "node --test",

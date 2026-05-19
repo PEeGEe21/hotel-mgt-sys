@@ -38,6 +38,7 @@ import { RedisModule } from './common/redis/redis.module';
 import { MonitoringModule } from './common/monitoring/monitoring.module';
 import { HrContractsModule } from './modules/hr-contracts/hr-contracts.module';
 import { JobTitlesModule } from './modules/job-titles/job-titles.module';
+import { SeedModule } from './modules/seed/seed.module';
 import { RootController } from './root.controller';
 
 @Module({
@@ -97,6 +98,7 @@ import { RootController } from './root.controller';
     DashboardModule,
     HrContractsModule,
     JobTitlesModule,
+    SeedModule,
   ],
   controllers: [RootController],
   providers: [PermissionsGuard, RolesGuard],

@@ -5,6 +5,7 @@ import { Figtree } from 'next/font/google';
 import { cn } from '@/lib/utils';
 import { Toaster } from 'sonner';
 import { ReactQueryProvider } from '@/components/providers/ReactQueryProvider';
+import { PwaInstallPrompt } from '@/components/pwa/PwaInstallPrompt';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-sans' });
 
@@ -49,6 +50,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <ReactQueryProvider>
           <Toaster richColors position="top-right" closeButton />
+          <PwaInstallPrompt />
           {children}
         </ReactQueryProvider>
       </body>

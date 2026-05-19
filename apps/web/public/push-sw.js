@@ -11,8 +11,8 @@ self.addEventListener('push', (event) => {
   const title = payload.title || 'HotelOS';
   const options = {
     body: payload.body || '',
-    icon: '/apple-icon.svg',
-    badge: '/apple-icon.svg',
+    icon: '/pwa-icons/icon-192.png',
+    badge: '/pwa-icons/icon-192.png',
     data: {
       href: payload.href || '/notifications',
     },
@@ -36,4 +36,8 @@ self.addEventListener('notificationclick', (event) => {
       return self.clients.openWindow(href);
     }),
   );
+});
+
+self.addEventListener('fetch', (event) => {
+  event.respondWith(fetch(event.request));
 });

@@ -44,4 +44,7 @@ export default () => ({
     secretKey: process.env.STRIPE_SECRET_KEY,
     webhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
   },
+  seed: {
+    routeKey: process.env.SEED_ROUTE_KEY,
+  },
 });

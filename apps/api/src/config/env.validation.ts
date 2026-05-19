@@ -78,6 +78,7 @@ export function validateEnv(config: Record<string, unknown>) {
   const emailFrom = readString(config, 'EMAIL_FROM');
   const resendApiKey = readString(config, 'RESEND_API_KEY');
   const redisUrl = readString(config, 'REDIS_URL');
+  const seedRouteKey = readString(config, 'SEED_ROUTE_KEY');
   const webPushPublicKey = readString(config, 'WEB_PUSH_PUBLIC_KEY');
   const webPushPrivateKey = readString(config, 'WEB_PUSH_PRIVATE_KEY');
   const webPushSubject = readString(config, 'WEB_PUSH_SUBJECT');
@@ -93,6 +94,10 @@ export function validateEnv(config: Record<string, unknown>) {
   assertCorsOrigins(corsOrigins);
   assertEmailFrom(emailFrom, 'EMAIL_FROM');
   assertPushSubject(webPushSubject, 'WEB_PUSH_SUBJECT');
+
+  if (seedRouteKey && seedRouteKey.length < 16) {
+    throw new Error('SEED_ROUTE_KEY must be at least 16 characters when set');
+  }
 
   const hasAnyPushConfig = Boolean(webPushPublicKey || webPushPrivateKey || webPushSubject);
   if (hasAnyPushConfig && (!webPushPublicKey || !webPushPrivateKey || !webPushSubject)) {
