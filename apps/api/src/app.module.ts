@@ -40,6 +40,7 @@ import { HrContractsModule } from './modules/hr-contracts/hr-contracts.module';
 import { JobTitlesModule } from './modules/job-titles/job-titles.module';
 import { SeedModule } from './modules/seed/seed.module';
 import { RootController } from './root.controller';
+import { PlatformModule } from './modules/platform/platform.module';
 
 @Module({
   imports: [
@@ -99,6 +100,7 @@ import { RootController } from './root.controller';
     HrContractsModule,
     JobTitlesModule,
     SeedModule,
+    PlatformModule,
   ],
   controllers: [RootController],
   providers: [PermissionsGuard, RolesGuard],

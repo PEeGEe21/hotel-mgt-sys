@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "turbo run dev",
+    "dev:admin": "pnpm --filter @hotel-os/admin dev",
     "build": "turbo run build",
+    "build:admin": "pnpm --filter @hotel-os/admin build",
     "lint": "turbo run lint",
     "test": "turbo run test",
     "release:metadata": "node scripts/print-release-metadata.mjs",
