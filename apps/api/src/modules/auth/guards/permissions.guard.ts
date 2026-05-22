@@ -1,7 +1,7 @@
 import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { Role } from '@prisma/client';
+import type { Role } from '@hotel-os/shared-types';
 import { DEFAULT_ROLE_PERMISSIONS } from '../../../common/constants/role-permissions';
 import { PERMISSIONS_KEY } from './index';
 

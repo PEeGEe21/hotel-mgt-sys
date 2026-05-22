@@ -1,4 +1,4 @@
-import { Role } from '@prisma/client';
+import type { Role } from '@hotel-os/shared-types';
 
 export const PLATFORM_PERMISSION_KEYS = [
   'platform:view-dashboard',

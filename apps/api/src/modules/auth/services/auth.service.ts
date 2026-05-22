@@ -3,8 +3,8 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
+import type { Role } from '@hotel-os/shared-types';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { Role } from '@prisma/client';
 import { DEFAULT_ROLE_PERMISSIONS } from '../../../common/constants/role-permissions';
 import { UpdateMeDto } from '../dtos/update-me.dto';
 import { EmailService } from '../../../common/email/email.service';
@@ -29,6 +29,8 @@ type MfaChallengeCacheValue = {
   phase: 'verify' | 'setup';
   secret: string;
 };
+
+const SUPER_ADMIN_ROLE = 'SUPER_ADMIN';
 
 @Injectable()
 export class AuthService {
@@ -63,7 +65,7 @@ export class AuthService {
 
   // ─── Login — returns access + refresh tokens ───────────────────────────────
   async login(user: any, meta?: { ipAddress?: string | null; userAgent?: string | null }) {
-    if (user.role === Role.SUPER_ADMIN) {
+    if (user.role === SUPER_ADMIN_ROLE) {
       return this.beginSuperAdminLogin(user, meta);
     }
 
@@ -123,7 +125,7 @@ export class AuthService {
       include: { staff: { include: { hotel: true } } },
     });
 
-    if (!user || !user.isActive || user.role !== Role.SUPER_ADMIN) {
+    if (!user || !user.isActive || user.role !== SUPER_ADMIN_ROLE) {
       await this.cache.del(`mfa:challenge:${challengeToken}`);
       throw new UnauthorizedException('Super admin account not available.');
     }
@@ -621,7 +623,7 @@ export class AuthService {
     await this.logAudit({
       actorUserId: user.id,
       hotelId: user.staff?.hotelId ?? null,
-      action: user.role === Role.SUPER_ADMIN ? 'auth.login.super_admin' : 'auth.login',
+      action: user.role === SUPER_ADMIN_ROLE ? 'auth.login.super_admin' : 'auth.login',
       ipAddress: meta?.ipAddress ?? null,
       userAgent: meta?.userAgent ?? null,
     });

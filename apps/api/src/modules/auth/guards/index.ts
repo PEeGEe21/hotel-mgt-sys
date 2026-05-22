@@ -1,7 +1,7 @@
 import { Injectable, CanActivate, ExecutionContext, ForbiddenException, SetMetadata } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { Reflector } from '@nestjs/core';
-import { Role } from '@prisma/client';
+import type { Role } from '@hotel-os/shared-types';
 import { PermissionsGuard } from './permissions.guard';
 
 export const ROLES_KEY = 'roles';

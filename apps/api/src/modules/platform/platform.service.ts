@@ -1,5 +1,4 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { PaymentStatus, Role } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { randomInt } from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -31,6 +30,9 @@ type PlatformHotelHealth = {
   overdueInvoices: number;
   signals: string[];
 };
+
+const ADMIN_ROLE = 'ADMIN';
+const OVERDUE_PAYMENT_STATUSES = ['UNPAID', 'PARTIAL'] as const;
 
 function normalizeOptional(value?: string | null) {
   const trimmed = value?.trim();
@@ -300,7 +302,7 @@ export class PlatformService {
           email: adminEmail,
           username,
           passwordHash,
-          role: Role.ADMIN,
+          role: ADMIN_ROLE,
           isActive: true,
           mustChangePassword: true,
         },
@@ -488,7 +490,7 @@ export class PlatformService {
             where: {
               hotelId: hotel.id,
               dueAt: { lt: new Date() },
-              paymentStatus: { in: [PaymentStatus.UNPAID, PaymentStatus.PARTIAL] },
+              paymentStatus: { in: [...OVERDUE_PAYMENT_STATUSES] },
             },
           }),
         ]);
@@ -668,7 +670,7 @@ export class PlatformService {
         where: {
           hotelId,
           dueAt: { lt: new Date() },
-          paymentStatus: { in: [PaymentStatus.UNPAID, PaymentStatus.PARTIAL] },
+          paymentStatus: { in: [...OVERDUE_PAYMENT_STATUSES] },
         },
       }),
     ]);
