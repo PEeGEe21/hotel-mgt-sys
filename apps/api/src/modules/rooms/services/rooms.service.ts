@@ -10,12 +10,16 @@ import { RoomFilterDto } from '../dtos/room-filter.dto';
 import { CreateRoomDto } from '../dtos/create-room.dto';
 import { UpdateRoomDto } from '../dtos/update-room.dto';
 import { RoomReservationsDto } from '../dtos/room-reservations.dto';
+import { HotelLifecycleService } from '../../hotel-lifecycle/hotel-lifecycle.service';
 
 // ─── Service ──────────────────────────────────────────────────────────────────
 
 @Injectable()
 export class RoomsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly hotelLifecycleService: HotelLifecycleService,
+  ) {}
 
   private async assertFloorBelongsToHotel(hotelId: string, floorId?: string | null) {
     if (!floorId) return;
@@ -158,19 +162,25 @@ export class RoomsService {
     });
     if (existing) throw new ConflictException(`Room ${dto.number} already exists.`);
 
-    return this.prisma.room.create({
-      data: {
-        hotelId,
-        number: dto.number,
-        floorId,
-        type: dto.type,
-        baseRate: dto.baseRate,
-        maxGuests: dto.maxGuests ?? 2,
-        description: dto.description,
-        amenities: dto.amenities ?? [],
-        images: dto.images ?? [],
-        status: RoomStatus.AVAILABLE,
-      },
+    return this.prisma.$transaction(async (tx) => {
+      const room = await tx.room.create({
+        data: {
+          hotelId,
+          number: dto.number,
+          floorId,
+          type: dto.type,
+          baseRate: dto.baseRate,
+          maxGuests: dto.maxGuests ?? 2,
+          description: dto.description,
+          amenities: dto.amenities ?? [],
+          images: dto.images ?? [],
+          status: RoomStatus.AVAILABLE,
+        },
+      });
+
+      await this.hotelLifecycleService.syncOnboardingStatus(hotelId, tx);
+
+      return room;
     });
   }
 

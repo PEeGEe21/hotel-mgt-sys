@@ -3,6 +3,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard, Roles, RolesGuard } from '../auth/guards';
 import { PlatformService } from './platform.service';
 import { CreatePlatformHotelOnboardingDto } from './dtos/create-platform-hotel-onboarding.dto';
+import { UpdatePlatformHotelLifecycleDto } from './dtos/update-platform-hotel-lifecycle.dto';
 
 @ApiTags('Platform')
 @ApiBearerAuth()
@@ -68,9 +69,37 @@ export class PlatformController {
     return this.platformService.getActivityFeed(req.user.sub, limit ? Number(limit) : undefined);
   }
 
+  @Get('audit-logs')
+  @ApiOperation({ summary: 'Get platform audit logs for the super admin console' })
+  getAuditLogs(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('action') action?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.platformService.getAuditLogs({
+      page: page ? Number(page) : undefined,
+      limit: limit ? Number(limit) : undefined,
+      action,
+      search,
+    });
+  }
+
   @Post('onboarding/hotel')
   @ApiOperation({ summary: 'Create a hotel tenant and provision the initial admin account' })
   createHotelOnboarding(@Request() req: any, @Body() dto: CreatePlatformHotelOnboardingDto) {
     return this.platformService.createHotelOnboarding(req.user.sub, dto);
+  }
+
+  @Post('hotels/:id/suspend')
+  @ApiOperation({ summary: 'Suspend a hotel tenant' })
+  suspendHotel(@Request() req: any, @Param('id') id: string, @Body() dto: UpdatePlatformHotelLifecycleDto) {
+    return this.platformService.suspendHotel(req.user.sub, id, dto.reason);
+  }
+
+  @Post('hotels/:id/reactivate')
+  @ApiOperation({ summary: 'Reactivate a suspended hotel tenant' })
+  reactivateHotel(@Request() req: any, @Param('id') id: string, @Body() dto: UpdatePlatformHotelLifecycleDto) {
+    return this.platformService.reactivateHotel(req.user.sub, id, dto.reason);
   }
 }

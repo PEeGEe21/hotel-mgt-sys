@@ -83,6 +83,8 @@ export function validateEnv(config: Record<string, unknown>) {
   const webPushPrivateKey = readString(config, 'WEB_PUSH_PRIVATE_KEY');
   const webPushSubject = readString(config, 'WEB_PUSH_SUBJECT');
   const monitoringAlertWebhookUrl = readString(config, 'MONITORING_ALERT_WEBHOOK_URL');
+  const superAdminEmail = readString(config, 'SUPER_ADMIN_EMAIL');
+  const superAdminPassword = readString(config, 'SUPER_ADMIN_PASSWORD');
 
   assertInteger(readString(config, 'PORT'), 'PORT');
   assertInteger(readString(config, 'RATE_LIMIT_WINDOW_MS'), 'RATE_LIMIT_WINDOW_MS');
@@ -97,6 +99,10 @@ export function validateEnv(config: Record<string, unknown>) {
 
   if (seedRouteKey && seedRouteKey.length < 16) {
     throw new Error('SEED_ROUTE_KEY must be at least 16 characters when set');
+  }
+
+  if ((superAdminEmail && !superAdminPassword) || (!superAdminEmail && superAdminPassword)) {
+    throw new Error('SUPER_ADMIN_EMAIL and SUPER_ADMIN_PASSWORD must be set together');
   }
 
   const hasAnyPushConfig = Boolean(webPushPublicKey || webPushPrivateKey || webPushSubject);

@@ -4,6 +4,7 @@ import * as bcrypt from 'bcryptjs';
 import { randomInt } from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreatePlatformHotelOnboardingDto } from './dtos/create-platform-hotel-onboarding.dto';
+import { HotelLifecycleService } from '../hotel-lifecycle/hotel-lifecycle.service';
 
 type ListHotelsParams = {
   page?: number;
@@ -76,7 +77,10 @@ function generateTemporaryPassword(length = 12) {
 
 @Injectable()
 export class PlatformService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly hotelLifecycleService: HotelLifecycleService,
+  ) {}
 
   async createHotelOnboarding(actorUserId: string, dto: CreatePlatformHotelOnboardingDto) {
     const hotelName = dto.hotelName.trim();
@@ -200,6 +204,8 @@ export class PlatformService {
         },
       });
 
+      const syncedHotel = await this.hotelLifecycleService.syncOnboardingStatus(hotel.id, tx);
+
       return {
         hotel: {
           id: hotel.id,
@@ -208,6 +214,7 @@ export class PlatformService {
           country: hotel.country,
           email: hotel.email,
           phone: hotel.phone,
+          onboardingStatus: syncedHotel.onboardingStatus,
         },
         admin: {
           id: user.id,
@@ -230,7 +237,7 @@ export class PlatformService {
     const last24Hours = new Date(now - 24 * 60 * 60 * 1000);
     const last30Days = new Date(now - 30 * 24 * 60 * 60 * 1000);
 
-    const [totalHotels, totalUsers, activeUsers, recentLogins, recentReservations, staleHotels] =
+    const [totalHotels, totalUsers, activeUsers, recentLogins, recentReservations, staleHotels, suspendedHotels] =
       await Promise.all([
         this.prisma.hotel.count(),
         this.prisma.user.count(),
@@ -248,6 +255,7 @@ export class PlatformService {
             },
           },
         }),
+        this.prisma.hotel.count({ where: { suspendedAt: { not: null } } }),
       ]);
 
     return {
@@ -258,6 +266,7 @@ export class PlatformService {
         recentLogins24h: recentLogins,
         recentReservations30d: recentReservations,
         staleHotels30d: staleHotels,
+        suspendedHotels,
       },
       generatedAt: new Date().toISOString(),
     };
@@ -296,6 +305,9 @@ export class PlatformService {
           phone: true,
           createdAt: true,
           updatedAt: true,
+          onboardingStatus: true,
+          suspendedAt: true,
+          suspensionReason: true,
           _count: {
             select: {
               rooms: true,
@@ -333,9 +345,15 @@ export class PlatformService {
           }),
         ]);
 
+        const onboardingStatus = this.hotelLifecycleService.deriveOnboardingStatus(
+          hotel._count.rooms,
+          hotel._count.staff,
+        );
         const lastLoginAt = latestStaffLogin?.user.lastLoginAt ?? null;
         const status =
-          hotel._count.staff === 0
+          hotel.suspendedAt
+            ? 'suspended'
+            : hotel._count.staff === 0 || onboardingStatus !== 'ACTIVE'
             ? 'setup'
             : lastLoginAt && lastLoginAt.getTime() >= Date.now() - 30 * 24 * 60 * 60 * 1000
               ? 'active'
@@ -351,6 +369,9 @@ export class PlatformService {
           phone: hotel.phone,
           createdAt: hotel.createdAt,
           updatedAt: hotel.updatedAt,
+          onboardingStatus,
+          suspendedAt: hotel.suspendedAt,
+          suspensionReason: hotel.suspensionReason,
           status,
           counts: {
             rooms: hotel._count.rooms,
@@ -400,6 +421,9 @@ export class PlatformService {
         timezone: true,
         createdAt: true,
         updatedAt: true,
+        onboardingStatus: true,
+        suspendedAt: true,
+        suspensionReason: true,
         _count: {
           select: {
             rooms: true,
@@ -417,6 +441,8 @@ export class PlatformService {
     if (!hotel) {
       throw new NotFoundException('Hotel not found.');
     }
+
+    const onboardingStatus = this.hotelLifecycleService.deriveOnboardingStatus(hotel._count.rooms, hotel._count.staff);
 
     const [admins, recentReservations, recentStaffLogins] = await Promise.all([
       this.prisma.user.findMany({
@@ -467,6 +493,7 @@ export class PlatformService {
 
     return {
       ...hotel,
+      onboardingStatus,
       admins: admins.map((admin) => ({
         id: admin.id,
         email: admin.email,
@@ -484,6 +511,102 @@ export class PlatformService {
         email: staff.user.email,
         lastLoginAt: staff.user.lastLoginAt,
       })),
+    };
+  }
+
+  async suspendHotel(actorUserId: string, hotelId: string, reason?: string) {
+    const hotel = await this.prisma.hotel.findUnique({
+      where: { id: hotelId },
+      select: { id: true, name: true, suspendedAt: true },
+    });
+
+    if (!hotel) {
+      throw new NotFoundException('Hotel not found.');
+    }
+
+    if (hotel.suspendedAt) {
+      throw new BadRequestException('Hotel is already suspended.');
+    }
+
+    const updated = await this.prisma.hotel.update({
+      where: { id: hotelId },
+      data: {
+        suspendedAt: new Date(),
+        suspensionReason: normalizeOptional(reason),
+      },
+      select: {
+        id: true,
+        name: true,
+        suspendedAt: true,
+        suspensionReason: true,
+        onboardingStatus: true,
+      },
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        hotelId,
+        actorUserId,
+        action: 'platform.hotel.suspend',
+        targetType: 'HOTEL',
+        targetId: hotelId,
+        metadata: {
+          hotelName: updated.name,
+          reason: updated.suspensionReason,
+        },
+      },
+    });
+
+    return updated;
+  }
+
+  async reactivateHotel(actorUserId: string, hotelId: string, reason?: string) {
+    const hotel = await this.prisma.hotel.findUnique({
+      where: { id: hotelId },
+      select: { id: true, name: true, suspendedAt: true, onboardingStatus: true },
+    });
+
+    if (!hotel) {
+      throw new NotFoundException('Hotel not found.');
+    }
+
+    if (!hotel.suspendedAt) {
+      throw new BadRequestException('Hotel is not suspended.');
+    }
+
+    const updated = await this.prisma.hotel.update({
+      where: { id: hotelId },
+      data: {
+        suspendedAt: null,
+        suspensionReason: normalizeOptional(reason),
+      },
+      select: {
+        id: true,
+        name: true,
+        suspendedAt: true,
+        suspensionReason: true,
+      },
+    });
+
+    const syncedHotel = await this.hotelLifecycleService.syncOnboardingStatus(hotelId);
+
+    await this.prisma.auditLog.create({
+      data: {
+        hotelId,
+        actorUserId,
+        action: 'platform.hotel.reactivate',
+        targetType: 'HOTEL',
+        targetId: hotelId,
+        metadata: {
+          hotelName: updated.name,
+          note: normalizeOptional(reason),
+        },
+      },
+    });
+
+    return {
+      ...updated,
+      onboardingStatus: syncedHotel.onboardingStatus,
     };
   }
 
@@ -716,6 +839,94 @@ export class PlatformService {
         },
         metadata: row.metadata ?? null,
       })),
+    };
+  }
+
+  async getAuditLogs(params: {
+    page?: number;
+    limit?: number;
+    action?: string;
+    search?: string;
+  }) {
+    const page = Math.max(1, params.page ?? 1);
+    const limit = Math.min(Math.max(params.limit ?? 20, 5), 100);
+    const skip = (page - 1) * limit;
+
+    const where = {
+      ...(params.action ? { action: { contains: params.action, mode: 'insensitive' as const } } : {}),
+      ...(params.search
+        ? {
+            OR: [
+              { action: { contains: params.search, mode: 'insensitive' as const } },
+              { actor: { email: { contains: params.search, mode: 'insensitive' as const } } },
+              { hotel: { name: { contains: params.search, mode: 'insensitive' as const } } },
+              { targetUser: { email: { contains: params.search, mode: 'insensitive' as const } } },
+            ],
+          }
+        : {}),
+    };
+
+    const [rows, total] = await Promise.all([
+      this.prisma.auditLog.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+        include: {
+          hotel: { select: { id: true, name: true } },
+          actor: {
+            select: {
+              id: true,
+              email: true,
+              role: true,
+              staff: { select: { firstName: true, lastName: true } },
+            },
+          },
+          targetUser: {
+            select: {
+              id: true,
+              email: true,
+              staff: { select: { firstName: true, lastName: true } },
+            },
+          },
+        },
+      }),
+      this.prisma.auditLog.count({ where }),
+    ]);
+
+    return {
+      logs: rows.map((row) => ({
+        id: row.id,
+        action: row.action,
+        targetType: row.targetType ?? null,
+        targetId: row.targetId ?? null,
+        createdAt: row.createdAt,
+        ipAddress: row.ipAddress ?? null,
+        userAgent: row.userAgent ?? null,
+        metadata: row.metadata ?? null,
+        hotel: row.hotel ? { id: row.hotel.id, name: row.hotel.name } : null,
+        actor: {
+          id: row.actor.id,
+          email: row.actor.email,
+          role: row.actor.role,
+          name: row.actor.staff
+            ? `${row.actor.staff.firstName} ${row.actor.staff.lastName}`.trim()
+            : row.actor.email,
+        },
+        targetUser: row.targetUser
+          ? {
+              id: row.targetUser.id,
+              email: row.targetUser.email,
+              name: row.targetUser.staff
+                ? `${row.targetUser.staff.firstName} ${row.targetUser.staff.lastName}`.trim()
+                : row.targetUser.email,
+            }
+          : null,
+      })),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
     };
   }
 }

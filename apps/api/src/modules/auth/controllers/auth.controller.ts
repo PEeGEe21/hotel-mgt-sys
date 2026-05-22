@@ -21,6 +21,7 @@ import { UpdateMeDto } from '../dtos/update-me.dto';
 import { ForgotPasswordDto } from '../dtos/forgot-password.dto';
 import { ResetPasswordDto } from '../dtos/reset-password.dto';
 import { ChangePasswordDto } from '../dtos/change-password.dto';
+import { VerifyMfaDto } from '../dtos/verify-mfa.dto';
 import { getRequestIp, getUserAgent } from '../../../common/utils/request.utils';
 
 // ─── Controller ────────────────────────────────────────────────────────────────
@@ -51,6 +52,26 @@ export class AuthController {
   @ApiOperation({ summary: 'Refresh access token' })
   refresh(@Body() dto: RefreshDto) {
     return this.authService.refresh(dto.refreshToken);
+  }
+
+  @Post('mfa/verify')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Verify a super-admin MFA challenge and complete login' })
+  verifyMfa(@Request() req: any, @Body() dto: VerifyMfaDto) {
+    return this.authService.verifyMfa(dto.challengeToken, dto.code, {
+      ipAddress: getRequestIp(req),
+      userAgent: getUserAgent(req),
+    });
+  }
+
+  @Post('mfa/skip')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Temporarily bypass a super-admin MFA challenge outside production' })
+  skipMfa(@Request() req: any, @Body() dto: VerifyMfaDto) {
+    return this.authService.skipMfa(dto.challengeToken, {
+      ipAddress: getRequestIp(req),
+      userAgent: getUserAgent(req),
+    });
   }
 
   @Post('forgot-password')

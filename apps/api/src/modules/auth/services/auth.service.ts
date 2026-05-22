@@ -11,6 +11,7 @@ import { EmailService } from '../../../common/email/email.service';
 import { RealtimePresenceService } from '../../realtime/realtime-presence.service';
 import { AuthSessionService } from './auth-session.service';
 import { RedisCacheService } from '../../../common/redis/redis-cache.service';
+import { buildOtpAuthUrl, generateBase32Secret, verifyTotpCode } from '../utils/totp.util';
 
 type PasswordResetTokenRow = {
   id: string;
@@ -20,6 +21,13 @@ type PasswordResetTokenRow = {
   email: string;
   isActive: boolean;
   hotelId: string | null;
+};
+
+type MfaChallengeCacheValue = {
+  userId: string;
+  email: string;
+  phase: 'verify' | 'setup';
+  secret: string;
 };
 
 @Injectable()
@@ -55,6 +63,10 @@ export class AuthService {
 
   // ─── Login — returns access + refresh tokens ───────────────────────────────
   async login(user: any, meta?: { ipAddress?: string | null; userAgent?: string | null }) {
+    if (user.role === Role.SUPER_ADMIN) {
+      return this.beginSuperAdminLogin(user, meta);
+    }
+
     const { sessionId } = await this.authSessionService.createSession(
       {
         userId: user.id,
@@ -94,6 +106,89 @@ export class AuthService {
     }
 
     return result;
+  }
+
+  async verifyMfa(
+    challengeToken: string,
+    code: string,
+    meta?: { ipAddress?: string | null; userAgent?: string | null },
+  ) {
+    const challenge = await this.cache.get<MfaChallengeCacheValue>(`mfa:challenge:${challengeToken}`);
+    if (!challenge) {
+      throw new UnauthorizedException('MFA challenge expired. Please sign in again.');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: challenge.userId },
+      include: { staff: { include: { hotel: true } } },
+    });
+
+    if (!user || !user.isActive || user.role !== Role.SUPER_ADMIN) {
+      await this.cache.del(`mfa:challenge:${challengeToken}`);
+      throw new UnauthorizedException('Super admin account not available.');
+    }
+
+    if (!verifyTotpCode(challenge.secret, code)) {
+      throw new UnauthorizedException('Invalid MFA code.');
+    }
+
+    if (challenge.phase === 'setup') {
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          mfaEnabled: true,
+          mfaSecret: challenge.secret,
+          mfaSetupAt: new Date(),
+        },
+      });
+
+      await this.logAudit({
+        actorUserId: user.id,
+        hotelId: null,
+        action: 'auth.mfa.setup_complete',
+        ipAddress: meta?.ipAddress ?? null,
+        userAgent: meta?.userAgent ?? null,
+      });
+    }
+
+    await this.cache.del(`mfa:challenge:${challengeToken}`);
+    return this.completeLogin(user, meta);
+  }
+
+  async skipMfa(
+    challengeToken: string,
+    meta?: { ipAddress?: string | null; userAgent?: string | null },
+  ) {
+    if (this.config.get<string>('NODE_ENV') === 'production') {
+      throw new ForbiddenException('MFA bypass is disabled in production.');
+    }
+
+    const challenge = await this.cache.get<MfaChallengeCacheValue>(`mfa:challenge:${challengeToken}`);
+    if (!challenge) {
+      throw new UnauthorizedException('MFA challenge expired. Please sign in again.');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: challenge.userId },
+      include: { staff: { include: { hotel: true } } },
+    });
+
+    if (!user || !user.isActive || user.role !== Role.SUPER_ADMIN) {
+      await this.cache.del(`mfa:challenge:${challengeToken}`);
+      throw new UnauthorizedException('Super admin account not available.');
+    }
+
+    await this.cache.del(`mfa:challenge:${challengeToken}`);
+    await this.logAudit({
+      actorUserId: user.id,
+      hotelId: user.staff?.hotelId ?? null,
+      action: 'auth.mfa.skip',
+      ipAddress: meta?.ipAddress ?? null,
+      userAgent: meta?.userAgent ?? null,
+      metadata: { phase: challenge.phase },
+    });
+
+    return this.completeLogin(user, meta);
   }
 
   // ─── Refresh — rotate refresh token, issue new access token ───────────────
@@ -463,6 +558,103 @@ export class AuthService {
   }
 
   // ─── Helpers ───────────────────────────────────────────────────────────────
+  private async beginSuperAdminLogin(
+    user: any,
+    meta?: { ipAddress?: string | null; userAgent?: string | null },
+  ) {
+    const secret = user.mfaEnabled && user.mfaSecret ? user.mfaSecret : generateBase32Secret();
+    const challengeToken = crypto.randomUUID();
+    const phase: 'verify' | 'setup' = user.mfaEnabled ? 'verify' : 'setup';
+
+    await this.cache.set<MfaChallengeCacheValue>(
+      `mfa:challenge:${challengeToken}`,
+      {
+        userId: user.id,
+        email: user.email,
+        phase,
+        secret,
+      },
+      60 * 5,
+    );
+
+    await this.logAudit({
+      actorUserId: user.id,
+      hotelId: null,
+      action: phase === 'setup' ? 'auth.mfa.setup_challenge' : 'auth.mfa.login_challenge',
+      ipAddress: meta?.ipAddress ?? null,
+      userAgent: meta?.userAgent ?? null,
+    });
+
+    if (phase === 'setup') {
+      const issuer = this.config.get<string>('superAdmin.mfaIssuer') || 'HotelOS Platform';
+      return {
+        success: false as const,
+        mfaRequired: true,
+        mfaSetupRequired: true,
+        challengeToken,
+        secret,
+        otpAuthUrl: buildOtpAuthUrl({
+          issuer,
+          email: user.email,
+          secret,
+        }),
+        message: 'Set up MFA in your authenticator app, then enter the 6-digit code to finish sign-in.',
+      };
+    }
+
+    return {
+      success: false as const,
+      mfaRequired: true,
+      mfaSetupRequired: false,
+      challengeToken,
+      message: 'Enter the 6-digit code from your authenticator app to continue.',
+    };
+  }
+
+  private async completeLogin(
+    user: any,
+    meta?: { ipAddress?: string | null; userAgent?: string | null },
+  ) {
+    const { sessionId } = await this.authSessionService.createSession(
+      {
+        userId: user.id,
+        hotelId: user.staff?.hotelId ?? null,
+      },
+      meta,
+    );
+    const [accessToken, refreshToken] = await Promise.all([
+      this.generateAccessToken(user, { sessionId }),
+      this.generateRefreshToken(user.id, {
+        sessionId,
+      }),
+    ]);
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+    });
+
+    const rolePermissions = await this.getRolePermissions(user.staff?.hotelId, user.role);
+
+    const result = {
+      success: true as const,
+      accessToken,
+      refreshToken,
+      user: { ...this.sanitizeUser(user), rolePermissions },
+      hotel: this.sanitizeHotel(user.staff?.hotel),
+    };
+
+    await this.logAudit({
+      actorUserId: user.id,
+      hotelId: user.staff?.hotelId ?? null,
+      action: user.role === Role.SUPER_ADMIN ? 'auth.login.super_admin' : 'auth.login',
+      ipAddress: meta?.ipAddress ?? null,
+      userAgent: meta?.userAgent ?? null,
+    });
+
+    return result;
+  }
+
   private generateAccessToken(
     user: any,
     opts?: { sessionId?: string | null; impersonatorId?: string | null },
@@ -819,6 +1011,8 @@ export class AuthService {
       lastLoginAt: user.lastLoginAt ?? null,
       avatar: staff?.avatar ?? null,
       mustChangePassword: user.mustChangePassword ?? false,
+      mfaEnabled: user.mfaEnabled ?? false,
+      mfaSetupAt: user.mfaSetupAt ?? null,
       permissionOverrides: {
         grants: user.permissionGrants ?? [],
         denies: user.permissionDenies ?? [],

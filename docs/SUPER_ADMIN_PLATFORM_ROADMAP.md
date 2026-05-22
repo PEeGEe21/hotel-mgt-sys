@@ -325,6 +325,7 @@ Recommended starting point:
 - TOTP-based MFA
 - enforced for all `SUPER_ADMIN` accounts
 - recovery codes stored and rotated safely
+- temporary non-production `Skip for now` MFA bypass exists for testing and must be removed before production rollout
 
 #### Soft delete policy
 
@@ -571,7 +572,7 @@ Use this as the working implementation tracker.
 - [ ] Add explicit platform permission keys
 - [ ] Add platform-specific rate limiting for `/api/v1/platform/*`
 - [x] Add admin authentication flow for `apps/admin`
-- [ ] Add super-admin MFA foundation
+- [x] Add super-admin MFA foundation
 - [ ] Enforce MFA for `SUPER_ADMIN` accounts before production rollout
 - [ ] Add impersonation TTL rules
 - [ ] Ensure impersonation tokens are non-renewable without explicit restart
@@ -584,10 +585,10 @@ Use this as the working implementation tracker.
 - [x] Add `GET /api/v1/platform/hotels/:id`
 - [x] Add `GET /api/v1/platform/users`
 - [x] Add `GET /api/v1/platform/users/:id`
-- [ ] Add `GET /api/v1/platform/audit-logs`
+- [x] Add `GET /api/v1/platform/audit-logs`
 - [x] Add `GET /api/v1/platform/activity-feed`
 - [ ] Add hotel health summary support
-- [ ] Add onboarding status visibility in platform APIs
+- [x] Add onboarding status visibility in platform APIs
 
 ### Milestone 4: Admin UI Read Surfaces
 
@@ -597,19 +598,19 @@ Use this as the working implementation tracker.
 - [x] Build hotels list page
 - [x] Build hotel details page
 - [x] Build cross-tenant user lookup page
-- [ ] Show hotel onboarding status in UI
+- [x] Show hotel onboarding status in UI
 - [ ] Show hotel health indicators in UI
 
 ### Milestone 5: Hotel Management
 
-- [ ] Add hotel create endpoint
+- [x] Add hotel create endpoint
 - [ ] Add hotel update endpoint
-- [ ] Add hotel suspend endpoint
-- [ ] Add hotel reactivate endpoint
+- [x] Add hotel suspend endpoint
+- [x] Add hotel reactivate endpoint
 - [ ] Add hotel soft-delete endpoint
 - [ ] Add hotel restore endpoint
 - [x] Build create hotel UI
-- [ ] Build suspend/reactivate UI
+- [x] Build suspend/reactivate UI
 - [ ] Build soft-delete/restore UI
 - [ ] Add guardrails and confirmation flows for destructive actions
 
@@ -618,14 +619,14 @@ Use this as the working implementation tracker.
 - [x] Add hotel onboarding endpoint
 - [x] Create initial tenant admin during onboarding
 - [x] Seed baseline hotel data during onboarding
-- [ ] Track onboarding status progression
-- [ ] Define onboarding states:
-- [ ] `PENDING_SETUP`
-- [ ] `ROOMS_ADDED`
-- [ ] `STAFF_INVITED`
-- [ ] `ACTIVE`
+- [x] Track onboarding status progression
+- [x] Define onboarding states:
+- [x] `PENDING_SETUP`
+- [x] `ROOMS_ADDED`
+- [x] `STAFF_INVITED`
+- [x] `ACTIVE`
 - [x] Build onboarding flow in admin UI
-- [ ] Show stuck/incomplete onboardings in admin dashboard
+- [x] Show stuck/incomplete onboardings in admin dashboard
 
 ### Milestone 7: Impersonation and Support
 
@@ -649,8 +650,8 @@ Use this as the working implementation tracker.
 
 ### Milestone 9: Health and Lifecycle
 
-- [ ] Add `onboardingStatus` field(s) to hotel lifecycle model
-- [ ] Add `suspendedAt` and suspension metadata
+- [x] Add `onboardingStatus` field(s) to hotel lifecycle model
+- [x] Add `suspendedAt` and suspension metadata
 - [ ] Add `deletedAt` and soft-delete metadata
 - [ ] Add `purgeAfterAt` grace-period support
 - [ ] Add hotel health snapshot model or equivalent service
@@ -677,9 +678,16 @@ Use this as the working implementation tracker.
 - [ ] MFA is enforced for super admins
 - [x] Platform dashboard shows cross-hotel stats
 - [x] Platform dashboard shows recent activity feed
-- [ ] Hotels can be listed, created, suspended, and reactivated
+- [x] Hotels can be listed, created, suspended, and reactivated
 - [ ] Soft delete exists without hard deletion
 - [x] Tenant onboarding creates hotel plus initial admin
-- [ ] Onboarding status is visible for every hotel
+- [x] Onboarding status is visible for every hotel
 - [x] Cross-tenant user lookup works
 - [ ] Impersonation works with audit logs and hard expiry
+
+### Immediate Next Focus
+
+- add hotel update flow in `apps/admin` and platform API
+- add lifecycle guardrails and confirmation requirements around suspend/reactivate
+- remove the temporary MFA skip before production rollout
+- add audit-log filtering/search in the admin UI

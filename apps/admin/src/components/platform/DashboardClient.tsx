@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { AuthNotice } from '@/components/platform/AuthNotice';
+import { OnboardingStatusBadge } from '@/components/platform/OnboardingStatusBadge';
 import { PlatformClientError } from '@/lib/platform-client';
 import { usePlatformActivityFeed, usePlatformHotels, usePlatformStats } from '@/hooks/usePlatform';
 
@@ -34,7 +35,7 @@ function formatDate(value: string | null) {
 
 export function DashboardClient() {
   const statsQuery = usePlatformStats();
-  const hotelsQuery = usePlatformHotels(3);
+  const hotelsQuery = usePlatformHotels(1, 8);
   const activityQuery = usePlatformActivityFeed(6);
 
   const authMessage =
@@ -59,14 +60,21 @@ export function DashboardClient() {
           value: formatCount(statsQuery.data.totals.staleHotels30d),
           note: 'No recent staff login in the last 30 days',
         },
+        {
+          label: 'Suspended hotels',
+          value: formatCount(statsQuery.data.totals.suspendedHotels),
+          note: 'Tenants currently blocked at platform level',
+        },
       ]
     : [
         { label: 'Hotels', value: '—', note: 'Waiting for platform auth' },
         { label: 'Active users', value: '—', note: 'Waiting for platform auth' },
         { label: 'Stale hotels', value: '—', note: 'Waiting for platform auth' },
+        { label: 'Suspended hotels', value: '—', note: 'Waiting for platform auth' },
       ];
 
   const hotels = hotelsQuery.data?.hotels ?? [];
+  const incompleteOnboardings = hotels.filter((hotel) => hotel.onboardingStatus !== 'ACTIVE');
   const activity = activityQuery.data?.events ?? [];
 
   return (
@@ -175,6 +183,9 @@ export function DashboardClient() {
                       <p>Staff: {hotel.counts.staff}</p>
                       <p>Reservations: {hotel.counts.reservations}</p>
                     </div>
+                    <div className="mt-3">
+                      <OnboardingStatusBadge status={hotel.onboardingStatus} />
+                    </div>
                     <p className="mt-3 text-sm text-slate-500">
                       Latest staff login: {formatDate(hotel.latestStaffLoginAt)}
                     </p>
@@ -208,6 +219,45 @@ export function DashboardClient() {
               )}
             </div>
           </article>
+        </section>
+
+        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.22em] text-teal-800">Onboarding watch</p>
+              <h2 className="mt-2 text-2xl font-semibold tracking-tight">Hotels that still need setup work</h2>
+            </div>
+            <Link href="/hotels" className="text-sm font-semibold text-teal-900">
+              Manage hotels
+            </Link>
+          </div>
+
+          <div className="mt-6 space-y-4">
+            {hotelsQuery.isLoading ? (
+              <p className="text-sm text-slate-600">Loading onboarding progress...</p>
+            ) : incompleteOnboardings.length === 0 ? (
+              <p className="text-sm text-slate-600">The latest platform hotels all have rooms and staff in place.</p>
+            ) : (
+              incompleteOnboardings.map((hotel) => (
+                <div key={hotel.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <h3 className="text-lg font-semibold text-slate-900">{hotel.name}</h3>
+                      <p className="mt-1 text-sm text-slate-600">
+                        {hotel.city}, {hotel.country}
+                      </p>
+                    </div>
+                    <OnboardingStatusBadge status={hotel.onboardingStatus} />
+                  </div>
+                  <div className="mt-4 grid gap-3 text-sm text-slate-600 md:grid-cols-3">
+                    <p>Rooms: {hotel.counts.rooms}</p>
+                    <p>Staff: {hotel.counts.staff}</p>
+                    <p>Reservations: {hotel.counts.reservations}</p>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         </section>
       </div>
     </main>

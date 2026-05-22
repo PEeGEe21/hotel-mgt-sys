@@ -15,7 +15,16 @@ const COOKIE_REFRESH = 'admin_refresh_token';
 
 export type AdminAuthResult =
   | { success: true; user: AdminAuthUser }
-  | { success: false; message: string; field?: 'email' | 'password' | 'general' };
+  | { success: false; message: string; field?: 'email' | 'password' | 'general' }
+  | {
+      success: false;
+      message: string;
+      mfaRequired: true;
+      mfaSetupRequired: boolean;
+      challengeToken: string;
+      secret?: string;
+      otpAuthUrl?: string;
+    };
 
 function normalizeUser(user: any): AdminAuthUser {
   return {
@@ -45,6 +54,18 @@ export async function adminLoginAction(email: string, password: string): Promise
       };
     }
 
+    if (data?.mfaRequired) {
+      return {
+        success: false,
+        message: data?.message ?? 'Multi-factor verification is required.',
+        mfaRequired: true,
+        mfaSetupRequired: Boolean(data?.mfaSetupRequired),
+        challengeToken: data.challengeToken,
+        secret: data.secret,
+        otpAuthUrl: data.otpAuthUrl,
+      };
+    }
+
     if (data?.user?.role !== 'SUPER_ADMIN') {
       return {
         success: false,
@@ -65,6 +86,95 @@ export async function adminLoginAction(email: string, password: string): Promise
       success: false,
       message: 'Could not reach the server. Check your connection.',
       field: 'general',
+    };
+  }
+}
+
+export async function adminVerifyMfaAction(
+  challengeToken: string,
+  code: string,
+): Promise<{ success: true; user: AdminAuthUser } | { success: false; message: string }> {
+  if (!challengeToken || !code) {
+    return { success: false, message: 'Challenge token and verification code are required.' };
+  }
+
+  try {
+    const response = await adminApiFetch('/auth/mfa/verify', {
+      method: 'POST',
+      body: JSON.stringify({ challengeToken, code }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      return {
+        success: false,
+        message: data?.message ?? 'MFA verification failed. Please try again.',
+      };
+    }
+
+    if (data?.user?.role !== 'SUPER_ADMIN') {
+      return {
+        success: false,
+        message: 'Only super admins can sign in to the platform console.',
+      };
+    }
+
+    const cookieStore = await cookies();
+    await setAdminAuthCookies(cookieStore, data.accessToken, data.refreshToken);
+
+    return {
+      success: true,
+      user: normalizeUser(data.user),
+    };
+  } catch {
+    return {
+      success: false,
+      message: 'Could not verify MFA right now. Please try again.',
+    };
+  }
+}
+
+export async function adminSkipMfaAction(
+  challengeToken: string,
+): Promise<{ success: true; user: AdminAuthUser } | { success: false; message: string }> {
+  if (!challengeToken) {
+    return { success: false, message: 'Challenge token is required.' };
+  }
+
+  try {
+    const response = await adminApiFetch('/auth/mfa/skip', {
+      method: 'POST',
+      body: JSON.stringify({ challengeToken, code: '000000' }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      return {
+        success: false,
+        message: data?.message ?? 'Could not bypass MFA right now.',
+      };
+    }
+
+    if (data?.user?.role !== 'SUPER_ADMIN') {
+      return {
+        success: false,
+        message: 'Only super admins can sign in to the platform console.',
+      };
+    }
+
+    const cookieStore = await cookies();
+    await setAdminAuthCookies(cookieStore, data.accessToken, data.refreshToken);
+
+    return {
+      success: true,
+      user: normalizeUser(data.user),
+    };
+  } catch {
+    return {
+      success: false,
+      message: 'Could not bypass MFA right now.',
     };
   }
 }

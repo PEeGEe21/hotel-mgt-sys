@@ -47,4 +47,10 @@ export default () => ({
   seed: {
     routeKey: process.env.SEED_ROUTE_KEY,
   },
+  superAdmin: {
+    email: process.env.SUPER_ADMIN_EMAIL,
+    password: process.env.SUPER_ADMIN_PASSWORD,
+    name: process.env.SUPER_ADMIN_NAME || 'Platform Super Admin',
+    mfaIssuer: process.env.SUPER_ADMIN_MFA_ISSUER || 'HotelOS Platform',
+  },
 });

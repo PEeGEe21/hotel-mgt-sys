@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { platformClientFetch } from '@/lib/platform-client';
 import type {
   PlatformActivityFeedResponse,
+  PlatformAuditLogsResponse,
   PlatformHotelsResponse,
   PlatformStatsResponse,
   PlatformUsersResponse,
@@ -50,5 +51,12 @@ export function usePlatformUserDetail(id: string) {
     queryKey: ['platform', 'user', id],
     queryFn: () => platformClientFetch(`/users/${id}`),
     enabled: !!id,
+  });
+}
+
+export function usePlatformAuditLogs(page = 1, limit = 20) {
+  return useQuery<PlatformAuditLogsResponse>({
+    queryKey: ['platform', 'audit-logs', page, limit],
+    queryFn: () => platformClientFetch(`/audit-logs?page=${page}&limit=${limit}`),
   });
 }

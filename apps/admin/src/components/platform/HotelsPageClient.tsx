@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AuthNotice } from '@/components/platform/AuthNotice';
+import { OnboardingStatusBadge } from '@/components/platform/OnboardingStatusBadge';
 import { PaginationControls } from '@/components/platform/PaginationControls';
 import { usePlatformHotels } from '@/hooks/usePlatform';
 import { PlatformClientError } from '@/lib/platform-client';
@@ -88,6 +89,9 @@ export function HotelsPageClient() {
                         {hotel.city}, {hotel.country}
                         {hotel.domain ? ` • ${hotel.domain}` : ''}
                       </p>
+                      <div className="mt-2">
+                        <OnboardingStatusBadge status={hotel.onboardingStatus} />
+                      </div>
                     </td>
                     <td className="px-5 py-4 uppercase tracking-wide">{hotel.status}</td>
                     <td className="px-5 py-4">

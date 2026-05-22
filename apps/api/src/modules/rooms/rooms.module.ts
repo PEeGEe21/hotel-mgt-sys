@@ -1,5 +1,12 @@
 import { Module } from '@nestjs/common';
 import { RoomsService } from './services/rooms.service';
 import { RoomsController } from './controllers/rooms.controller';
-@Module({ providers: [RoomsService], controllers: [RoomsController], exports: [RoomsService] })
+import { HotelLifecycleModule } from '../hotel-lifecycle/hotel-lifecycle.module';
+
+@Module({
+  imports: [HotelLifecycleModule],
+  providers: [RoomsService],
+  controllers: [RoomsController],
+  exports: [RoomsService],
+})
 export class RoomsModule {}

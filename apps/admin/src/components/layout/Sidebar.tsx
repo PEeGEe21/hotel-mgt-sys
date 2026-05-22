@@ -3,13 +3,14 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
-import { LayoutDashboard, Building2, Users, Shield, X } from 'lucide-react';
+import { LayoutDashboard, Building2, Users, Shield, ScrollText, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const nav = [
   { label: 'Dashboard', href: '/', icon: LayoutDashboard },
   { label: 'Hotels', href: '/hotels', icon: Building2 },
   { label: 'Users', href: '/users', icon: Users },
+  { label: 'Audit Logs', href: '/audit-logs', icon: ScrollText },
 ];
 
 type SidebarProps = {
@@ -38,7 +39,7 @@ function SidebarContent({ mobile = false, pathname, onNavigate }: { mobile?: boo
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
         {nav.map((item) => {
           const Icon = item.icon;
-          const active = pathname === item.href;
+          const active = item.href === '/' ? pathname === item.href : pathname.startsWith(item.href);
           return (
             <Link
               key={item.href}

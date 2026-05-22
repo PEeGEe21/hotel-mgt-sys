@@ -6,6 +6,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
 import { runSeedData } from './seed-data';
+import { seedSuperAdmin } from './super-admin-seed';
 
 @Injectable()
 export class SeedService {
@@ -14,7 +15,7 @@ export class SeedService {
     private readonly prisma: PrismaService,
   ) {}
 
-  async run(key?: string) {
+  async run(key?: string, seedType?: string) {
     const configuredKey = this.configService.get<string>('seed.routeKey');
 
     if (!configuredKey) {
@@ -23,6 +24,14 @@ export class SeedService {
 
     if (!key || key !== configuredKey) {
       throw new ForbiddenException('Invalid seed key');
+    }
+
+    if (seedType === 'super-admin') {
+      return seedSuperAdmin(this.prisma, {
+        email: this.configService.get<string>('superAdmin.email'),
+        password: this.configService.get<string>('superAdmin.password'),
+        name: this.configService.get<string>('superAdmin.name'),
+      });
     }
 
     await runSeedData(this.prisma);

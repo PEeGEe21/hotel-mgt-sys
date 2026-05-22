@@ -2,7 +2,7 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { adminLoginAction, adminLogoutAction } from '@/actions/admin-auth.actions';
+import { adminLoginAction, adminLogoutAction, adminSkipMfaAction, adminVerifyMfaAction } from '@/actions/admin-auth.actions';
 
 export type AdminAuthUser = {
   id: string;
@@ -20,6 +20,8 @@ export type AdminAuthUser = {
   department: string | null;
   position: string | null;
   mustChangePassword: boolean;
+  mfaEnabled?: boolean;
+  mfaSetupAt?: string | null;
   impersonatorId?: string | null;
   isImpersonation?: boolean;
   permissionOverrides: {
@@ -28,12 +30,34 @@ export type AdminAuthUser = {
   };
 };
 
+export type AdminMfaChallenge = {
+  challengeToken: string;
+  message: string;
+  mfaRequired: true;
+  mfaSetupRequired: boolean;
+  secret?: string;
+  otpAuthUrl?: string;
+};
+
 type AdminAuthState = {
   user: AdminAuthUser | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
-  login: (email: string, password: string) => Promise<{ success: boolean; user?: AdminAuthUser; message?: string }>;
+  login: (
+    email: string,
+    password: string,
+  ) => Promise<
+    | { success: true; user: AdminAuthUser }
+    | { success: false; message: string; mfaChallenge?: AdminMfaChallenge }
+  >;
+  verifyMfa: (
+    challengeToken: string,
+    code: string,
+  ) => Promise<{ success: true; user: AdminAuthUser } | { success: false; message: string }>;
+  skipMfa: (
+    challengeToken: string,
+  ) => Promise<{ success: true; user: AdminAuthUser } | { success: false; message: string }>;
   logout: () => Promise<void>;
   setUser: (user: AdminAuthUser | null) => void;
   clearError: () => void;
@@ -50,6 +74,46 @@ export const useAdminAuthStore = create<AdminAuthState>()(
       login: async (email, password) => {
         set({ isLoading: true, error: null });
         const result = await adminLoginAction(email, password);
+
+        if (!result.success) {
+          const isMfaChallenge = 'mfaRequired' in result;
+          set({ isLoading: false, error: isMfaChallenge ? null : result.message });
+          return {
+            success: false,
+            message: result.message,
+            mfaChallenge: 'mfaRequired' in result
+              ? {
+                  challengeToken: result.challengeToken,
+                  message: result.message,
+                  mfaRequired: true,
+                  mfaSetupRequired: result.mfaSetupRequired,
+                  secret: result.secret,
+                  otpAuthUrl: result.otpAuthUrl,
+                }
+              : undefined,
+          };
+        }
+
+        set({ user: result.user, isAuthenticated: true, isLoading: false, error: null });
+        return { success: true, user: result.user };
+      },
+
+      verifyMfa: async (challengeToken, code) => {
+        set({ isLoading: true, error: null });
+        const result = await adminVerifyMfaAction(challengeToken, code);
+
+        if (!result.success) {
+          set({ isLoading: false, error: result.message });
+          return { success: false, message: result.message };
+        }
+
+        set({ user: result.user, isAuthenticated: true, isLoading: false, error: null });
+        return { success: true, user: result.user };
+      },
+
+      skipMfa: async (challengeToken) => {
+        set({ isLoading: true, error: null });
+        const result = await adminSkipMfaAction(challengeToken);
 
         if (!result.success) {
           set({ isLoading: false, error: result.message });

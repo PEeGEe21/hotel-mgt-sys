@@ -1,8 +1,11 @@
 'use client';
 
 import Link from 'next/link';
+import { useState } from 'react';
 import { AuthNotice } from '@/components/platform/AuthNotice';
+import { OnboardingStatusBadge } from '@/components/platform/OnboardingStatusBadge';
 import { usePlatformHotelDetail } from '@/hooks/usePlatform';
+import { platformClientFetch } from '@/lib/platform-client';
 import type { PlatformHotelDetailResponse } from '@/lib/platform-types';
 import { PlatformClientError } from '@/lib/platform-client';
 
@@ -15,6 +18,24 @@ export function HotelDetailClient({ id, fallbackName }: { id: string; fallbackNa
   const detailQuery = usePlatformHotelDetail(id);
   const hotel = detailQuery.data as PlatformHotelDetailResponse | undefined;
   const authMessage = detailQuery.error instanceof PlatformClientError ? detailQuery.error.message : null;
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  const handleLifecycleAction = async (action: 'suspend' | 'reactivate') => {
+    setIsUpdating(true);
+    setActionError(null);
+    try {
+      await platformClientFetch(`/hotels/${id}/${action}`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+      await detailQuery.refetch();
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Could not update hotel lifecycle state.');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
 
   return (
     <main className="min-h-screen px-6 py-10 md:px-10">
@@ -28,6 +49,7 @@ export function HotelDetailClient({ id, fallbackName }: { id: string; fallbackNa
         </div>
 
         {authMessage ? <AuthNotice message={authMessage} /> : null}
+        {actionError ? <AuthNotice title="Lifecycle update failed" message={actionError} /> : null}
 
         {detailQuery.isLoading ? (
           <div className="rounded-3xl border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-sm">Loading hotel details...</div>
@@ -43,8 +65,39 @@ export function HotelDetailClient({ id, fallbackName }: { id: string; fallbackNa
                   <p>Country: {hotel.country}</p>
                   <p>Currency: {hotel.currency}</p>
                   <p>Timezone: {hotel.timezone}</p>
+                  <p>Status: {hotel.suspendedAt ? 'Suspended' : 'Active'}</p>
+                </div>
+                <div className="mt-4">
+                  <p className="text-sm font-medium text-slate-700">Onboarding progress</p>
+                  <div className="mt-2">
+                    <OnboardingStatusBadge status={hotel.onboardingStatus} showDescription />
+                  </div>
                 </div>
                 <p className="mt-4 text-sm text-slate-600">{hotel.address}</p>
+                {hotel.suspensionReason ? (
+                  <p className="mt-4 text-sm text-amber-700">Suspension note: {hotel.suspensionReason}</p>
+                ) : null}
+                <div className="mt-5 flex gap-3">
+                  {hotel.suspendedAt ? (
+                    <button
+                      type="button"
+                      disabled={isUpdating}
+                      onClick={() => handleLifecycleAction('reactivate')}
+                      className="rounded-full bg-emerald-700 px-5 py-3 text-sm font-semibold text-white disabled:opacity-50"
+                    >
+                      {isUpdating ? 'Updating...' : 'Reactivate hotel'}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={isUpdating}
+                      onClick={() => handleLifecycleAction('suspend')}
+                      className="rounded-full bg-amber-700 px-5 py-3 text-sm font-semibold text-white disabled:opacity-50"
+                    >
+                      {isUpdating ? 'Updating...' : 'Suspend hotel'}
+                    </button>
+                  )}
+                </div>
               </article>
 
               <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">

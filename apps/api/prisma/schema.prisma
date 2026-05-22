@@ -84,6 +84,13 @@ enum HotelCronJobType {
   DAILY_DIGEST_SCAN
 }
 
+enum HotelOnboardingStatus {
+  PENDING_SETUP
+  ROOMS_ADDED
+  STAFF_INVITED
+  ACTIVE
+}
+
 enum OrderStatus {
   PENDING
   PREPARING
@@ -166,6 +173,9 @@ model Hotel {
   logo                                String?
   currency                            String   @default("NGN")
   timezone                            String   @default("Africa/Lagos")
+  onboardingStatus                    HotelOnboardingStatus @default(PENDING_SETUP)
+  suspendedAt                         DateTime?
+  suspensionReason                    String?
   taxRate                             Decimal? @default(0)
   latitude                            Float?
   longitude                           Float?
@@ -357,6 +367,9 @@ model User {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
   mustChangePassword Boolean   @default(false)
+  mfaEnabled         Boolean   @default(false)
+  mfaSecret          String?
+  mfaSetupAt         DateTime?
 
   // Granular permission overrides on top of role defaults
   permissionGrants String[] @default([])
@@ -403,7 +416,7 @@ model RefreshToken {
 
 model AuditLog {
   id           String   @id @default(uuid())
-  hotelId      String
+  hotelId      String?
   actorUserId  String
   action       String
   targetType   String?
@@ -414,7 +427,7 @@ model AuditLog {
   metadata     Json?
   createdAt    DateTime @default(now())
 
-  hotel      Hotel @relation(fields: [hotelId], references: [id])
+  hotel      Hotel? @relation(fields: [hotelId], references: [id])
   actor      User  @relation("AuditActor", fields: [actorUserId], references: [id])
   targetUser User? @relation("AuditTarget", fields: [targetUserId], references: [id])
 

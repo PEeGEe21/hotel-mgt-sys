@@ -6,6 +6,7 @@ export type PlatformStatsResponse = {
     recentLogins24h: number;
     recentReservations30d: number;
     staleHotels30d: number;
+    suspendedHotels: number;
   };
   generatedAt: string;
 };
@@ -39,7 +40,10 @@ export type PlatformHotelsResponse = {
     phone: string;
     createdAt: string;
     updatedAt: string;
-    status: 'active' | 'stale' | 'setup';
+    onboardingStatus: 'PENDING_SETUP' | 'ROOMS_ADDED' | 'STAFF_INVITED' | 'ACTIVE';
+    suspendedAt: string | null;
+    suspensionReason: string | null;
+    status: 'active' | 'stale' | 'setup' | 'suspended';
     counts: {
       rooms: number;
       staff: number;
@@ -105,6 +109,9 @@ export type PlatformHotelDetailResponse = {
   timezone: string;
   createdAt: string;
   updatedAt: string;
+  onboardingStatus: 'PENDING_SETUP' | 'ROOMS_ADDED' | 'STAFF_INVITED' | 'ACTIVE';
+  suspendedAt: string | null;
+  suspensionReason: string | null;
   _count: {
     rooms: number;
     staff: number;
@@ -180,6 +187,7 @@ export type PlatformHotelOnboardingResponse = {
     country: string;
     email: string;
     phone: string;
+    onboardingStatus: 'PENDING_SETUP' | 'ROOMS_ADDED' | 'STAFF_INVITED' | 'ACTIVE';
   };
   admin: {
     id: string;
@@ -193,4 +201,33 @@ export type PlatformHotelOnboardingResponse = {
     temporaryPassword: string;
     mustChangePassword: boolean;
   };
+};
+
+export type PlatformAuditLogsResponse = {
+  logs: Array<{
+    id: string;
+    action: string;
+    targetType: string | null;
+    targetId: string | null;
+    createdAt: string;
+    ipAddress: string | null;
+    userAgent: string | null;
+    metadata: unknown;
+    hotel: { id: string; name: string } | null;
+    actor: {
+      id: string;
+      email: string;
+      role: string;
+      name: string;
+    };
+    targetUser: {
+      id: string;
+      email: string;
+      name: string;
+    } | null;
+  }>;
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
 };

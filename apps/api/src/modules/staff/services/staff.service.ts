@@ -13,6 +13,7 @@ import { StaffFilterDto } from '../dtos/staff-filter.dto';
 import { UpdateStaffDto } from '../dtos/update-staff.dto';
 import { CreateStaffDto } from '../dtos/create-staff.dto';
 import { RealtimePresenceService } from '../../realtime/realtime-presence.service';
+import { HotelLifecycleService } from '../../hotel-lifecycle/hotel-lifecycle.service';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -75,6 +76,7 @@ export class StaffService {
   constructor(
     private prisma: PrismaService,
     private readonly presenceService: RealtimePresenceService,
+    private readonly hotelLifecycleService: HotelLifecycleService,
   ) {}
 
   private async ensureJobTitle(hotelId: string, jobTitleId?: string | null) {
@@ -352,6 +354,7 @@ export class StaffService {
       });
 
       await this.setPinWithClient(tx, hotelId, staff.id, { generate: true });
+      await this.hotelLifecycleService.syncOnboardingStatus(hotelId, tx);
 
       return { staff, employeeCode: employeeCode!, defaultPassword: 'password' };
     });

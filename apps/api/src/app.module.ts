@@ -41,6 +41,7 @@ import { JobTitlesModule } from './modules/job-titles/job-titles.module';
 import { SeedModule } from './modules/seed/seed.module';
 import { RootController } from './root.controller';
 import { PlatformModule } from './modules/platform/platform.module';
+import { HotelLifecycleModule } from './modules/hotel-lifecycle/hotel-lifecycle.module';
 
 @Module({
   imports: [
@@ -100,6 +101,7 @@ import { PlatformModule } from './modules/platform/platform.module';
     HrContractsModule,
     JobTitlesModule,
     SeedModule,
+    HotelLifecycleModule,
     PlatformModule,
   ],
   controllers: [RootController],
