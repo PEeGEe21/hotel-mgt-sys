@@ -3,6 +3,8 @@ import { RedisService } from '../redis/redis.service';
 type RateLimitOptions = {
   max: number;
   windowMs: number;
+  keyPrefix?: string;
+  onlyPaths?: string[];
   skipPaths?: string[];
   redisService: RedisService;
   onError?: (error: unknown) => void;
@@ -38,6 +40,11 @@ function shouldSkip(req: RateLimitRequest, skipPaths: string[]) {
   return skipPaths.some((path) => req.path === path || req.path?.startsWith(`${path}/`));
 }
 
+function shouldApply(req: RateLimitRequest, onlyPaths?: string[]) {
+  if (!onlyPaths || onlyPaths.length === 0) return true;
+  return onlyPaths.some((path) => req.path === path || req.path?.startsWith(`${path}/`));
+}
+
 export function createRateLimitMiddleware(options: RateLimitOptions) {
   const script = `
     local current = redis.call("INCR", KEYS[1])
@@ -55,11 +62,17 @@ export function createRateLimitMiddleware(options: RateLimitOptions) {
         return;
       }
 
+      if (!shouldApply(req, options.onlyPaths)) {
+        next();
+        return;
+      }
+
       try {
         await options.redisService.ensureReady();
 
         const now = Date.now();
-        const key = `rate-limit:${getClientKey(req)}`;
+        const keyPrefix = options.keyPrefix || 'rate-limit';
+        const key = `${keyPrefix}:${getClientKey(req)}`;
         const result = (await options.redisService.command.eval(
           script,
           1,

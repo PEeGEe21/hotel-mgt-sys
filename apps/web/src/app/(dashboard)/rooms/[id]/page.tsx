@@ -35,8 +35,8 @@ import {
 import { STATUS_CONFIG, TYPE_CONFIG, ALL_ROOM_STATUSES, type RoomStatus } from '@/lib/rooms-data';
 import { useRoom, useUpdateRoomStatus } from '@/hooks/room/useRooms';
 import { useRoomReservations } from '@/hooks/room/useRoomReservations';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import TableScroll from '@/components/ui/table-scroll';
+import { useAppStore } from '@/store/app.store';
 import {
   Dialog,
   DialogContent,
@@ -232,6 +232,8 @@ export default function RoomDetailPage() {
   const params = useParams();
   const id = params.id as string;
 
+  const hotel = useAppStore((state) => state.hotel);
+  const currency = hotel?.currency || 'NGN';
   const { data: room, isLoading, isError } = useRoom(id);
   const [resPage, setResPage] = useState(1);
   const resLimit = 6;
@@ -343,7 +345,7 @@ export default function RoomDetailPage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div className="bg-[#161b27] border border-[#1e2536] rounded-xl px-4 py-4">
               <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Base Rate</p>
-              <p className="text-xl font-bold text-white">{fmtMoney(Number(room.baseRate))}</p>
+              <p className="text-xl font-bold text-white">{fmtMoney(Number(room.baseRate), currency)}</p>
               <p className="text-xs text-slate-600">per night</p>
             </div>
             <div className="bg-[#161b27] border border-[#1e2536] rounded-xl px-4 py-4">
@@ -379,7 +381,8 @@ export default function RoomDetailPage() {
           </div>
 
           {/* Tabs */}
-          <div className="flex gap-1 bg-[#161b27] border border-[#1e2536] rounded-xl p-1 w-fit overflow-x-auto">
+          <div className="w-full overflow-x-auto">
+            <div className="flex min-w-max gap-1 rounded-xl border border-[#1e2536] bg-[#161b27] p-1">
             <Tab
               label="Overview"
               active={activeTab === 'overview'}
@@ -404,6 +407,7 @@ export default function RoomDetailPage() {
               icon={Wrench}
               onClick={() => setActiveTab('maintenance')}
             />
+            </div>
           </div>
 
           {/* ── Overview ── */}
@@ -582,7 +586,7 @@ export default function RoomDetailPage() {
                       { label: 'Floor / Area', value: (room as any).floor?.name ?? '—' },
                       { label: 'Type', value: room.type },
                       { label: 'Max Guests', value: `${room.maxGuests} guests` },
-                      { label: 'Base Rate', value: fmtMoney(Number(room.baseRate)) },
+                      { label: 'Base Rate', value: fmtMoney(Number(room.baseRate), currency) },
                       { label: 'Reservation', value: activeRes?.reservationNo ?? '—' },
                     ].map(({ label, value }) => (
                       <div key={label}>
@@ -731,7 +735,7 @@ export default function RoomDetailPage() {
                               <td
                                 className={`px-4 py-3 text-sm font-semibold ${Number(f.amount) < 0 ? 'text-emerald-400' : 'text-slate-200'}`}
                               >
-                                {fmtMoney(Math.abs(Number(f.amount)))}
+                                {fmtMoney(Math.abs(Number(f.amount)), currency)}
                                 {Number(f.amount) < 0 && (
                                   <span className="text-xs font-normal text-slate-500 ml-1">
                                     (payment)
@@ -747,14 +751,14 @@ export default function RoomDetailPage() {
                         <div>
                           <span className="text-sm text-slate-500">Outstanding Balance</span>
                           <p className="text-xs text-slate-600 mt-0.5">
-                            Total: {fmtMoney(activeRes.totalAmount)} · Paid:{' '}
-                            {fmtMoney(activeRes.paidAmount)}
+                            Total: {fmtMoney(activeRes.totalAmount, currency)} · Paid:{' '}
+                            {fmtMoney(activeRes.paidAmount, currency)}
                           </p>
                         </div>
                         <span
                           className={`text-xl font-bold ${folioBalance > 0 ? 'text-white' : 'text-emerald-400'}`}
                         >
-                          {fmtMoney(folioBalance)}
+                          {fmtMoney(folioBalance, currency)}
                         </span>
                       </div>
                     </div>
@@ -972,7 +976,7 @@ export default function RoomDetailPage() {
                           {r.status.replace('_', ' ')}
                         </span>
                         <p className="text-sm text-slate-200 font-semibold mt-1">
-                          {fmtMoney(Number(r.totalAmount))}
+                          {fmtMoney(Number(r.totalAmount), currency)}
                         </p>
                       </div>
                     </div>

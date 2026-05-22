@@ -36,6 +36,7 @@ import {
 import { useHrContracts } from '@/hooks/hr/useHrContracts';
 import { formatDate, formatFileSize, formatMoney, titleizeStatus } from '@/utils/hr/contracts-utils';
 import { openHrContractDownload } from '@/hooks/useProxyActions';
+import { ConfirmActionDialog } from '@/components/ui/action-dialogs';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmt(iso: string) {
@@ -296,6 +297,7 @@ export default function StaffDetailPage() {
 
   const [tab, setTab] = useState<Tab>('overview');
   const [showEdit, setShowEdit] = useState(false);
+  const [pendingAction, setPendingAction] = useState<null | 'reset-password' | 'deactivate'>(null);
 
   if (isLoading)
     return (
@@ -411,9 +413,7 @@ export default function StaffDetailPage() {
             <Edit2 size={13} /> Edit
           </button>
           <button
-            onClick={() => {
-              if (confirm('Reset password to default?')) resetPwd.mutate();
-            }}
+            onClick={() => setPendingAction('reset-password')}
             disabled={resetPwd.isPending}
             className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#161b27] border border-[#1e2536] hover:border-amber-500/30 text-slate-400 hover:text-amber-400 text-xs font-medium transition-colors"
           >
@@ -426,9 +426,7 @@ export default function StaffDetailPage() {
           </button>
           {isActive ? (
             <button
-              onClick={() => {
-                if (confirm('Deactivate this staff account?')) deactivate.mutate();
-              }}
+              onClick={() => setPendingAction('deactivate')}
               disabled={deactivate.isPending}
               className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#161b27] border border-[#1e2536] hover:border-red-500/30 text-slate-400 hover:text-red-400 text-xs font-medium transition-colors"
             >
@@ -504,7 +502,8 @@ export default function StaffDetailPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-[#161b27] border border-[#1e2536] rounded-xl p-1 w-fit">
+      <div className="w-full overflow-x-auto">
+        <div className="flex min-w-max gap-1 rounded-xl border border-[#1e2536] bg-[#161b27] p-1">
         <TabBtn
           label="Overview"
           icon={UserCheck}
@@ -541,6 +540,7 @@ export default function StaffDetailPage() {
           active={tab === 'tasks'}
           onClick={() => setTab('tasks')}
         />
+        </div>
       </div>
 
       {/* ── Overview ── */}
@@ -1032,6 +1032,31 @@ export default function StaffDetailPage() {
       )}
 
       {showEdit && <EditStaffModal staff={staff} onClose={() => setShowEdit(false)} />}
+      <ConfirmActionDialog
+        isOpen={pendingAction === 'reset-password'}
+        title="Reset staff password?"
+        description="This will reset the staff account password to the default temporary password and require a change at next sign-in."
+        confirmLabel="Reset Password"
+        isPending={resetPwd.isPending}
+        onClose={() => setPendingAction(null)}
+        onConfirm={async () => {
+          await resetPwd.mutateAsync();
+          setPendingAction(null);
+        }}
+      />
+      <ConfirmActionDialog
+        isOpen={pendingAction === 'deactivate'}
+        title="Deactivate staff account?"
+        description="This will disable the staff member's login access until the account is reactivated."
+        confirmLabel="Deactivate"
+        tone="destructive"
+        isPending={deactivate.isPending}
+        onClose={() => setPendingAction(null)}
+        onConfirm={async () => {
+          await deactivate.mutateAsync();
+          setPendingAction(null);
+        }}
+      />
     </div>
   );
 }

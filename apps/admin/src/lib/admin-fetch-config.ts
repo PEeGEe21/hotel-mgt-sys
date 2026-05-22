@@ -9,6 +9,8 @@ const API_URL =
 const IS_PROD = process.env.NODE_ENV === 'production';
 const COOKIE_ACCESS = 'admin_access_token';
 const COOKIE_REFRESH = 'admin_refresh_token';
+const HOTEL_COOKIE_ACCESS = 'hotel_access_token';
+const HOTEL_COOKIE_REFRESH = 'hotel_refresh_token';
 
 export async function adminApiFetch(path: string, options: RequestInit) {
   return fetch(`${API_URL}${path}`, {
@@ -46,9 +48,41 @@ export async function setAdminAuthCookies(
   });
 }
 
+export async function setHotelAuthCookies(
+  cookieStore: Awaited<ReturnType<typeof cookies>>,
+  accessToken: string,
+  refreshToken: string,
+  refreshMaxAgeSeconds = 60 * 60 * 24 * 7,
+) {
+  cookieStore.set({
+    name: HOTEL_COOKIE_ACCESS,
+    value: accessToken,
+    httpOnly: true,
+    secure: IS_PROD,
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 60 * 15,
+  });
+
+  cookieStore.set({
+    name: HOTEL_COOKIE_REFRESH,
+    value: refreshToken,
+    httpOnly: true,
+    secure: IS_PROD,
+    sameSite: 'strict',
+    path: '/',
+    maxAge: Math.max(60, refreshMaxAgeSeconds),
+  });
+}
+
 export async function clearAdminAuthCookies(cookieStore: Awaited<ReturnType<typeof cookies>>) {
   cookieStore.delete(COOKIE_ACCESS);
   cookieStore.delete(COOKIE_REFRESH);
+}
+
+export async function clearHotelAuthCookies(cookieStore: Awaited<ReturnType<typeof cookies>>) {
+  cookieStore.delete(HOTEL_COOKIE_ACCESS);
+  cookieStore.delete(HOTEL_COOKIE_REFRESH);
 }
 
 export async function getAdminAccessToken(): Promise<string | null> {
@@ -59,4 +93,14 @@ export async function getAdminAccessToken(): Promise<string | null> {
 export async function getAdminRefreshToken(): Promise<string | null> {
   const cookieStore = await cookies();
   return cookieStore.get(COOKIE_REFRESH)?.value ?? null;
+}
+
+export async function getHotelAccessToken(): Promise<string | null> {
+  const cookieStore = await cookies();
+  return cookieStore.get(HOTEL_COOKIE_ACCESS)?.value ?? null;
+}
+
+export async function getHotelRefreshToken(): Promise<string | null> {
+  const cookieStore = await cookies();
+  return cookieStore.get(HOTEL_COOKIE_REFRESH)?.value ?? null;
 }

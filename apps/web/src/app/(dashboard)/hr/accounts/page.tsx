@@ -34,6 +34,8 @@ import ManageAccountModal from './_components/ManageAccountModal';
 import Link from 'next/link';
 import { useDepartments } from '@/hooks/useDepartments';
 import { useJobTitles } from '@/hooks/useJobTitles';
+import openToast from '@/components/ToastComponent';
+import { ConfirmActionDialog, PasswordPromptDialog } from '@/components/ui/action-dialogs';
 
 type Role =
   | 'SUPER_ADMIN'
@@ -82,6 +84,9 @@ export default function UserAccountsPage() {
   const [limit, setLimit] = useState(10);
   const [showAdd, setShowAdd] = useState(false);
   const [editing, setEditing] = useState<UserAccount | null>(null);
+  const [confirmDisable, setConfirmDisable] = useState<UserAccount | null>(null);
+  const [confirmImpersonate, setConfirmImpersonate] = useState<UserAccount | null>(null);
+  const [passwordResetTarget, setPasswordResetTarget] = useState<UserAccount | null>(null);
   const debouncedSearch = useDebounce(search.trim(), 300);
   const { data, isLoading } = useUserAccounts({
     search: debouncedSearch || undefined,
@@ -302,18 +307,7 @@ export default function UserAccountsPage() {
                             <button
                               className="p-1.5 rounded-lg text-slate-500 hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
                               title="Impersonate"
-                              onClick={async () => {
-                                if (!confirm(`Impersonate ${acc.staffName}?`)) return;
-                                const result = await impersonateAction(acc.id);
-                                if (result.success) {
-                                  queryClient.removeQueries({ queryKey: ['dashboard'] });
-                                  setUser(result.user);
-                                  if (result.hotel) setHotel(result.hotel);
-                                  router.push('/dashboard');
-                                } else {
-                                  alert(result.message);
-                                }
-                              }}
+                              onClick={() => setConfirmImpersonate(acc)}
                             >
                               <LogIn size={13} />
                             </button>
@@ -321,12 +315,7 @@ export default function UserAccountsPage() {
                           <button
                             className="p-1.5 rounded-lg text-slate-500 hover:text-amber-400 hover:bg-amber-500/10 transition-colors"
                             title="Reset Password"
-                            onClick={async () => {
-                              const pw = prompt('Enter a temporary password');
-                              if (!pw) return;
-                              setEditing(acc);
-                              await resetPassword.mutateAsync(pw);
-                            }}
+                            onClick={() => setPasswordResetTarget(acc)}
                           >
                             <Key size={13} />
                           </button>
@@ -341,10 +330,7 @@ export default function UserAccountsPage() {
                           </button>
                           <button
                             className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                            onClick={async () => {
-                              if (!confirm('Disable this account?')) return;
-                              await deleteAccount.mutateAsync(acc.id);
-                            }}
+                            onClick={() => setConfirmDisable(acc)}
                           >
                             <Trash2 size={13} />
                           </button>
@@ -392,6 +378,70 @@ export default function UserAccountsPage() {
           }}
         />
       )}
+      <ConfirmActionDialog
+        isOpen={!!confirmImpersonate}
+        title="Impersonate this account?"
+        description={
+          confirmImpersonate
+            ? `You are about to sign in as ${confirmImpersonate.staffName}. Use this only for support or troubleshooting.`
+            : ''
+        }
+        confirmLabel="Impersonate"
+        onClose={() => setConfirmImpersonate(null)}
+        onConfirm={async () => {
+          if (!confirmImpersonate) return;
+          const result = await impersonateAction(confirmImpersonate.id);
+          if (result.success) {
+            queryClient.removeQueries({ queryKey: ['dashboard'] });
+            setUser(result.user);
+            if (result.hotel) setHotel(result.hotel);
+            openToast('success', `Now impersonating ${confirmImpersonate.staffName}`);
+            router.push('/dashboard');
+          } else {
+            openToast('error', result.message);
+          }
+          setConfirmImpersonate(null);
+        }}
+      />
+      <PasswordPromptDialog
+        isOpen={!!passwordResetTarget}
+        title="Set temporary password"
+        description={
+          passwordResetTarget
+            ? `Choose a temporary password for ${passwordResetTarget.staffName}.`
+            : ''
+        }
+        confirmLabel="Reset Password"
+        isPending={resetPassword.isPending}
+        onClose={() => setPasswordResetTarget(null)}
+        onConfirm={async (password) => {
+          if (!password) {
+            openToast('error', 'Temporary password is required.');
+            return;
+          }
+          setEditing(passwordResetTarget);
+          await resetPassword.mutateAsync(password);
+          setPasswordResetTarget(null);
+        }}
+      />
+      <ConfirmActionDialog
+        isOpen={!!confirmDisable}
+        title="Disable this account?"
+        description={
+          confirmDisable
+            ? `This will disable ${confirmDisable.staffName}'s login access until the account is re-enabled.`
+            : ''
+        }
+        confirmLabel="Disable Account"
+        tone="destructive"
+        isPending={deleteAccount.isPending}
+        onClose={() => setConfirmDisable(null)}
+        onConfirm={async () => {
+          if (!confirmDisable) return;
+          await deleteAccount.mutateAsync(confirmDisable.id);
+          setConfirmDisable(null);
+        }}
+      />
     </>
   );
 }

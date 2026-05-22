@@ -36,8 +36,19 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
 
     if (payload.sid) {
-      await this.authSessionService.validateSession(payload.sid, payload.sub);
+      const session = await this.authSessionService.validateSession(payload.sid, payload.sub);
       await this.authSessionService.touchSession(payload.sid);
+      return {
+        sub: payload.sub,
+        email: payload.email,
+        role: payload.role,
+        sid: payload.sid ?? null,
+        impersonatorId: payload.impersonatorId ?? null,
+        isImpersonation: Boolean(payload.isImpersonation),
+        sessionExpiresAt: session.expiresAt,
+        staffId: user?.staff?.id ?? null,
+        hotelId: user?.staff?.hotelId ?? null,
+      };
     }
 
     return {
@@ -47,6 +58,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       sid: payload.sid ?? null,
       impersonatorId: payload.impersonatorId ?? null,
       isImpersonation: Boolean(payload.isImpersonation),
+      sessionExpiresAt: null,
       staffId: user?.staff?.id ?? null,
       hotelId: user?.staff?.hotelId ?? null,
     };

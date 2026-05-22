@@ -5,6 +5,14 @@ export default () => ({
   rateLimit: {
     windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '60000', 10),
     max: parseInt(process.env.RATE_LIMIT_MAX || (process.env.NODE_ENV === 'production' ? '120' : '600'), 10),
+    platform: {
+      windowMs: parseInt(process.env.PLATFORM_RATE_LIMIT_WINDOW_MS || '60000', 10),
+      max: parseInt(process.env.PLATFORM_RATE_LIMIT_MAX || '60', 10),
+    },
+    platformAuth: {
+      windowMs: parseInt(process.env.PLATFORM_AUTH_RATE_LIMIT_WINDOW_MS || '60000', 10),
+      max: parseInt(process.env.PLATFORM_AUTH_RATE_LIMIT_MAX || '20', 10),
+    },
   },
   database: {
     url: process.env.DATABASE_URL,
@@ -52,5 +60,6 @@ export default () => ({
     password: process.env.SUPER_ADMIN_PASSWORD,
     name: process.env.SUPER_ADMIN_NAME || 'Platform Super Admin',
     mfaIssuer: process.env.SUPER_ADMIN_MFA_ISSUER || 'HotelOS Platform',
+    impersonationTtl: process.env.SUPER_ADMIN_IMPERSONATION_TTL || '30m',
   },
 });

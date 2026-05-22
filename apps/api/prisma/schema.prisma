@@ -176,6 +176,8 @@ model Hotel {
   onboardingStatus                    HotelOnboardingStatus @default(PENDING_SETUP)
   suspendedAt                         DateTime?
   suspensionReason                    String?
+  deletedAt                           DateTime?
+  purgeAfterAt                        DateTime?
   taxRate                             Decimal? @default(0)
   latitude                            Float?
   longitude                           Float?

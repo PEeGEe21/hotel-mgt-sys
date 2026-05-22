@@ -11,7 +11,6 @@ import {
 } from '@/hooks/useRolePermissions';
 
 const roles: { key: Role; label: string; locked?: boolean }[] = [
-  { key: 'SUPER_ADMIN', label: 'Super Admin', locked: true },
   { key: 'ADMIN', label: 'Admin', locked: true },
   { key: 'MANAGER', label: 'Manager' },
   { key: 'RECEPTIONIST', label: 'Receptionist' },
@@ -127,9 +126,9 @@ export default function RolesPage() {
       <div className="flex items-start gap-3 bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3">
         <Info size={15} className="text-amber-400 shrink-0 mt-0.5" />
         <p className="text-sm text-amber-300">
-          <span className="font-semibold">Super Admin</span> and{' '}
-          <span className="font-semibold">Admin</span> roles are locked — they always have full
-          access and cannot be restricted.
+          <span className="font-semibold">Admin</span> is locked in the tenant app and cannot be
+          restricted here. <span className="font-semibold">Super Admin</span> is platform-only and
+          is managed from the separate admin console, not from hotel settings.
         </p>
       </div>
 
@@ -146,7 +145,7 @@ export default function RolesPage() {
         <p className="text-sm text-sky-100">
           <span className="font-semibold">Backfill Defaults</span> repairs stored role rows by
           adding any missing baseline permissions from code. It will not remove custom permissions,
-          but it can restore missing defaults for locked roles like Super Admin and Admin.
+          but it can restore missing defaults for locked tenant roles like Admin.
         </p>
       </div>
 

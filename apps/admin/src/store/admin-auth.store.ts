@@ -2,7 +2,7 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { adminLoginAction, adminLogoutAction, adminSkipMfaAction, adminVerifyMfaAction } from '@/actions/admin-auth.actions';
+import { adminLoginAction, adminLogoutAction, adminVerifyMfaAction } from '@/actions/admin-auth.actions';
 
 export type AdminAuthUser = {
   id: string;
@@ -24,6 +24,8 @@ export type AdminAuthUser = {
   mfaSetupAt?: string | null;
   impersonatorId?: string | null;
   isImpersonation?: boolean;
+  sessionExpiresAt?: string | null;
+  impersonationExpiresAt?: string | null;
   permissionOverrides: {
     grants: string[];
     denies: string[];
@@ -54,9 +56,6 @@ type AdminAuthState = {
   verifyMfa: (
     challengeToken: string,
     code: string,
-  ) => Promise<{ success: true; user: AdminAuthUser } | { success: false; message: string }>;
-  skipMfa: (
-    challengeToken: string,
   ) => Promise<{ success: true; user: AdminAuthUser } | { success: false; message: string }>;
   logout: () => Promise<void>;
   setUser: (user: AdminAuthUser | null) => void;
@@ -101,19 +100,6 @@ export const useAdminAuthStore = create<AdminAuthState>()(
       verifyMfa: async (challengeToken, code) => {
         set({ isLoading: true, error: null });
         const result = await adminVerifyMfaAction(challengeToken, code);
-
-        if (!result.success) {
-          set({ isLoading: false, error: result.message });
-          return { success: false, message: result.message };
-        }
-
-        set({ user: result.user, isAuthenticated: true, isLoading: false, error: null });
-        return { success: true, user: result.user };
-      },
-
-      skipMfa: async (challengeToken) => {
-        set({ isLoading: true, error: null });
-        const result = await adminSkipMfaAction(challengeToken);
 
         if (!result.success) {
           set({ isLoading: false, error: result.message });

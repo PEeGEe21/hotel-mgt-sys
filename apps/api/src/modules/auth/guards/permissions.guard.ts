@@ -24,8 +24,6 @@ export class PermissionsGuard implements CanActivate {
 
     if (!user?.sub) throw new ForbiddenException('Insufficient permissions');
 
-    if (user.role === 'SUPER_ADMIN') return true;
-
     const dbUser = await this.prisma.user.findUnique({
       where: { id: user.sub },
       select: {

@@ -1,6 +1,8 @@
 'use client';
 
 import Link from 'next/link';
+import { useState } from 'react';
+import { adminStartTenantImpersonationAction } from '@/actions/admin-auth.actions';
 import { AuthNotice } from '@/components/platform/AuthNotice';
 import { usePlatformUserDetail } from '@/hooks/usePlatform';
 import type { PlatformUserDetailResponse } from '@/lib/platform-types';
@@ -15,6 +17,24 @@ export function UserDetailClient({ id }: { id: string }) {
   const detailQuery = usePlatformUserDetail(id);
   const user = detailQuery.data as PlatformUserDetailResponse | undefined;
   const authMessage = detailQuery.error instanceof PlatformClientError ? detailQuery.error.message : null;
+  const [impersonationError, setImpersonationError] = useState<string | null>(null);
+  const [isStartingImpersonation, setIsStartingImpersonation] = useState(false);
+
+  const handleStartImpersonation = async () => {
+    setIsStartingImpersonation(true);
+    setImpersonationError(null);
+    const result = await adminStartTenantImpersonationAction(id);
+    if (!result.success) {
+      setImpersonationError(result.message);
+      setIsStartingImpersonation(false);
+      return;
+    }
+
+    const popup = window.open(result.launchUrl, '_blank', 'noopener,noreferrer');
+    if (!popup) {
+      window.location.href = result.launchUrl;
+    }
+  };
 
   return (
     <main className="min-h-screen px-6 py-10 md:px-10">
@@ -28,6 +48,7 @@ export function UserDetailClient({ id }: { id: string }) {
         </div>
 
         {authMessage ? <AuthNotice message={authMessage} /> : null}
+        {impersonationError ? <AuthNotice title="Impersonation failed" message={impersonationError} /> : null}
 
         {detailQuery.isLoading ? (
           <div className="rounded-3xl border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-sm">Loading user details...</div>
@@ -43,6 +64,21 @@ export function UserDetailClient({ id }: { id: string }) {
                   <p>Last login: {formatDate(user.lastLoginAt)}</p>
                   <p>Password reset: {user.mustChangePassword ? 'Required' : 'Not required'}</p>
                 </div>
+                {user.hotel && user.role !== 'SUPER_ADMIN' ? (
+                  <div className="mt-5 flex flex-wrap gap-3">
+                    <button
+                      type="button"
+                      onClick={handleStartImpersonation}
+                      disabled={isStartingImpersonation}
+                      className="rounded-full bg-teal-900 px-5 py-3 text-sm font-semibold text-white disabled:opacity-50"
+                    >
+                      {isStartingImpersonation ? 'Opening tenant workspace...' : 'Impersonate in web app'}
+                    </button>
+                    <p className="text-sm text-slate-500">
+                      Launches the tenant-facing app in a separate impersonation session with a hard expiry.
+                    </p>
+                  </div>
+                ) : null}
               </article>
 
               <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">

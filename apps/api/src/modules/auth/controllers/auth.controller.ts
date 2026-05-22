@@ -64,16 +64,6 @@ export class AuthController {
     });
   }
 
-  @Post('mfa/skip')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Temporarily bypass a super-admin MFA challenge outside production' })
-  skipMfa(@Request() req: any, @Body() dto: VerifyMfaDto) {
-    return this.authService.skipMfa(dto.challengeToken, {
-      ipAddress: getRequestIp(req),
-      userAgent: getUserAgent(req),
-    });
-  }
-
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Request a password reset email' })
@@ -150,6 +140,7 @@ export class AuthController {
     return this.authService.getMe(req.user.sub, {
       impersonatorId: req.user.impersonatorId ?? null,
       isImpersonation: Boolean(req.user.isImpersonation),
+      sessionExpiresAt: req.user.sessionExpiresAt ?? null,
     });
   }
 

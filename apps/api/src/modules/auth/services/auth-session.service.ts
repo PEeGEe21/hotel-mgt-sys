@@ -35,6 +35,7 @@ export type ListedAuthSessionRecord = AuthSessionRecord & {
 @Injectable()
 export class AuthSessionService {
   private readonly refreshLifetimeMs: number;
+  private readonly impersonationLifetimeMs: number;
 
   constructor(
     private readonly redisService: RedisService,
@@ -44,6 +45,10 @@ export class AuthSessionService {
       this.configService.get<string>('JWT_REFRESH_EXPIRES_IN') || '7d',
       7 * 24 * 60 * 60 * 1000,
     );
+    this.impersonationLifetimeMs = this.parseDurationMs(
+      this.configService.get<string>('superAdmin.impersonationTtl') || '30m',
+      30 * 60 * 1000,
+    );
   }
 
   async createSession(actor: SessionActor, meta?: SessionMeta) {
@@ -51,7 +56,8 @@ export class AuthSessionService {
 
     const sessionId = crypto.randomUUID();
     const now = new Date();
-    const expiresAt = new Date(now.getTime() + this.refreshLifetimeMs);
+    const lifetimeMs = actor.isImpersonation ? this.impersonationLifetimeMs : this.refreshLifetimeMs;
+    const expiresAt = new Date(now.getTime() + lifetimeMs);
     const session = this.serializeSession({
       id: sessionId,
       userId: actor.userId,
@@ -224,6 +230,11 @@ export class AuthSessionService {
     await this.redisService.command.hset(key, {
       lastSeenAt: new Date().toISOString(),
     });
+  }
+
+  async getSessionRecord(sessionId: string) {
+    await this.redisService.ensureReady();
+    return this.getSession(sessionId);
   }
 
   private async getSession(sessionId: string): Promise<AuthSessionRecord | null> {

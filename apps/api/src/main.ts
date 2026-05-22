@@ -46,9 +46,45 @@ async function bootstrap() {
   app.use(compression());
   app.use(
     createRateLimitMiddleware({
+      max: configService.get<number>('rateLimit.platform.max') || 60,
+      windowMs: configService.get<number>('rateLimit.platform.windowMs') || 60_000,
+      onlyPaths: ['/api/v1/platform'],
+      keyPrefix: 'rate-limit:platform',
+      redisService,
+      onError: (error) => {
+        logger.warn(
+          {
+            message: 'Platform rate limiter degraded to fail-open',
+            error: error instanceof Error ? error.message : String(error),
+          },
+          'PlatformRateLimitMiddleware',
+        );
+      },
+    }),
+  );
+  app.use(
+    createRateLimitMiddleware({
+      max: configService.get<number>('rateLimit.platformAuth.max') || 20,
+      windowMs: configService.get<number>('rateLimit.platformAuth.windowMs') || 60_000,
+      onlyPaths: ['/api/v1/auth/mfa/verify', '/api/v1/auth/impersonate'],
+      keyPrefix: 'rate-limit:platform-auth',
+      redisService,
+      onError: (error) => {
+        logger.warn(
+          {
+            message: 'Platform auth rate limiter degraded to fail-open',
+            error: error instanceof Error ? error.message : String(error),
+          },
+          'PlatformAuthRateLimitMiddleware',
+        );
+      },
+    }),
+  );
+  app.use(
+    createRateLimitMiddleware({
       max: configService.get<number>('rateLimit.max') || 600,
       windowMs: configService.get<number>('rateLimit.windowMs') || 60_000,
-      skipPaths: ['/api/v1/health'],
+      skipPaths: ['/api/v1/health', '/api/v1/platform', '/api/v1/auth/mfa/verify', '/api/v1/auth/impersonate'],
       redisService,
       onError: (error) => {
         logger.warn(

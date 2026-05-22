@@ -129,6 +129,13 @@ export class AuthService {
     }
 
     if (!verifyTotpCode(challenge.secret, code)) {
+      await this.logAudit({
+        actorUserId: user.id,
+        hotelId: null,
+        action: 'auth.mfa.verify_failed',
+        ipAddress: meta?.ipAddress ?? null,
+        userAgent: meta?.userAgent ?? null,
+      });
       throw new UnauthorizedException('Invalid MFA code.');
     }
 
@@ -141,53 +148,17 @@ export class AuthService {
           mfaSetupAt: new Date(),
         },
       });
-
-      await this.logAudit({
-        actorUserId: user.id,
-        hotelId: null,
-        action: 'auth.mfa.setup_complete',
-        ipAddress: meta?.ipAddress ?? null,
-        userAgent: meta?.userAgent ?? null,
-      });
     }
 
-    await this.cache.del(`mfa:challenge:${challengeToken}`);
-    return this.completeLogin(user, meta);
-  }
-
-  async skipMfa(
-    challengeToken: string,
-    meta?: { ipAddress?: string | null; userAgent?: string | null },
-  ) {
-    if (this.config.get<string>('NODE_ENV') === 'production') {
-      throw new ForbiddenException('MFA bypass is disabled in production.');
-    }
-
-    const challenge = await this.cache.get<MfaChallengeCacheValue>(`mfa:challenge:${challengeToken}`);
-    if (!challenge) {
-      throw new UnauthorizedException('MFA challenge expired. Please sign in again.');
-    }
-
-    const user = await this.prisma.user.findUnique({
-      where: { id: challenge.userId },
-      include: { staff: { include: { hotel: true } } },
-    });
-
-    if (!user || !user.isActive || user.role !== Role.SUPER_ADMIN) {
-      await this.cache.del(`mfa:challenge:${challengeToken}`);
-      throw new UnauthorizedException('Super admin account not available.');
-    }
-
-    await this.cache.del(`mfa:challenge:${challengeToken}`);
     await this.logAudit({
       actorUserId: user.id,
-      hotelId: user.staff?.hotelId ?? null,
-      action: 'auth.mfa.skip',
+      hotelId: null,
+      action: challenge.phase === 'setup' ? 'auth.mfa.setup_complete' : 'auth.mfa.verify_success',
       ipAddress: meta?.ipAddress ?? null,
       userAgent: meta?.userAgent ?? null,
-      metadata: { phase: challenge.phase },
     });
 
+    await this.cache.del(`mfa:challenge:${challengeToken}`);
     return this.completeLogin(user, meta);
   }
 
@@ -222,7 +193,7 @@ export class AuthService {
         })
       ).sessionId;
 
-    await this.authSessionService.validateSession(resolvedSessionId, stored.user.id);
+    const session = await this.authSessionService.validateSession(resolvedSessionId, stored.user.id);
 
     // Rotate — delete old, issue new
     await this.prisma.refreshToken.delete({ where: { token } });
@@ -236,6 +207,7 @@ export class AuthService {
         sessionId: resolvedSessionId,
         impersonatorId: stored.impersonatorId ?? null,
         isImpersonation: stored.isImpersonation ?? false,
+        expiresAt: stored.isImpersonation ? new Date(session.expiresAt) : null,
       }),
     ]);
 
@@ -306,7 +278,7 @@ export class AuthService {
   // ─── Get current user profile ─────────────────────────────────────────────
   async getMe(
     userId: string,
-    meta?: { impersonatorId?: string | null; isImpersonation?: boolean },
+    meta?: { impersonatorId?: string | null; isImpersonation?: boolean; sessionExpiresAt?: string | null },
   ) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -320,6 +292,8 @@ export class AuthService {
         rolePermissions,
         impersonatorId: meta?.impersonatorId ?? null,
         isImpersonation: Boolean(meta?.isImpersonation),
+        sessionExpiresAt: meta?.sessionExpiresAt ?? null,
+        impersonationExpiresAt: meta?.isImpersonation ? meta?.sessionExpiresAt ?? null : null,
       },
       hotel: this.sanitizeHotel(user.staff?.hotel),
     };
@@ -675,11 +649,19 @@ export class AuthService {
 
   private async generateRefreshToken(
     userId: string,
-    opts?: { sessionId?: string | null; impersonatorId?: string | null; isImpersonation?: boolean },
+    opts?: {
+      sessionId?: string | null;
+      impersonatorId?: string | null;
+      isImpersonation?: boolean;
+      expiresAt?: Date | null;
+    },
   ) {
     const token = crypto.randomBytes(64).toString('hex');
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7); // 7 days
+    const expiresAt = opts?.expiresAt ? new Date(opts.expiresAt) : new Date();
+
+    if (!opts?.expiresAt) {
+      expiresAt.setDate(expiresAt.getDate() + 7); // 7 days
+    }
 
     await this.prisma.refreshToken.create({
       data: {
@@ -806,7 +788,7 @@ export class AuthService {
       throw new ForbiddenException('Cannot impersonate users from another hotel.');
     }
 
-    const { sessionId } = await this.authSessionService.createSession(
+    const { sessionId, expiresAt } = await this.authSessionService.createSession(
       {
         userId: target.id,
         hotelId: target.staff?.hotelId ?? null,
@@ -825,6 +807,7 @@ export class AuthService {
         sessionId,
         impersonatorId: impersonator.id,
         isImpersonation: true,
+        expiresAt,
       }),
     ]);
 
@@ -938,7 +921,6 @@ export class AuthService {
     userAgent?: string | null;
     metadata?: any;
   }) {
-    if (!params.hotelId) return;
     await this.prisma.auditLog.create({
       data: {
         hotelId: params.hotelId,

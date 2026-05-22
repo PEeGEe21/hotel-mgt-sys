@@ -19,7 +19,7 @@ export default function TableScroll({
     >
       <div
         className={cn(
-          '[&_table]:w-full [&_table]:min-w-[720px] sm:[&_table]:min-w-0',
+          '[&_table]:w-full [&_table]:min-w-[720px] sm:[&_table]:min-w-0 [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap',
           tableClassName,
         )}
       >

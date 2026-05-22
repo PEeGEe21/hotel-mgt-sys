@@ -89,6 +89,10 @@ export function validateEnv(config: Record<string, unknown>) {
   assertInteger(readString(config, 'PORT'), 'PORT');
   assertInteger(readString(config, 'RATE_LIMIT_WINDOW_MS'), 'RATE_LIMIT_WINDOW_MS');
   assertInteger(readString(config, 'RATE_LIMIT_MAX'), 'RATE_LIMIT_MAX');
+  assertInteger(readString(config, 'PLATFORM_RATE_LIMIT_WINDOW_MS'), 'PLATFORM_RATE_LIMIT_WINDOW_MS');
+  assertInteger(readString(config, 'PLATFORM_RATE_LIMIT_MAX'), 'PLATFORM_RATE_LIMIT_MAX');
+  assertInteger(readString(config, 'PLATFORM_AUTH_RATE_LIMIT_WINDOW_MS'), 'PLATFORM_AUTH_RATE_LIMIT_WINDOW_MS');
+  assertInteger(readString(config, 'PLATFORM_AUTH_RATE_LIMIT_MAX'), 'PLATFORM_AUTH_RATE_LIMIT_MAX');
   assertInteger(readString(config, 'MONITORING_ALERT_DEDUP_MS'), 'MONITORING_ALERT_DEDUP_MS');
   assertUrl(frontendUrl, 'FRONTEND_URL');
   assertUrl(redisUrl, 'REDIS_URL');

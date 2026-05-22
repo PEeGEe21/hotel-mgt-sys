@@ -43,7 +43,9 @@ export type PlatformHotelsResponse = {
     onboardingStatus: 'PENDING_SETUP' | 'ROOMS_ADDED' | 'STAFF_INVITED' | 'ACTIVE';
     suspendedAt: string | null;
     suspensionReason: string | null;
-    status: 'active' | 'stale' | 'setup' | 'suspended';
+    deletedAt: string | null;
+    purgeAfterAt: string | null;
+    status: 'active' | 'stale' | 'setup' | 'suspended' | 'deleted';
     counts: {
       rooms: number;
       staff: number;
@@ -56,6 +58,15 @@ export type PlatformHotelsResponse = {
       name: string;
     } | null;
     latestStaffLoginAt: string | null;
+    health: {
+      score: number;
+      status: 'healthy' | 'warning' | 'critical' | 'setup';
+      label: string;
+      lastStaffLoginAt: string | null;
+      lastReservationCreatedAt: string | null;
+      overdueInvoices: number;
+      signals: string[];
+    };
   }>;
   total: number;
   page: number;
@@ -112,6 +123,8 @@ export type PlatformHotelDetailResponse = {
   onboardingStatus: 'PENDING_SETUP' | 'ROOMS_ADDED' | 'STAFF_INVITED' | 'ACTIVE';
   suspendedAt: string | null;
   suspensionReason: string | null;
+  deletedAt: string | null;
+  purgeAfterAt: string | null;
   _count: {
     rooms: number;
     staff: number;
@@ -144,6 +157,15 @@ export type PlatformHotelDetailResponse = {
     email: string;
     lastLoginAt: string | null;
   }>;
+  health: {
+    score: number;
+    status: 'healthy' | 'warning' | 'critical' | 'setup';
+    label: string;
+    lastStaffLoginAt: string | null;
+    lastReservationCreatedAt: string | null;
+    overdueInvoices: number;
+    signals: string[];
+  };
 };
 
 export type PlatformUserDetailResponse = {

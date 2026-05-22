@@ -1,10 +1,12 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { Role } from '@prisma/client';
+import { PaymentStatus, Role } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { randomInt } from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreatePlatformHotelOnboardingDto } from './dtos/create-platform-hotel-onboarding.dto';
 import { HotelLifecycleService } from '../hotel-lifecycle/hotel-lifecycle.service';
+import { UpdatePlatformHotelDto } from './dtos/update-platform-hotel.dto';
+import { UpdatePlatformHotelLifecycleDto } from './dtos/update-platform-hotel-lifecycle.dto';
 
 type ListHotelsParams = {
   page?: number;
@@ -18,6 +20,16 @@ type ListUsersParams = {
   search?: string;
   role?: string;
   hotelId?: string;
+};
+
+type PlatformHotelHealth = {
+  score: number;
+  status: 'healthy' | 'warning' | 'critical' | 'setup';
+  label: string;
+  lastStaffLoginAt: Date | null;
+  lastReservationCreatedAt: Date | null;
+  overdueInvoices: number;
+  signals: string[];
 };
 
 function normalizeOptional(value?: string | null) {
@@ -81,6 +93,128 @@ export class PlatformService {
     private readonly prisma: PrismaService,
     private readonly hotelLifecycleService: HotelLifecycleService,
   ) {}
+
+  private deriveHotelHealth(params: {
+    suspendedAt: Date | null;
+    deletedAt: Date | null;
+    onboardingStatus: string;
+    lastStaffLoginAt: Date | null;
+    lastReservationCreatedAt: Date | null;
+    overdueInvoices: number;
+    staffCount: number;
+    roomCount: number;
+  }): PlatformHotelHealth {
+    const now = Date.now();
+    const daysSinceLogin = params.lastStaffLoginAt
+      ? (now - params.lastStaffLoginAt.getTime()) / (24 * 60 * 60 * 1000)
+      : Number.POSITIVE_INFINITY;
+    const daysSinceReservation = params.lastReservationCreatedAt
+      ? (now - params.lastReservationCreatedAt.getTime()) / (24 * 60 * 60 * 1000)
+      : Number.POSITIVE_INFINITY;
+
+    const signals: string[] = [];
+    let score = 100;
+
+    if (params.deletedAt) {
+      return {
+        score: 5,
+        status: 'critical',
+        label: 'Soft-deleted',
+        lastStaffLoginAt: params.lastStaffLoginAt,
+        lastReservationCreatedAt: params.lastReservationCreatedAt,
+        overdueInvoices: params.overdueInvoices,
+        signals: ['Tenant is soft-deleted and pending purge or restore.'],
+      };
+    }
+
+    if (params.suspendedAt) {
+      score -= 45;
+      signals.push('Tenant is suspended at the platform level.');
+    }
+
+    if (params.onboardingStatus !== 'ACTIVE' || params.staffCount === 0 || params.roomCount === 0) {
+      score -= 30;
+      signals.push('Onboarding is still incomplete.');
+    }
+
+    if (daysSinceLogin === Number.POSITIVE_INFINITY) {
+      score -= 25;
+      signals.push('No staff login activity has been recorded yet.');
+    } else if (daysSinceLogin > 30) {
+      score -= 25;
+      signals.push('No staff login in the last 30 days.');
+    } else if (daysSinceLogin > 14) {
+      score -= 12;
+      signals.push('Staff login activity is slowing down.');
+    }
+
+    if (daysSinceReservation === Number.POSITIVE_INFINITY) {
+      score -= 15;
+      signals.push('No reservations have been created yet.');
+    } else if (daysSinceReservation > 30) {
+      score -= 20;
+      signals.push('No reservations created in the last 30 days.');
+    } else if (daysSinceReservation > 14) {
+      score -= 10;
+      signals.push('Reservation creation activity is cooling off.');
+    }
+
+    if (params.overdueInvoices >= 5) {
+      score -= 25;
+      signals.push(`${params.overdueInvoices} overdue invoices need collection follow-up.`);
+    } else if (params.overdueInvoices > 0) {
+      score -= 12;
+      signals.push(`${params.overdueInvoices} overdue invoice${params.overdueInvoices === 1 ? '' : 's'} outstanding.`);
+    }
+
+    score = Math.max(0, Math.min(100, score));
+
+    if (params.onboardingStatus !== 'ACTIVE' || params.staffCount === 0 || params.roomCount === 0) {
+      return {
+        score,
+        status: 'setup',
+        label: 'Setup',
+        lastStaffLoginAt: params.lastStaffLoginAt,
+        lastReservationCreatedAt: params.lastReservationCreatedAt,
+        overdueInvoices: params.overdueInvoices,
+        signals,
+      };
+    }
+
+    if (score <= 49) {
+      return {
+        score,
+        status: 'critical',
+        label: 'Critical',
+        lastStaffLoginAt: params.lastStaffLoginAt,
+        lastReservationCreatedAt: params.lastReservationCreatedAt,
+        overdueInvoices: params.overdueInvoices,
+        signals,
+      };
+    }
+
+    if (score <= 79) {
+      return {
+        score,
+        status: 'warning',
+        label: 'Watch',
+        lastStaffLoginAt: params.lastStaffLoginAt,
+        lastReservationCreatedAt: params.lastReservationCreatedAt,
+        overdueInvoices: params.overdueInvoices,
+        signals,
+      };
+    }
+
+    return {
+      score,
+      status: 'healthy',
+      label: 'Healthy',
+      lastStaffLoginAt: params.lastStaffLoginAt,
+      lastReservationCreatedAt: params.lastReservationCreatedAt,
+      overdueInvoices: params.overdueInvoices,
+      signals: signals.length > 0 ? signals : ['Recent activity looks healthy across staff and bookings.'],
+    };
+  }
 
   async createHotelOnboarding(actorUserId: string, dto: CreatePlatformHotelOnboardingDto) {
     const hotelName = dto.hotelName.trim();
@@ -308,6 +442,8 @@ export class PlatformService {
           onboardingStatus: true,
           suspendedAt: true,
           suspensionReason: true,
+          deletedAt: true,
+          purgeAfterAt: true,
           _count: {
             select: {
               rooms: true,
@@ -322,7 +458,7 @@ export class PlatformService {
 
     const hotels = await Promise.all(
       rows.map(async (hotel) => {
-        const [primaryAdmin, latestStaffLogin] = await Promise.all([
+        const [primaryAdmin, latestStaffLogin, recentReservation, overdueInvoices] = await Promise.all([
           this.prisma.user.findFirst({
             where: {
               role: { in: ['SUPER_ADMIN', 'ADMIN'] },
@@ -343,6 +479,18 @@ export class PlatformService {
             },
             orderBy: { user: { lastLoginAt: 'desc' } },
           }),
+          this.prisma.reservation.findFirst({
+            where: { hotelId: hotel.id },
+            select: { createdAt: true },
+            orderBy: { createdAt: 'desc' },
+          }),
+          this.prisma.invoice.count({
+            where: {
+              hotelId: hotel.id,
+              dueAt: { lt: new Date() },
+              paymentStatus: { in: [PaymentStatus.UNPAID, PaymentStatus.PARTIAL] },
+            },
+          }),
         ]);
 
         const onboardingStatus = this.hotelLifecycleService.deriveOnboardingStatus(
@@ -350,8 +498,21 @@ export class PlatformService {
           hotel._count.staff,
         );
         const lastLoginAt = latestStaffLogin?.user.lastLoginAt ?? null;
+        const lastReservationCreatedAt = recentReservation?.createdAt ?? null;
+        const health = this.deriveHotelHealth({
+          suspendedAt: hotel.suspendedAt,
+          deletedAt: hotel.deletedAt,
+          onboardingStatus,
+          lastStaffLoginAt: lastLoginAt,
+          lastReservationCreatedAt,
+          overdueInvoices,
+          staffCount: hotel._count.staff,
+          roomCount: hotel._count.rooms,
+        });
         const status =
-          hotel.suspendedAt
+          hotel.deletedAt
+            ? 'deleted'
+            : hotel.suspendedAt
             ? 'suspended'
             : hotel._count.staff === 0 || onboardingStatus !== 'ACTIVE'
             ? 'setup'
@@ -372,6 +533,8 @@ export class PlatformService {
           onboardingStatus,
           suspendedAt: hotel.suspendedAt,
           suspensionReason: hotel.suspensionReason,
+          deletedAt: hotel.deletedAt,
+          purgeAfterAt: hotel.purgeAfterAt,
           status,
           counts: {
             rooms: hotel._count.rooms,
@@ -389,6 +552,11 @@ export class PlatformService {
               }
             : null,
           latestStaffLoginAt: lastLoginAt,
+          health: {
+            ...health,
+            lastStaffLoginAt: health.lastStaffLoginAt,
+            lastReservationCreatedAt: health.lastReservationCreatedAt,
+          },
         };
       }),
     );
@@ -424,6 +592,8 @@ export class PlatformService {
         onboardingStatus: true,
         suspendedAt: true,
         suspensionReason: true,
+        deletedAt: true,
+        purgeAfterAt: true,
         _count: {
           select: {
             rooms: true,
@@ -444,7 +614,7 @@ export class PlatformService {
 
     const onboardingStatus = this.hotelLifecycleService.deriveOnboardingStatus(hotel._count.rooms, hotel._count.staff);
 
-    const [admins, recentReservations, recentStaffLogins] = await Promise.all([
+    const [admins, recentReservations, recentStaffLogins, latestReservation, overdueInvoices] = await Promise.all([
       this.prisma.user.findMany({
         where: {
           role: { in: ['SUPER_ADMIN', 'ADMIN'] },
@@ -489,7 +659,31 @@ export class PlatformService {
         orderBy: { user: { lastLoginAt: 'desc' } },
         take: 5,
       }),
+      this.prisma.reservation.findFirst({
+        where: { hotelId },
+        select: { createdAt: true },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.invoice.count({
+        where: {
+          hotelId,
+          dueAt: { lt: new Date() },
+          paymentStatus: { in: [PaymentStatus.UNPAID, PaymentStatus.PARTIAL] },
+        },
+      }),
     ]);
+
+    const latestStaffLoginAt = recentStaffLogins[0]?.user.lastLoginAt ?? null;
+    const health = this.deriveHotelHealth({
+      suspendedAt: hotel.suspendedAt,
+      deletedAt: hotel.deletedAt,
+      onboardingStatus,
+      lastStaffLoginAt: latestStaffLoginAt,
+      lastReservationCreatedAt: latestReservation?.createdAt ?? null,
+      overdueInvoices,
+      staffCount: hotel._count.staff,
+      roomCount: hotel._count.rooms,
+    });
 
     return {
       ...hotel,
@@ -511,13 +705,101 @@ export class PlatformService {
         email: staff.user.email,
         lastLoginAt: staff.user.lastLoginAt,
       })),
+      health: {
+        ...health,
+        lastStaffLoginAt: health.lastStaffLoginAt,
+        lastReservationCreatedAt: health.lastReservationCreatedAt,
+      },
     };
   }
 
-  async suspendHotel(actorUserId: string, hotelId: string, reason?: string) {
+  async updateHotel(actorUserId: string, hotelId: string, dto: UpdatePlatformHotelDto) {
     const hotel = await this.prisma.hotel.findUnique({
       where: { id: hotelId },
-      select: { id: true, name: true, suspendedAt: true },
+      select: {
+        id: true,
+        name: true,
+        domain: true,
+        address: true,
+        city: true,
+        state: true,
+        country: true,
+        phone: true,
+        email: true,
+        website: true,
+        description: true,
+        currency: true,
+        timezone: true,
+      },
+    });
+
+    if (!hotel) {
+      throw new NotFoundException('Hotel not found.');
+    }
+
+    const normalizedDomain = dto.domain !== undefined ? normalizeOptional(dto.domain)?.toLowerCase() : undefined;
+    if (normalizedDomain && normalizedDomain !== hotel.domain) {
+      const existing = await this.prisma.hotel.findUnique({
+        where: { domain: normalizedDomain },
+        select: { id: true },
+      });
+      if (existing && existing.id !== hotelId) {
+        throw new ConflictException('A hotel with this domain already exists.');
+      }
+    }
+
+    const data = {
+      ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
+      ...(dto.domain !== undefined ? { domain: normalizedDomain } : {}),
+      ...(dto.address !== undefined ? { address: dto.address.trim() } : {}),
+      ...(dto.city !== undefined ? { city: dto.city.trim() } : {}),
+      ...(dto.state !== undefined ? { state: normalizeOptional(dto.state) } : {}),
+      ...(dto.country !== undefined ? { country: dto.country.trim() } : {}),
+      ...(dto.phone !== undefined ? { phone: dto.phone.trim() } : {}),
+      ...(dto.email !== undefined ? { email: dto.email.trim().toLowerCase() } : {}),
+      ...(dto.website !== undefined ? { website: normalizeOptional(dto.website) } : {}),
+      ...(dto.description !== undefined ? { description: normalizeOptional(dto.description) } : {}),
+      ...(dto.currency !== undefined ? { currency: dto.currency.trim().toUpperCase() } : {}),
+      ...(dto.timezone !== undefined ? { timezone: dto.timezone.trim() } : {}),
+    };
+
+    if (Object.keys(data).length === 0) {
+      throw new BadRequestException('Provide at least one hotel field to update.');
+    }
+
+    await this.prisma.hotel.update({
+      where: { id: hotelId },
+      data,
+      select: { id: true },
+    });
+
+    const changedFields = Object.keys(data).filter((key) => {
+      const before = (hotel as Record<string, unknown>)[key] ?? null;
+      const after = (data as Record<string, unknown>)[key] ?? null;
+      return before !== after;
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        hotelId,
+        actorUserId,
+        action: 'platform.hotel.update',
+        targetType: 'HOTEL',
+        targetId: hotelId,
+        metadata: {
+          hotelName: data.name ?? hotel.name,
+          changedFields,
+        },
+      },
+    });
+
+    return this.getHotelDetail(hotelId);
+  }
+
+  async suspendHotel(actorUserId: string, hotelId: string, dto: UpdatePlatformHotelLifecycleDto) {
+    const hotel = await this.prisma.hotel.findUnique({
+      where: { id: hotelId },
+      select: { id: true, name: true, suspendedAt: true, deletedAt: true },
     });
 
     if (!hotel) {
@@ -528,11 +810,24 @@ export class PlatformService {
       throw new BadRequestException('Hotel is already suspended.');
     }
 
+    if (hotel.deletedAt) {
+      throw new BadRequestException('Restore this hotel before changing its suspension state.');
+    }
+
+    if (dto.confirmationName.trim() !== hotel.name) {
+      throw new BadRequestException('Confirmation name did not match the hotel name.');
+    }
+
+    const reason = normalizeOptional(dto.reason);
+    if (!reason) {
+      throw new BadRequestException('A suspension reason is required.');
+    }
+
     const updated = await this.prisma.hotel.update({
       where: { id: hotelId },
       data: {
         suspendedAt: new Date(),
-        suspensionReason: normalizeOptional(reason),
+        suspensionReason: reason,
       },
       select: {
         id: true,
@@ -553,6 +848,7 @@ export class PlatformService {
         metadata: {
           hotelName: updated.name,
           reason: updated.suspensionReason,
+          confirmationName: dto.confirmationName.trim(),
         },
       },
     });
@@ -560,10 +856,10 @@ export class PlatformService {
     return updated;
   }
 
-  async reactivateHotel(actorUserId: string, hotelId: string, reason?: string) {
+  async reactivateHotel(actorUserId: string, hotelId: string, dto: UpdatePlatformHotelLifecycleDto) {
     const hotel = await this.prisma.hotel.findUnique({
       where: { id: hotelId },
-      select: { id: true, name: true, suspendedAt: true, onboardingStatus: true },
+      select: { id: true, name: true, suspendedAt: true, onboardingStatus: true, deletedAt: true },
     });
 
     if (!hotel) {
@@ -574,11 +870,21 @@ export class PlatformService {
       throw new BadRequestException('Hotel is not suspended.');
     }
 
+    if (hotel.deletedAt) {
+      throw new BadRequestException('Restore this hotel before reactivating it.');
+    }
+
+    if (dto.confirmationName.trim() !== hotel.name) {
+      throw new BadRequestException('Confirmation name did not match the hotel name.');
+    }
+
+    const reason = normalizeOptional(dto.reason);
+
     const updated = await this.prisma.hotel.update({
       where: { id: hotelId },
       data: {
         suspendedAt: null,
-        suspensionReason: normalizeOptional(reason),
+        suspensionReason: reason,
       },
       select: {
         id: true,
@@ -599,7 +905,146 @@ export class PlatformService {
         targetId: hotelId,
         metadata: {
           hotelName: updated.name,
-          note: normalizeOptional(reason),
+          note: reason,
+          confirmationName: dto.confirmationName.trim(),
+        },
+      },
+    });
+
+    return {
+      ...updated,
+      onboardingStatus: syncedHotel.onboardingStatus,
+    };
+  }
+
+  async softDeleteHotel(actorUserId: string, hotelId: string, dto: UpdatePlatformHotelLifecycleDto) {
+    const hotel = await this.prisma.hotel.findUnique({
+      where: { id: hotelId },
+      select: {
+        id: true,
+        name: true,
+        suspendedAt: true,
+        suspensionReason: true,
+        deletedAt: true,
+        purgeAfterAt: true,
+        onboardingStatus: true,
+      },
+    });
+
+    if (!hotel) {
+      throw new NotFoundException('Hotel not found.');
+    }
+
+    if (hotel.deletedAt) {
+      throw new BadRequestException('Hotel is already soft-deleted.');
+    }
+
+    if (dto.confirmationName.trim() !== hotel.name) {
+      throw new BadRequestException('Confirmation name did not match the hotel name.');
+    }
+
+    const reason = normalizeOptional(dto.reason);
+    if (!reason) {
+      throw new BadRequestException('A soft-delete reason is required.');
+    }
+
+    const now = new Date();
+    const purgeAfter = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+    const updated = await this.prisma.hotel.update({
+      where: { id: hotelId },
+      data: {
+        deletedAt: now,
+        purgeAfterAt: purgeAfter,
+        suspendedAt: hotel.suspendedAt ?? now,
+        suspensionReason: hotel.suspensionReason ?? reason,
+      },
+      select: {
+        id: true,
+        name: true,
+        suspendedAt: true,
+        suspensionReason: true,
+        deletedAt: true,
+        purgeAfterAt: true,
+        onboardingStatus: true,
+      },
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        hotelId,
+        actorUserId,
+        action: 'platform.hotel.soft_delete',
+        targetType: 'HOTEL',
+        targetId: hotelId,
+        metadata: {
+          hotelName: updated.name,
+          reason,
+          confirmationName: dto.confirmationName.trim(),
+          purgeAfterAt: updated.purgeAfterAt,
+        },
+      },
+    });
+
+    return updated;
+  }
+
+  async restoreHotel(actorUserId: string, hotelId: string, dto: UpdatePlatformHotelLifecycleDto) {
+    const hotel = await this.prisma.hotel.findUnique({
+      where: { id: hotelId },
+      select: {
+        id: true,
+        name: true,
+        deletedAt: true,
+        purgeAfterAt: true,
+        suspendedAt: true,
+        onboardingStatus: true,
+      },
+    });
+
+    if (!hotel) {
+      throw new NotFoundException('Hotel not found.');
+    }
+
+    if (!hotel.deletedAt) {
+      throw new BadRequestException('Hotel is not soft-deleted.');
+    }
+
+    if (dto.confirmationName.trim() !== hotel.name) {
+      throw new BadRequestException('Confirmation name did not match the hotel name.');
+    }
+
+    const note = normalizeOptional(dto.reason);
+
+    const updated = await this.prisma.hotel.update({
+      where: { id: hotelId },
+      data: {
+        deletedAt: null,
+        purgeAfterAt: null,
+      },
+      select: {
+        id: true,
+        name: true,
+        suspendedAt: true,
+        suspensionReason: true,
+        deletedAt: true,
+        purgeAfterAt: true,
+      },
+    });
+
+    const syncedHotel = await this.hotelLifecycleService.syncOnboardingStatus(hotelId);
+
+    await this.prisma.auditLog.create({
+      data: {
+        hotelId,
+        actorUserId,
+        action: 'platform.hotel.restore',
+        targetType: 'HOTEL',
+        targetId: hotelId,
+        metadata: {
+          hotelName: updated.name,
+          note,
+          confirmationName: dto.confirmationName.trim(),
         },
       },
     });
@@ -846,6 +1291,9 @@ export class PlatformService {
     page?: number;
     limit?: number;
     action?: string;
+    actor?: string;
+    hotel?: string;
+    targetUser?: string;
     search?: string;
   }) {
     const page = Math.max(1, params.page ?? 1);
@@ -854,6 +1302,11 @@ export class PlatformService {
 
     const where = {
       ...(params.action ? { action: { contains: params.action, mode: 'insensitive' as const } } : {}),
+      ...(params.actor ? { actor: { email: { contains: params.actor, mode: 'insensitive' as const } } } : {}),
+      ...(params.hotel ? { hotel: { name: { contains: params.hotel, mode: 'insensitive' as const } } } : {}),
+      ...(params.targetUser
+        ? { targetUser: { email: { contains: params.targetUser, mode: 'insensitive' as const } } }
+        : {}),
       ...(params.search
         ? {
             OR: [

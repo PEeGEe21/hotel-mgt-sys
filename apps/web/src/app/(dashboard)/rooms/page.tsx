@@ -31,6 +31,7 @@ import {
 import { useDebounce } from '@/hooks/useDebounce';
 import { ApiRoom, useCreateRoom, useRooms } from '@/hooks/room/useRooms';
 import { useFloors } from '@/hooks/useFloors';
+import { useAppStore } from '@/store/app.store';
 
 import {
   Dialog,
@@ -45,8 +46,58 @@ import AddRoomModal from './_components/AddRoomModal';
 
 const amenityIcons: Record<string, any> = { WiFi: Wifi, AC: Wind, TV: Tv, 'Mini Bar': Coffee };
 
+function formatRoomMoney(value: number, currency: string) {
+  return new Intl.NumberFormat('en-NG', {
+    style: 'currency',
+    currency,
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function RoomsGridSkeleton() {
+  return (
+    <div className="space-y-8">
+      {Array.from({ length: 2 }).map((_, section) => (
+        <div key={section}>
+          <div className="mb-3 flex items-center gap-3">
+            <div className="h-3 w-24 animate-pulse rounded bg-[#1e2536]" />
+            <div className="h-px flex-1 bg-[#1e2536]" />
+            <div className="h-3 w-16 animate-pulse rounded bg-[#1e2536]" />
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {Array.from({ length: 8 }).map((__, index) => (
+              <div key={index} className="rounded-xl border border-[#1e2536] bg-[#161b27] p-4">
+                <div className="mb-3 flex items-start justify-between">
+                  <div className="space-y-2">
+                    <div className="h-7 w-16 animate-pulse rounded bg-[#1e2536]" />
+                    <div className="h-3 w-20 animate-pulse rounded bg-[#1e2536]" />
+                  </div>
+                  <div className="h-6 w-20 animate-pulse rounded-full bg-[#1e2536]" />
+                </div>
+                <div className="space-y-2">
+                  <div className="h-3 w-24 animate-pulse rounded bg-[#1e2536]" />
+                  <div className="h-3 w-28 animate-pulse rounded bg-[#1e2536]" />
+                  <div className="h-3 w-20 animate-pulse rounded bg-[#1e2536]" />
+                </div>
+                <div className="mt-4 flex items-center justify-between">
+                  <div className="flex gap-1.5">
+                    {Array.from({ length: 4 }).map((___, icon) => (
+                      <div key={icon} className="h-3 w-3 animate-pulse rounded bg-[#1e2536]" />
+                    ))}
+                  </div>
+                  <div className="h-4 w-20 animate-pulse rounded bg-[#1e2536]" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ─── Room Card (grid) ──────────────────────────────────────────────────────────
-function RoomCard({ room, onClick }: { room: ApiRoom; onClick: () => void }) {
+function RoomCard({ room, onClick, currency }: { room: ApiRoom; onClick: () => void; currency: string }) {
   const s = STATUS_CONFIG[room.status];
   const t = TYPE_CONFIG[room.type];
   return (
@@ -85,7 +136,7 @@ function RoomCard({ room, onClick }: { room: ApiRoom; onClick: () => void }) {
           <p className="text-xs text-slate-600 truncate">{room.notes}</p>
         )}
       </div>
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <div className="flex gap-1.5">
           {room.amenities.slice(0, 4).map((a) => {
             const Icon = amenityIcons[a];
@@ -95,8 +146,8 @@ function RoomCard({ room, onClick }: { room: ApiRoom; onClick: () => void }) {
             <span className="text-[10px] text-slate-600">+{room.amenities.length - 4}</span>
           )}
         </div>
-        <span className="text-xs font-bold text-slate-300">
-          ${room.baseRate}
+        <span className="text-xs font-bold text-slate-300 whitespace-nowrap">
+          {formatRoomMoney(Number(room.baseRate), currency)}
           <span className="text-slate-600 font-normal">/n</span>
         </span>
       </div>
@@ -105,7 +156,7 @@ function RoomCard({ room, onClick }: { room: ApiRoom; onClick: () => void }) {
 }
 
 // ─── Room Row (list) ───────────────────────────────────────────────────────────
-function RoomRow({ room, onClick }: { room: ApiRoom; onClick: () => void }) {
+function RoomRow({ room, onClick, currency }: { room: ApiRoom; onClick: () => void; currency: string }) {
   const s = STATUS_CONFIG[room.status];
   const t = TYPE_CONFIG[room.type];
   return (
@@ -142,7 +193,7 @@ function RoomRow({ room, onClick }: { room: ApiRoom; onClick: () => void }) {
       <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">{room.checkOut ?? '—'}</td>
       <td className="px-4 py-3 text-xs text-slate-400">{room.capacity} guests</td>
       <td className="px-4 py-3 text-sm font-medium text-slate-300 whitespace-nowrap">
-        ${room.baseRate}
+        {formatRoomMoney(Number(room.baseRate), currency)}
         <span className="text-slate-600 text-xs">/night</span>
       </td>
       <td className="px-4 py-3">
@@ -155,6 +206,8 @@ function RoomRow({ room, onClick }: { room: ApiRoom; onClick: () => void }) {
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 export default function RoomsPage() {
   const router = useRouter();
+  const hotel = useAppStore((state) => state.hotel);
+  const currency = hotel?.currency || 'NGN';
   const [view, setView] = useState<'grid' | 'list'>('grid');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<RoomStatus | 'ALL'>('ALL');
@@ -183,8 +236,29 @@ export default function RoomsPage() {
 
   if (isLoading)
     return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 size={24} className="animate-spin text-slate-500" />
+      <div className="space-y-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="space-y-2">
+            <div className="h-8 w-24 animate-pulse rounded bg-[#1e2536]" />
+            <div className="h-4 w-52 animate-pulse rounded bg-[#1e2536]" />
+          </div>
+          <div className="h-10 w-28 animate-pulse rounded-lg bg-[#1e2536]" />
+        </div>
+        <div className="grid grid-cols-3 gap-2 md:grid-cols-7">
+          {Array.from({ length: 7 }).map((_, index) => (
+            <div key={index} className="rounded-xl border border-[#1e2536] bg-[#161b27] px-3 py-3">
+              <div className="mx-auto h-6 w-10 animate-pulse rounded bg-[#1e2536]" />
+              <div className="mx-auto mt-2 h-3 w-14 animate-pulse rounded bg-[#1e2536]" />
+            </div>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="h-10 min-w-48 flex-1 animate-pulse rounded-lg bg-[#161b27]" />
+          <div className="h-10 w-32 animate-pulse rounded-lg bg-[#161b27]" />
+          <div className="h-10 w-32 animate-pulse rounded-lg bg-[#161b27]" />
+          <div className="h-10 w-20 animate-pulse rounded-lg bg-[#161b27]" />
+        </div>
+        <RoomsGridSkeleton />
       </div>
     );
 
@@ -199,7 +273,7 @@ export default function RoomsPage() {
     <>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-white tracking-tight">Rooms</h1>
             <p className="text-slate-500 text-sm mt-0.5">
@@ -303,11 +377,12 @@ export default function RoomsPage() {
                   <div className="flex-1 h-px bg-[#1e2536]" />
                   <p className="text-xs text-slate-600">{floorRooms.length} rooms</p>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
                   {floorRooms.map((room) => (
                     <RoomCard
                       key={room.id}
                       room={room}
+                      currency={currency}
                       onClick={() => router.push(`/rooms/${room.id}`)}
                     />
                   ))}
@@ -355,6 +430,7 @@ export default function RoomsPage() {
                   <RoomRow
                     key={room.id}
                     room={room}
+                    currency={currency}
                     onClick={() => router.push(`/rooms/${room.id}`)}
                   />
                 ))}
@@ -369,7 +445,7 @@ export default function RoomsPage() {
             )}
             {/* Pagination — list view only */}
             {view === 'list' && data && rooms.length > 1 && (
-              <div className="flex items-center justify-between pt-2">
+              <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                 <p className="text-xs text-slate-500">
                   Page {data.page} of {data.totalPages} · {data.total} rooms
                   {isFetching && <span className="ml-2 text-blue-400">Updating…</span>}

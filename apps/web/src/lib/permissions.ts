@@ -16,6 +16,17 @@ export type Role =
   | 'BARTENDER'
   | 'STAFF';
 
+export const TENANT_ROLES: Exclude<Role, 'SUPER_ADMIN'>[] = [
+  'ADMIN',
+  'MANAGER',
+  'RECEPTIONIST',
+  'HOUSEKEEPING',
+  'CASHIER',
+  'COOK',
+  'BARTENDER',
+  'STAFF',
+];
+
 export type Permission =
   // Dashboard
   | 'view:dashboard'

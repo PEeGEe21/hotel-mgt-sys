@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Sidebar from '@/components/layout/Sidebar';
 import Topbar from '@/components/layout/Topbar';
+import { ImpersonationBanner } from '@/components/platform/ImpersonationBanner';
 import { AdminAuthProvider } from '@/components/providers/AdminAuthProvider';
 import { useAdminAuthStore } from '@/store/admin-auth.store';
 import { useHydration } from '@/hooks/useHydration';
@@ -44,7 +45,12 @@ function PlatformLayoutInner({ children }: { children: React.ReactNode }) {
       <Sidebar mobileOpen={mobileSidebarOpen} onMobileClose={() => setMobileSidebarOpen(false)} />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <Topbar onMenuClick={() => setMobileSidebarOpen(true)} />
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6">{children}</main>
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6">
+          <div className="space-y-4">
+            <ImpersonationBanner />
+            {children}
+          </div>
+        </main>
       </div>
     </div>
   );

@@ -20,6 +20,7 @@ import {
 import {
   ROLE_PERMISSIONS,
   PERMISSION_GROUPS,
+  TENANT_ROLES,
   resolvePermissions,
   type Role,
   type Permission,
@@ -49,7 +50,6 @@ type StaffUser = {
 const toRole = (value: string): Role =>
   (
     [
-      'SUPER_ADMIN',
       'ADMIN',
       'MANAGER',
       'RECEPTIONIST',
@@ -454,20 +454,22 @@ export default function UserPermissionsPage() {
 
   const users = useMemo<StaffUser[]>(() => {
     return (
-      data?.map((u) => ({
-        id: u.id,
-        name: u.staffName ?? u.email,
-        role: toRole(u.role),
-        department: u.department ?? '—',
-        position: u.position ?? '—',
-        email: u.email,
-        grants: (u.permissionGrants ?? []) as Permission[],
-        denies: (u.permissionDenies ?? []) as Permission[],
-      })) ?? []
+      data
+        ?.filter((u) => u.role !== 'SUPER_ADMIN')
+        .map((u) => ({
+          id: u.id,
+          name: u.staffName ?? u.email,
+          role: toRole(u.role),
+          department: u.department ?? '—',
+          position: u.position ?? '—',
+          email: u.email,
+          grants: (u.permissionGrants ?? []) as Permission[],
+          denies: (u.permissionDenies ?? []) as Permission[],
+        })) ?? []
     );
   }, [data]);
 
-  const roles = [...new Set(users.map((u) => u.role))] as Role[];
+  const roles = TENANT_ROLES.filter((role) => users.some((user) => user.role === role));
 
   useEffect(() => {
     if (selected) {

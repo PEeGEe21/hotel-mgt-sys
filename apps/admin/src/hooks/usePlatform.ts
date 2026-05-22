@@ -54,9 +54,23 @@ export function usePlatformUserDetail(id: string) {
   });
 }
 
-export function usePlatformAuditLogs(page = 1, limit = 20) {
+export function usePlatformAuditLogs(
+  page = 1,
+  limit = 20,
+  filters?: { action?: string; actor?: string; hotel?: string; targetUser?: string; search?: string },
+) {
+  const params = new URLSearchParams({
+    page: String(page),
+    limit: String(limit),
+  });
+
+  for (const [key, value] of Object.entries(filters ?? {})) {
+    const trimmed = value?.trim();
+    if (trimmed) params.set(key, trimmed);
+  }
+
   return useQuery<PlatformAuditLogsResponse>({
-    queryKey: ['platform', 'audit-logs', page, limit],
-    queryFn: () => platformClientFetch(`/audit-logs?page=${page}&limit=${limit}`),
+    queryKey: ['platform', 'audit-logs', page, limit, filters],
+    queryFn: () => platformClientFetch(`/audit-logs?${params.toString()}`),
   });
 }

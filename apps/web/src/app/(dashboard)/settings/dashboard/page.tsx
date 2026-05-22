@@ -18,6 +18,7 @@ import {
   useDashboardAdminLayouts,
   useUpdateDashboardAdminLayouts,
 } from '@/hooks/dashboard/useDashboardAdminLayouts';
+import { TENANT_ROLES } from '@/lib/permissions';
 
 const roleLabels: Record<Role, string> = {
   SUPER_ADMIN: 'Super Admin',
@@ -60,7 +61,7 @@ export default function DashboardSettingsPage() {
     setRowsByRole(grouped);
   }, [data]);
 
-  const roles = data?.roles ?? [];
+  const roles = (data?.roles ?? []).filter((role) => TENANT_ROLES.includes(role as (typeof TENANT_ROLES)[number]));
   const activeRows = rowsByRole[selectedRole] ?? [];
 
   const changedCount = useMemo(() => {

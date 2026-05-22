@@ -88,3 +88,10 @@ export async function POST(
 ) {
   return proxyRequest(req, params);
 }
+
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: { path: string[] } },
+) {
+  return proxyRequest(req, params);
+}

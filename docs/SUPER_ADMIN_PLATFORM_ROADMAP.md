@@ -564,19 +564,23 @@ Use this as the working implementation tracker.
 - [ ] Move shared platform response/request types into `packages/shared-types`
 - [x] Wire workspace config so `apps/admin` and `packages/shared-types` build cleanly
 - [x] Add admin build/dev scripts
-- [ ] Add separate admin deployment target/env plan
+- [x] Add separate admin deployment target/env plan
 
 ### Milestone 2: Security Foundations
 
 - [x] Add platform-only API guards
-- [ ] Add explicit platform permission keys
-- [ ] Add platform-specific rate limiting for `/api/v1/platform/*`
+- [x] Add explicit platform permission keys
+- [x] Add platform-specific rate limiting for `/api/v1/platform/*`
 - [x] Add admin authentication flow for `apps/admin`
 - [x] Add super-admin MFA foundation
-- [ ] Enforce MFA for `SUPER_ADMIN` accounts before production rollout
-- [ ] Add impersonation TTL rules
-- [ ] Ensure impersonation tokens are non-renewable without explicit restart
+- [x] Enforce MFA for `SUPER_ADMIN` accounts before production rollout
+- [x] Add impersonation TTL rules
+- [x] Ensure impersonation tokens are non-renewable without explicit restart
 - [ ] Add platform audit coverage for login, MFA, and impersonation events
+
+Audit note:
+Login, MFA challenge/setup/verification, and impersonation start/stop events are now audited.
+One follow-up still remains if impersonation becomes active scope again: explicit expiry-event audit coverage.
 
 ### Milestone 3: Platform Read APIs
 
@@ -587,7 +591,7 @@ Use this as the working implementation tracker.
 - [x] Add `GET /api/v1/platform/users/:id`
 - [x] Add `GET /api/v1/platform/audit-logs`
 - [x] Add `GET /api/v1/platform/activity-feed`
-- [ ] Add hotel health summary support
+- [x] Add hotel health summary support
 - [x] Add onboarding status visibility in platform APIs
 
 ### Milestone 4: Admin UI Read Surfaces
@@ -599,20 +603,20 @@ Use this as the working implementation tracker.
 - [x] Build hotel details page
 - [x] Build cross-tenant user lookup page
 - [x] Show hotel onboarding status in UI
-- [ ] Show hotel health indicators in UI
+- [x] Show hotel health indicators in UI
 
 ### Milestone 5: Hotel Management
 
 - [x] Add hotel create endpoint
-- [ ] Add hotel update endpoint
+- [x] Add hotel update endpoint
 - [x] Add hotel suspend endpoint
 - [x] Add hotel reactivate endpoint
-- [ ] Add hotel soft-delete endpoint
-- [ ] Add hotel restore endpoint
+- [x] Add hotel soft-delete endpoint
+- [x] Add hotel restore endpoint
 - [x] Build create hotel UI
 - [x] Build suspend/reactivate UI
-- [ ] Build soft-delete/restore UI
-- [ ] Add guardrails and confirmation flows for destructive actions
+- [x] Build soft-delete/restore UI
+- [x] Add guardrails and confirmation flows for destructive actions
 
 ### Milestone 6: Tenant Onboarding
 
@@ -637,6 +641,11 @@ Use this as the working implementation tracker.
 - [ ] Audit impersonation start/stop/expiry events
 - [ ] Restrict impersonation to allowed platform roles only
 
+Note:
+Impersonation is shelved for now as an active roadmap slice.
+Reason: the current product direction does not yet justify a super-admin-launched impersonation flow when support operators can still sign in directly through the hotel app, and the final deployment model for `apps/admin` vs `apps/web` may require a dedicated cross-domain handoff design.
+Decision: keep the underlying auth capability available, but do not prioritize further platform-console impersonation UX work until the support workflow and hosting model are explicitly confirmed.
+
 ### Milestone 8: Subscription and Feature Controls
 
 - [ ] Add `SubscriptionPlan` model
@@ -652,13 +661,13 @@ Use this as the working implementation tracker.
 
 - [x] Add `onboardingStatus` field(s) to hotel lifecycle model
 - [x] Add `suspendedAt` and suspension metadata
-- [ ] Add `deletedAt` and soft-delete metadata
-- [ ] Add `purgeAfterAt` grace-period support
-- [ ] Add hotel health snapshot model or equivalent service
-- [ ] Track last staff login
-- [ ] Track last booking created
+- [x] Add `deletedAt` and soft-delete metadata
+- [x] Add `purgeAfterAt` grace-period support
+- [x] Add hotel health snapshot model or equivalent service
+- [x] Track last staff login
+- [x] Track last booking created
 - [ ] Track failed payment signal(s)
-- [ ] Define a lightweight hotel health score/status
+- [x] Define a lightweight hotel health score/status
 
 ### Milestone 10: Deployment and Operations
 
@@ -669,25 +678,37 @@ Use this as the working implementation tracker.
 - [ ] Configure admin MFA secret handling
 - [ ] Configure platform rate-limit storage/backing strategy
 - [ ] Add admin monitoring and alerting
-- [ ] Add platform operational runbook
+- [x] Add platform operational runbook
+
+Deployment note:
+The deployment plan and admin runbook are now documented in:
+- [platform-admin-deployment-plan.md](/var/www/html/hotel-os/docs/operations/platform-admin-deployment-plan.md)
+- [platform-admin-runbook.md](/var/www/html/hotel-os/docs/operations/platform-admin-runbook.md)
+The remaining items in this milestone still require real production environment wiring and deployment execution.
 
 ### Phase 1 Done Checklist
 
 - [ ] `apps/admin` deploys successfully
-- [ ] Only `SUPER_ADMIN` can sign in
-- [ ] MFA is enforced for super admins
+- [x] Only `SUPER_ADMIN` can sign in
+- [x] MFA is enforced for super admins
 - [x] Platform dashboard shows cross-hotel stats
 - [x] Platform dashboard shows recent activity feed
 - [x] Hotels can be listed, created, suspended, and reactivated
-- [ ] Soft delete exists without hard deletion
+- [x] Soft delete exists without hard deletion
 - [x] Tenant onboarding creates hotel plus initial admin
 - [x] Onboarding status is visible for every hotel
 - [x] Cross-tenant user lookup works
 - [ ] Impersonation works with audit logs and hard expiry
 
-### Immediate Next Focus
+### Recently Resolved
 
 - add hotel update flow in `apps/admin` and platform API
 - add lifecycle guardrails and confirmation requirements around suspend/reactivate
 - remove the temporary MFA skip before production rollout
 - add audit-log filtering/search in the admin UI
+- add soft-delete/restore with lifecycle metadata
+- add platform-specific rate limiting
+- add hotel health indicators on dashboard and hotel detail pages
+
+Updated focus note:
+After those items, do not treat super-admin impersonation as the default next milestone until we confirm that support teams truly need console-launched impersonation instead of direct hotel-app sign-in, and until the final admin/web domain strategy is settled.

@@ -1,7 +1,17 @@
 import { Role } from '@prisma/client';
 
+export const PLATFORM_PERMISSION_KEYS = [
+  'platform:view-dashboard',
+  'platform:view-hotels',
+  'platform:manage-hotels',
+  'platform:view-users',
+  'platform:view-audit',
+  'platform:impersonate-users',
+] as const;
+
 export const DEFAULT_ROLE_PERMISSIONS: Record<Role, string[]> = {
   SUPER_ADMIN: [
+    ...PLATFORM_PERMISSION_KEYS,
     'view:dashboard',
     'view:rooms',
     'create:rooms',

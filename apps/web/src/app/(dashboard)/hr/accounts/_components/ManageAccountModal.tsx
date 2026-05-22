@@ -3,20 +3,11 @@ import { type UserAccount } from '@/hooks/useUserAccounts';
 import { type Department } from '@/hooks/useDepartments';
 import { type JobTitle } from '@/hooks/useJobTitles';
 import { Role } from '@hotel-os/shared-types';
+import { TENANT_ROLES } from '@/lib/permissions';
 import { X } from 'lucide-react';
 import { Dialog, DialogContent, DialogOverlay, DialogTitle } from '@/components/ui/dialog';
 
-const roles: Role[] = [
-  'SUPER_ADMIN',
-  'ADMIN',
-  'MANAGER',
-  'RECEPTIONIST',
-  'HOUSEKEEPING',
-  'CASHIER',
-  'COOK',
-  'BARTENDER',
-  'STAFF',
-];
+const roles = TENANT_ROLES as Role[];
 
 function ManageAccountModal({
   isOpen,
