@@ -1,4 +1,5 @@
 require('ts-node/register/transpile-only');
+require('./helpers/mock-prisma-client');
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
