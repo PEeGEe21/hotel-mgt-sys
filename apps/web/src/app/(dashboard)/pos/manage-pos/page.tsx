@@ -506,7 +506,7 @@ function SalesTab() {
                 {filteredOrders.map((order) => (
                   <tr
                     key={order.id}
-                    className="border-b border-[#1e2536] last:border-0 hover:bg-white/[0.02] transition-colors"
+                    className="border-b border-[#1e2536] last:border-0 hover:bg-white/[0.02] transition-colors !whitespace-nowrap"
                   >
                     <td className="px-4 py-3 font-mono text-xs text-slate-400">{order.orderNo}</td>
                     <td className="px-4 py-3">
