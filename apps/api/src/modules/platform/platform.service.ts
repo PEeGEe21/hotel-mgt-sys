@@ -3,14 +3,17 @@ import * as bcrypt from 'bcryptjs';
 import { randomInt } from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreatePlatformHotelOnboardingDto } from './dtos/create-platform-hotel-onboarding.dto';
+import { CreatePlatformSuperAdminDto } from './dtos/create-platform-super-admin.dto';
 import { HotelLifecycleService } from '../hotel-lifecycle/hotel-lifecycle.service';
 import { UpdatePlatformHotelDto } from './dtos/update-platform-hotel.dto';
 import { UpdatePlatformHotelLifecycleDto } from './dtos/update-platform-hotel-lifecycle.dto';
+import { EmailService } from '../../common/email/email.service';
 
 type ListHotelsParams = {
   page?: number;
   limit?: number;
   search?: string;
+  all?: boolean;
 };
 
 type ListUsersParams = {
@@ -94,7 +97,92 @@ export class PlatformService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly hotelLifecycleService: HotelLifecycleService,
+    private readonly email: EmailService,
   ) {}
+
+  private getTenantAppUrl(hotelDomain?: string | null) {
+    const baseUrl =
+      process.env.FRONTEND_URL ||
+      process.env.NEXT_PUBLIC_WEB_APP_URL ||
+      'http://localhost:3000';
+
+    if (!hotelDomain) return baseUrl;
+
+    try {
+      const url = new URL(baseUrl);
+      url.hostname = hotelDomain.includes('.') ? hotelDomain : `${hotelDomain}.${url.hostname}`;
+      return url.toString().replace(/\/$/, '');
+    } catch {
+      return baseUrl;
+    }
+  }
+
+  private getPlatformAdminUrl() {
+    return (
+      process.env.PLATFORM_ADMIN_URL ||
+      process.env.NEXT_PUBLIC_PLATFORM_ADMIN_URL ||
+      process.env.ADMIN_APP_URL ||
+      'http://localhost:3001'
+    ).replace(/\/$/, '');
+  }
+
+  private async sendTenantAdminOnboardingEmail(params: {
+    hotelId: string;
+    hotelName: string;
+    hotelDomain: string | null;
+    recipientEmail: string;
+    recipientName: string;
+    temporaryPassword: string;
+  }) {
+    const signInUrl = this.getTenantAppUrl(params.hotelDomain);
+
+    await this.email.sendEmail({
+      to: params.recipientEmail,
+      hotelId: params.hotelId,
+      event: 'platform.hotel.initial_admin_created',
+      subject: `Your ${params.hotelName} admin account is ready`,
+      text: `Hello ${params.recipientName},\n\nYour ${params.hotelName} admin account has been created.\n\nSign-in URL: ${signInUrl}\nEmail: ${params.recipientEmail}\nTemporary password: ${params.temporaryPassword}\n\nYou will be asked to change your password on first sign-in.`,
+      html: `
+        <p>Hello ${params.recipientName},</p>
+        <p>Your <strong>${params.hotelName}</strong> admin account has been created.</p>
+        <p><strong>Sign-in URL:</strong> <a href="${signInUrl}">${signInUrl}</a></p>
+        <p><strong>Email:</strong> ${params.recipientEmail}</p>
+        <p><strong>Temporary password:</strong> ${params.temporaryPassword}</p>
+        <p>You will be asked to change your password on first sign-in.</p>
+      `,
+      metadata: {
+        hotelName: params.hotelName,
+        recipientEmail: params.recipientEmail,
+      },
+    });
+  }
+
+  private async sendSuperAdminWelcomeEmail(params: {
+    recipientEmail: string;
+    recipientName: string;
+    temporaryPassword: string;
+  }) {
+    const signInUrl = `${this.getPlatformAdminUrl()}/login`;
+
+    await this.email.sendEmail({
+      to: params.recipientEmail,
+      hotelId: null,
+      event: 'platform.super_admin.created',
+      subject: 'Your HotelOS platform admin account is ready',
+      text: `Hello ${params.recipientName},\n\nA HotelOS super admin account has been created for you.\n\nSign-in URL: ${signInUrl}\nEmail: ${params.recipientEmail}\nTemporary password: ${params.temporaryPassword}\n\nYou will complete MFA setup the first time you sign in.`,
+      html: `
+        <p>Hello ${params.recipientName},</p>
+        <p>A HotelOS super admin account has been created for you.</p>
+        <p><strong>Sign-in URL:</strong> <a href="${signInUrl}">${signInUrl}</a></p>
+        <p><strong>Email:</strong> ${params.recipientEmail}</p>
+        <p><strong>Temporary password:</strong> ${params.temporaryPassword}</p>
+        <p>You will complete MFA setup the first time you sign in.</p>
+      `,
+      metadata: {
+        recipientEmail: params.recipientEmail,
+      },
+    });
+  }
 
   private deriveHotelHealth(params: {
     suspendedAt: Date | null;
@@ -261,7 +349,7 @@ export class PlatformService {
       throw new ConflictException('Could not generate a unique employee code. Please try again.');
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const hotel = await tx.hotel.create({
         data: {
           name: hotelName,
@@ -366,6 +454,17 @@ export class PlatformService {
         },
       };
     });
+
+    await this.sendTenantAdminOnboardingEmail({
+      hotelId: result.hotel.id,
+      hotelName: result.hotel.name,
+      hotelDomain: domain ?? null,
+      recipientEmail: result.admin.email,
+      recipientName: result.admin.name,
+      temporaryPassword,
+    });
+
+    return result;
   }
 
   async getStats() {
@@ -410,8 +509,8 @@ export class PlatformService {
 
   async listHotels(params: ListHotelsParams) {
     const page = Math.max(1, params.page ?? 1);
-    const limit = Math.min(Math.max(params.limit ?? 20, 5), 100);
-    const skip = (page - 1) * limit;
+    const limit = params.all ? undefined : Math.min(Math.max(params.limit ?? 20, 5), 100);
+    const skip = params.all || !limit ? 0 : (page - 1) * limit;
 
     const where = params.search
       ? {
@@ -429,8 +528,7 @@ export class PlatformService {
       this.prisma.hotel.findMany({
         where,
         orderBy: { createdAt: 'desc' },
-        skip,
-        take: limit,
+        ...(params.all ? {} : { skip, take: limit }),
         select: {
           id: true,
           name: true,
@@ -566,9 +664,223 @@ export class PlatformService {
     return {
       hotels,
       total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
+      page: params.all ? 1 : page,
+      limit: params.all ? hotels.length : limit,
+      totalPages: params.all ? 1 : Math.ceil(total / (limit ?? 20)),
+    };
+  }
+
+  async search(query?: string) {
+    const term = query?.trim();
+    if (!term || term.length < 2) {
+      return { hotels: [], users: [], actions: [] };
+    }
+
+    const [hotels, users, actions] = await Promise.all([
+      this.prisma.hotel.findMany({
+        where: {
+          OR: [
+            { name: { contains: term, mode: 'insensitive' } },
+            { domain: { contains: term, mode: 'insensitive' } },
+            { city: { contains: term, mode: 'insensitive' } },
+            { country: { contains: term, mode: 'insensitive' } },
+          ],
+        },
+        orderBy: { updatedAt: 'desc' },
+        take: 5,
+        select: {
+          id: true,
+          name: true,
+          city: true,
+          country: true,
+          domain: true,
+        },
+      }),
+      this.prisma.user.findMany({
+        where: {
+          OR: [
+            { email: { contains: term, mode: 'insensitive' } },
+            { username: { contains: term, mode: 'insensitive' } },
+            { staff: { firstName: { contains: term, mode: 'insensitive' } } },
+            { staff: { lastName: { contains: term, mode: 'insensitive' } } },
+            { staff: { employeeCode: { contains: term, mode: 'insensitive' } } },
+          ],
+        },
+        orderBy: { updatedAt: 'desc' },
+        take: 5,
+        select: {
+          id: true,
+          email: true,
+          username: true,
+          role: true,
+          staff: {
+            select: {
+              firstName: true,
+              lastName: true,
+              hotel: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+          },
+        },
+      }),
+      this.prisma.auditLog.findMany({
+        where: {
+          OR: [
+            { action: { contains: term, mode: 'insensitive' } },
+            { actor: { email: { contains: term, mode: 'insensitive' } } },
+            { hotel: { name: { contains: term, mode: 'insensitive' } } },
+          ],
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+        select: {
+          id: true,
+          action: true,
+          createdAt: true,
+          actor: {
+            select: {
+              email: true,
+              staff: { select: { firstName: true, lastName: true } },
+            },
+          },
+          hotel: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      }),
+    ]);
+
+    return {
+      hotels,
+      users: users.map((user) => ({
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        name: user.staff ? `${user.staff.firstName} ${user.staff.lastName}`.trim() : user.username ?? user.email,
+        hotel: user.staff?.hotel ?? null,
+      })),
+      actions: actions.map((action) => ({
+        id: action.id,
+        action: action.action,
+        createdAt: action.createdAt,
+        actorName: action.actor.staff
+          ? `${action.actor.staff.firstName} ${action.actor.staff.lastName}`.trim()
+          : action.actor.email,
+        hotel: action.hotel,
+      })),
+    };
+  }
+
+  async listSuperAdmins(search?: string) {
+    const term = search?.trim();
+    const rows = await this.prisma.user.findMany({
+      where: {
+        role: 'SUPER_ADMIN',
+        ...(term
+          ? {
+              OR: [
+                { email: { contains: term, mode: 'insensitive' } },
+                { username: { contains: term, mode: 'insensitive' } },
+              ],
+            }
+          : {}),
+      },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        isActive: true,
+        lastLoginAt: true,
+        createdAt: true,
+        mfaEnabled: true,
+      },
+    });
+
+    return {
+      superAdmins: rows.map((row) => ({
+        id: row.id,
+        email: row.email,
+        name: row.username ?? row.email,
+        isActive: row.isActive,
+        lastLoginAt: row.lastLoginAt,
+        createdAt: row.createdAt,
+        mfaEnabled: row.mfaEnabled,
+      })),
+    };
+  }
+
+  async createSuperAdmin(actorUserId: string, dto: CreatePlatformSuperAdminDto) {
+    const email = dto.email.trim().toLowerCase();
+    const name = dto.name.trim();
+
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email },
+      select: { id: true },
+    });
+
+    if (existingUser) {
+      throw new ConflictException('A user with this email already exists.');
+    }
+
+    const temporaryPassword = generateTemporaryPassword();
+    const passwordHash = await bcrypt.hash(temporaryPassword, 10);
+
+    const user = await this.prisma.user.create({
+      data: {
+        email,
+        username: name,
+        passwordHash,
+        role: 'SUPER_ADMIN',
+        isActive: true,
+        mustChangePassword: true,
+      },
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        createdAt: true,
+      },
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        hotelId: null,
+        actorUserId,
+        action: 'platform.super_admin.created',
+        targetType: 'USER',
+        targetId: user.id,
+        targetUserId: user.id,
+        metadata: {
+          email: user.email,
+          name,
+        },
+      },
+    });
+
+    await this.sendSuperAdminWelcomeEmail({
+      recipientEmail: user.email,
+      recipientName: name,
+      temporaryPassword,
+    });
+
+    return {
+      superAdmin: {
+        id: user.id,
+        email: user.email,
+        name: user.username ?? user.email,
+        createdAt: user.createdAt,
+        // remove when email sending is set
+        temporaryPassword: temporaryPassword
+      },
+      emailQueued: true,
     };
   }
 
@@ -951,7 +1263,7 @@ export class PlatformService {
     }
 
     const now = new Date();
-    const purgeAfter = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const purgeAfter = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days from now
 
     const updated = await this.prisma.hotel.update({
       where: { id: hotelId },

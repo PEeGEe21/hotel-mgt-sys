@@ -6,7 +6,9 @@ import type {
   PlatformActivityFeedResponse,
   PlatformAuditLogsResponse,
   PlatformHotelsResponse,
+  PlatformSearchResponse,
   PlatformStatsResponse,
+  PlatformSuperAdminsResponse,
   PlatformUsersResponse,
 } from '@/lib/platform-types';
 
@@ -24,17 +26,54 @@ export function usePlatformActivityFeed(limit = 6) {
   });
 }
 
-export function usePlatformHotels(page = 1, limit = 20) {
+export function usePlatformHotels(page = 1, limit = 20, options?: { search?: string; all?: boolean }) {
+  const params = new URLSearchParams();
+  if (!options?.all) {
+    params.set('page', String(page));
+    params.set('limit', String(limit));
+  }
+  if (options?.search?.trim()) params.set('search', options.search.trim());
+  if (options?.all) params.set('all', 'true');
+
   return useQuery<PlatformHotelsResponse>({
-    queryKey: ['platform', 'hotels', page, limit],
-    queryFn: () => platformClientFetch(`/hotels?page=${page}&limit=${limit}`),
+    queryKey: ['platform', 'hotels', page, limit, options],
+    queryFn: () => platformClientFetch(`/hotels?${params.toString()}`),
   });
 }
 
-export function usePlatformUsers(page = 1, limit = 20) {
+export function usePlatformUsers(page = 1, limit = 20, filters?: { search?: string; hotelId?: string; role?: string }) {
+  const params = new URLSearchParams({
+    page: String(page),
+    limit: String(limit),
+  });
+  for (const [key, value] of Object.entries(filters ?? {})) {
+    const trimmed = value?.trim();
+    if (trimmed) params.set(key, trimmed);
+  }
+
   return useQuery<PlatformUsersResponse>({
-    queryKey: ['platform', 'users', page, limit],
-    queryFn: () => platformClientFetch(`/users?page=${page}&limit=${limit}`),
+    queryKey: ['platform', 'users', page, limit, filters],
+    queryFn: () => platformClientFetch(`/users?${params.toString()}`),
+  });
+}
+
+export function usePlatformSearch(query: string) {
+  const term = query.trim();
+
+  return useQuery<PlatformSearchResponse>({
+    queryKey: ['platform', 'search', term],
+    queryFn: () => platformClientFetch(`/search?q=${encodeURIComponent(term)}`),
+    enabled: term.length >= 2,
+  });
+}
+
+export function usePlatformSuperAdmins(search = '') {
+  const params = new URLSearchParams();
+  if (search.trim()) params.set('search', search.trim());
+
+  return useQuery<PlatformSuperAdminsResponse>({
+    queryKey: ['platform', 'super-admins', search],
+    queryFn: () => platformClientFetch(`/super-admins?${params.toString()}`),
   });
 }
 

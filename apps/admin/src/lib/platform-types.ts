@@ -74,6 +74,36 @@ export type PlatformHotelsResponse = {
   totalPages: number;
 };
 
+export type PlatformSearchResponse = {
+  hotels: Array<{
+    id: string;
+    name: string;
+    city: string;
+    country: string;
+    domain: string | null;
+  }>;
+  users: Array<{
+    id: string;
+    email: string;
+    role: string;
+    name: string;
+    hotel: {
+      id: string;
+      name: string;
+    } | null;
+  }>;
+  actions: Array<{
+    id: string;
+    action: string;
+    createdAt: string;
+    actorName: string;
+    hotel: {
+      id: string;
+      name: string;
+    } | null;
+  }>;
+};
+
 export type PlatformUsersResponse = {
   users: Array<{
     id: string;
@@ -102,6 +132,18 @@ export type PlatformUsersResponse = {
   page: number;
   limit: number;
   totalPages: number;
+};
+
+export type PlatformSuperAdminsResponse = {
+  superAdmins: Array<{
+    id: string;
+    email: string;
+    name: string;
+    isActive: boolean;
+    lastLoginAt: string | null;
+    createdAt: string;
+    mfaEnabled: boolean;
+  }>;
 };
 
 export type PlatformHotelDetailResponse = {

@@ -229,6 +229,66 @@ export async function getAdminMeAction(): Promise<{ success: true; user: AdminAu
   }
 }
 
+export async function updateAdminProfileAction(payload: {
+  name: string;
+  email: string;
+}): Promise<{ success: true; user: AdminAuthUser } | { success: false; message: string }> {
+  const accessToken = await getAdminAccessToken();
+  if (!accessToken) {
+    return { success: false, message: 'Your admin session is no longer available.' };
+  }
+
+  try {
+    const response = await adminApiFetch('/auth/me', {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({
+        name: payload.name.trim(),
+        email: payload.email.trim().toLowerCase(),
+      }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      return { success: false, message: data?.message ?? 'Could not update your profile.' };
+    }
+
+    return {
+      success: true,
+      user: normalizeUser(data.user),
+    };
+  } catch {
+    return { success: false, message: 'Could not reach the server. Check your connection.' };
+  }
+}
+
+export async function adminChangePasswordAction(payload: {
+  currentPassword: string;
+  newPassword: string;
+}): Promise<{ success: true; message: string } | { success: false; message: string }> {
+  const accessToken = await getAdminAccessToken();
+  if (!accessToken) {
+    return { success: false, message: 'Your admin session is no longer available.' };
+  }
+
+  try {
+    const response = await adminApiFetch('/auth/change-password', {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      return { success: false, message: data?.message ?? 'Could not change your password.' };
+    }
+
+    return { success: true, message: data?.message ?? 'Password changed successfully.' };
+  } catch {
+    return { success: false, message: 'Could not reach the server. Check your connection.' };
+  }
+}
+
 async function readTenantMeWithRefresh() {
   const cookieStore = await cookies();
   let accessToken = await getHotelAccessToken();

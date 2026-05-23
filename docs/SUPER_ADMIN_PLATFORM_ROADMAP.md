@@ -602,6 +602,7 @@ One follow-up still remains if impersonation becomes active scope again: explici
 - [x] Build hotels list page
 - [x] Build hotel details page
 - [x] Build cross-tenant user lookup page
+- [x] Add global topbar search across hotels, users, and actions
 - [x] Show hotel onboarding status in UI
 - [x] Show hotel health indicators in UI
 
@@ -622,6 +623,7 @@ One follow-up still remains if impersonation becomes active scope again: explici
 
 - [x] Add hotel onboarding endpoint
 - [x] Create initial tenant admin during onboarding
+- [x] Email initial tenant admin sign-in details during onboarding
 - [x] Seed baseline hotel data during onboarding
 - [x] Track onboarding status progression
 - [x] Define onboarding states:
@@ -645,6 +647,13 @@ Note:
 Impersonation is shelved for now as an active roadmap slice.
 Reason: the current product direction does not yet justify a super-admin-launched impersonation flow when support operators can still sign in directly through the hotel app, and the final deployment model for `apps/admin` vs `apps/web` may require a dedicated cross-domain handoff design.
 Decision: keep the underlying auth capability available, but do not prioritize further platform-console impersonation UX work until the support workflow and hosting model are explicitly confirmed.
+
+### Milestone 7b: Platform Identity Management
+
+- [x] Add super-admin management page in `apps/admin`
+- [x] Add create-super-admin platform API flow
+- [x] Email new super-admin credentials on account creation
+- [x] Add self-service super-admin profile page
 
 ### Milestone 8: Subscription and Feature Controls
 

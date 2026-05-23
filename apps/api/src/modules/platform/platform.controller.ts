@@ -1,8 +1,19 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Request, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Request,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard, Permissions, PermissionsGuard, Roles, RolesGuard } from '../auth/guards';
 import { PlatformService } from './platform.service';
 import { CreatePlatformHotelOnboardingDto } from './dtos/create-platform-hotel-onboarding.dto';
+import { CreatePlatformSuperAdminDto } from './dtos/create-platform-super-admin.dto';
 import { UpdatePlatformHotelLifecycleDto } from './dtos/update-platform-hotel-lifecycle.dto';
 import { UpdatePlatformHotelDto } from './dtos/update-platform-hotel.dto';
 import { QueryPlatformAuditLogsDto } from './dtos/query-platform-audit-logs.dto';
@@ -14,6 +25,13 @@ import { QueryPlatformAuditLogsDto } from './dtos/query-platform-audit-logs.dto'
 @Controller('platform')
 export class PlatformController {
   constructor(private readonly platformService: PlatformService) {}
+
+  @Get('super-admins')
+  @Permissions('platform:manage-admins')
+  @ApiOperation({ summary: 'List super admin accounts' })
+  listSuperAdmins(@Query('search') search?: string) {
+    return this.platformService.listSuperAdmins(search);
+  }
 
   @Get('stats')
   @Permissions('platform:view-dashboard')
@@ -29,11 +47,13 @@ export class PlatformController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('search') search?: string,
+    @Query('all') all?: string,
   ) {
     return this.platformService.listHotels({
       page: page ? Number(page) : undefined,
       limit: limit ? Number(limit) : undefined,
       search,
+      all: all === 'true',
     });
   }
 
@@ -61,6 +81,20 @@ export class PlatformController {
       role,
       hotelId,
     });
+  }
+
+  @Get('search')
+  @Permissions('platform:view-dashboard')
+  @ApiOperation({ summary: 'Search across hotels, users, and recent platform actions' })
+  search(@Query('q') query?: string) {
+    return this.platformService.search(query);
+  }
+
+  @Post('super-admins')
+  @Permissions('platform:manage-admins')
+  @ApiOperation({ summary: 'Create a new super admin account and email temporary credentials' })
+  createSuperAdmin(@Request() req: any, @Body() dto: CreatePlatformSuperAdminDto) {
+    return this.platformService.createSuperAdmin(req.user.sub, dto);
   }
 
   @Get('users/:id')
@@ -109,28 +143,44 @@ export class PlatformController {
   @Post('hotels/:id/suspend')
   @Permissions('platform:manage-hotels')
   @ApiOperation({ summary: 'Suspend a hotel tenant' })
-  suspendHotel(@Request() req: any, @Param('id') id: string, @Body() dto: UpdatePlatformHotelLifecycleDto) {
+  suspendHotel(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Body() dto: UpdatePlatformHotelLifecycleDto,
+  ) {
     return this.platformService.suspendHotel(req.user.sub, id, dto);
   }
 
   @Post('hotels/:id/reactivate')
   @Permissions('platform:manage-hotels')
   @ApiOperation({ summary: 'Reactivate a suspended hotel tenant' })
-  reactivateHotel(@Request() req: any, @Param('id') id: string, @Body() dto: UpdatePlatformHotelLifecycleDto) {
+  reactivateHotel(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Body() dto: UpdatePlatformHotelLifecycleDto,
+  ) {
     return this.platformService.reactivateHotel(req.user.sub, id, dto);
   }
 
   @Post('hotels/:id/soft-delete')
   @Permissions('platform:manage-hotels')
   @ApiOperation({ summary: 'Soft-delete a hotel tenant with a grace-period purge window' })
-  softDeleteHotel(@Request() req: any, @Param('id') id: string, @Body() dto: UpdatePlatformHotelLifecycleDto) {
+  softDeleteHotel(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Body() dto: UpdatePlatformHotelLifecycleDto,
+  ) {
     return this.platformService.softDeleteHotel(req.user.sub, id, dto);
   }
 
   @Post('hotels/:id/restore')
   @Permissions('platform:manage-hotels')
   @ApiOperation({ summary: 'Restore a soft-deleted hotel tenant before purge' })
-  restoreHotel(@Request() req: any, @Param('id') id: string, @Body() dto: UpdatePlatformHotelLifecycleDto) {
+  restoreHotel(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Body() dto: UpdatePlatformHotelLifecycleDto,
+  ) {
     return this.platformService.restoreHotel(req.user.sub, id, dto);
   }
 }

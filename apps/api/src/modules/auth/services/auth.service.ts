@@ -352,7 +352,14 @@ export class AuthService {
       if (dto.email && dto.email !== user.email) {
         await tx.user.update({
           where: { id: user.id },
-          data: { email: dto.email },
+          data: { email: dto.email.trim().toLowerCase() },
+        });
+      }
+
+      if (!user.staff && dto.name) {
+        await tx.user.update({
+          where: { id: user.id },
+          data: { username: dto.name.trim() },
         });
       }
 
@@ -975,8 +982,9 @@ export class AuthService {
 
   private sanitizeUser(user: any) {
     const staff = user.staff;
-    const fullName = staff ? `${staff.firstName} ${staff.lastName}`.trim() : user.email;
-    const username = user.email?.includes('@') ? user.email.split('@')[0] : user.email;
+    const fallbackUsername = user.email?.includes('@') ? user.email.split('@')[0] : user.email;
+    const username = user.username ?? fallbackUsername;
+    const fullName = staff ? `${staff.firstName} ${staff.lastName}`.trim() : username ?? user.email;
 
     return {
       id: user.id,

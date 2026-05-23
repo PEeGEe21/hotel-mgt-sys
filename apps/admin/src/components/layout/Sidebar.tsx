@@ -10,6 +10,7 @@ const nav = [
   { label: 'Dashboard', href: '/', icon: LayoutDashboard },
   { label: 'Hotels', href: '/hotels', icon: Building2 },
   { label: 'Users', href: '/users', icon: Users },
+  { label: 'Super Admins', href: '/admins', icon: Shield },
   { label: 'Audit Logs', href: '/audit-logs', icon: ScrollText },
 ];
 

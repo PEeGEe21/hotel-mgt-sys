@@ -118,6 +118,7 @@ async function bootstrap() {
   SwaggerModule.setup('api/docs', app, document);
 
   await app.listen(port);
+  logger.log('HOTEL OS API FROM THIS WORKTREE', 'Bootstrap');
   logger.log(`HotelOS API running on http://localhost:${port}`, 'Bootstrap');
   logger.log(`API Docs at http://localhost:${port}/api/docs`, 'Bootstrap');
 }

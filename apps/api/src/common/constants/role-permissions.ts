@@ -5,6 +5,7 @@ export const PLATFORM_PERMISSION_KEYS = [
   'platform:view-hotels',
   'platform:manage-hotels',
   'platform:view-users',
+  'platform:manage-admins',
   'platform:view-audit',
   'platform:impersonate-users',
 ] as const;

@@ -2,10 +2,10 @@
   "name": "@hotel-os/api",
   "version": "1.0.0",
   "scripts": {
-    "build": "prisma generate && nest build",
-    "dev": "prisma generate && nest start --watch",
+    "build": "rm -rf dist && prisma generate && nest build",
+    "dev": "prisma generate && NODE_PATH=. node --watch --require ts-node/register/transpile-only src/main.ts",
     "migrate:deploy": "prisma migrate deploy",
-    "start": "node dist/main",
+    "start": "node dist/apps/api/src/main.js",
     "lint": "node -e \"console.log('API lint is not configured yet; skipping.')\"",
     "test": "node --test",
     "seed": "ts-node prisma/seed.ts",

@@ -289,7 +289,7 @@ export default function RoomDetailPage() {
       <div className="max-w-full flex w-full gap-4 flex-wrap">
         <div className="space-y-6 flex-[7]">
           {/* Back + header */}
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
             <div className="flex items-center gap-3">
               <button
                 onClick={() => router.back()}

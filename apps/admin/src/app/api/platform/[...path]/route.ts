@@ -3,9 +3,7 @@ import { cookies } from 'next/headers';
 import { adminRefreshAction } from '@/actions/admin-auth.actions';
 
 const API_URL =
-  process.env.API_URL ||
-  process.env.NEXT_PUBLIC_API_URL ||
-  'http://localhost:4000/api/v1';
+  process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
 
 const ADMIN_COOKIE_ACCESS = 'admin_access_token';
 const TENANT_COOKIE_ACCESS = 'hotel_access_token';
@@ -29,9 +27,9 @@ async function proxyRequest(req: NextRequest, params: { path: string[] }) {
 
   const upstreamPath = params.path.join('/');
   const search = req.nextUrl.search || '';
-  const body =
-    req.method === 'GET' || req.method === 'HEAD' ? undefined : await req.text();
+  const body = req.method === 'GET' || req.method === 'HEAD' ? undefined : await req.text();
 
+  console.log(API_URL, 'API_URL');
   const sendRequest = (accessToken: string) =>
     fetch(`${API_URL}/platform/${upstreamPath}${search}`, {
       method: req.method,
@@ -75,23 +73,14 @@ async function proxyRequest(req: NextRequest, params: { path: string[] }) {
   });
 }
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { path: string[] } },
-) {
+export async function GET(req: NextRequest, { params }: { params: { path: string[] } }) {
   return proxyRequest(req, params);
 }
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { path: string[] } },
-) {
+export async function POST(req: NextRequest, { params }: { params: { path: string[] } }) {
   return proxyRequest(req, params);
 }
 
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: { path: string[] } },
-) {
+export async function PATCH(req: NextRequest, { params }: { params: { path: string[] } }) {
   return proxyRequest(req, params);
 }

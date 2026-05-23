@@ -1,10 +1,11 @@
 'use client';
 
 import Link from 'next/link';
+import { useDeferredValue, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AuthNotice } from '@/components/platform/AuthNotice';
 import { PaginationControls } from '@/components/platform/PaginationControls';
-import { usePlatformUsers } from '@/hooks/usePlatform';
+import { usePlatformHotels, usePlatformUsers } from '@/hooks/usePlatform';
 import { PlatformClientError } from '@/lib/platform-client';
 
 function formatDate(value: string | null) {
@@ -20,13 +21,36 @@ export function UsersPageClient() {
   const searchParams = useSearchParams();
   const page = Math.max(1, Number(searchParams?.get('page') ?? '1'));
   const limit = 20;
-  const usersQuery = usePlatformUsers(page, limit);
+  const [search, setSearch] = useState(searchParams?.get('search') ?? '');
+  const [selectedHotelId, setSelectedHotelId] = useState(searchParams?.get('hotelId') ?? '');
+  const deferredSearch = useDeferredValue(search);
+  const usersQuery = usePlatformUsers(page, limit, {
+    search: deferredSearch,
+    hotelId: selectedHotelId,
+  });
+  const hotelsQuery = usePlatformHotels(1, 20, { all: true });
   const users = usersQuery.data?.users ?? [];
   const authMessage = usersQuery.error instanceof PlatformClientError ? usersQuery.error.message : null;
+  const hotelOptions = hotelsQuery.data?.hotels ?? [];
 
   const changePage = (nextPage: number) => {
     const params = new URLSearchParams(searchParams?.toString() ?? '');
     params.set('page', String(nextPage));
+    router.push(`/users?${params.toString()}`);
+  };
+
+  const updateFilters = (next: { search?: string; hotelId?: string }) => {
+    const params = new URLSearchParams(searchParams?.toString() ?? '');
+    const nextSearch = next.search ?? search;
+    const nextHotelId = next.hotelId ?? selectedHotelId;
+
+    if (nextSearch.trim()) params.set('search', nextSearch.trim());
+    else params.delete('search');
+
+    if (nextHotelId) params.set('hotelId', nextHotelId);
+    else params.delete('hotelId');
+
+    params.set('page', '1');
     router.push(`/users?${params.toString()}`);
   };
 
@@ -43,6 +67,41 @@ export function UsersPageClient() {
         </div>
 
         {authMessage ? <AuthNotice message={authMessage} /> : null}
+
+        <section className="grid gap-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:grid-cols-[1.15fr_0.85fr]">
+          <label className="text-sm text-slate-700">
+            <span className="mb-1.5 block font-medium">Search users</span>
+            <input
+              value={search}
+              onChange={(event) => {
+                const nextValue = event.target.value;
+                setSearch(nextValue);
+                updateFilters({ search: nextValue });
+              }}
+              placeholder="Email, name, username, or employee code"
+              className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 outline-none focus:border-teal-700"
+            />
+          </label>
+          <label className="text-sm text-slate-700">
+            <span className="mb-1.5 block font-medium">Filter by hotel</span>
+            <select
+              value={selectedHotelId}
+              onChange={(event) => {
+                const nextValue = event.target.value;
+                setSelectedHotelId(nextValue);
+                updateFilters({ hotelId: nextValue });
+              }}
+              className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 outline-none focus:border-teal-700"
+            >
+              <option value="">All hotels</option>
+              {hotelOptions.map((hotel) => (
+                <option key={hotel.id} value={hotel.id}>
+                  {hotel.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </section>
 
         <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
           <table className="min-w-full divide-y divide-slate-200 text-left">

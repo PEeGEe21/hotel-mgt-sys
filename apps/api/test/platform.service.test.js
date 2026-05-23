@@ -57,7 +57,12 @@ function createService(overrides = {}) {
     ...overrides.hotelLifecycleService,
   };
 
-  return new PlatformService(prisma, hotelLifecycleService);
+  const email = {
+    sendEmail: async () => ({}),
+    ...overrides.email,
+  };
+
+  return new PlatformService(prisma, hotelLifecycleService, email);
 }
 
 test('suspendHotel rejects when confirmation name does not match hotel name', async () => {
