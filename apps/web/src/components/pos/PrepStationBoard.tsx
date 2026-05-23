@@ -25,6 +25,7 @@ import {
 import { useAuthStore } from '@/store/auth.store';
 import { usePermissions } from '@/hooks/usePermissions';
 import { usePrepBoard, usePrepRealtime, useUpdatePrepItemStatus, type PrepStation, type PrepStatus, type PrepBoardTicketItem } from '@/hooks/pos/usePrepBoard';
+import CancelPosOrderModal from '@/components/pos/CancelPosOrderModal';
 
 const BOARD_CONFIG = {
   KITCHEN: {
@@ -206,6 +207,7 @@ export default function PrepStationBoard({
   const { isAuthenticated, user, logout } = useAuthStore();
   const { ready, can } = usePermissions();
   const [now, setNow] = useState(() => Date.now());
+  const [cancelOrder, setCancelOrder] = useState<any | null>(null);
 
   const permission =
     station === 'KITCHEN' ? 'view:pos-kitchen-board' : 'view:pos-bar-board';
@@ -467,6 +469,27 @@ export default function PrepStationBoard({
                                     : 'Unassigned'}
                                 </p>
                                 <p className="mt-1">Prep complete: {ticket.prepSummary.ready + ticket.prepSummary.fulfilled}/{ticket.prepSummary.totalRoutedItems}</p>
+                                {can('void:pos') ? (
+                                  <button
+                                    onClick={() =>
+                                      setCancelOrder({
+                                        id: ticket.orderId,
+                                        orderNo: ticket.orderNo,
+                                        tableNo: ticket.tableNo,
+                                        roomNo: ticket.roomNo,
+                                        posTerminal: null,
+                                        status: ticket.orderStatus,
+                                        total: 0,
+                                        isPaid: ticket.isPaid,
+                                        reservationId: null,
+                                        items: [],
+                                      })
+                                    }
+                                    className="mt-3 inline-flex items-center rounded-full border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-red-300 transition-colors hover:bg-red-500/20"
+                                  >
+                                    Cancel Order
+                                  </button>
+                                ) : null}
                               </div>
                             </div>
 
@@ -492,6 +515,13 @@ export default function PrepStationBoard({
           </div>
         </div>
       </div>
+      {cancelOrder && (
+        <CancelPosOrderModal
+          order={cancelOrder as any}
+          onClose={() => setCancelOrder(null)}
+          onSuccess={() => refetch()}
+        />
+      )}
     </div>
   );
 }

@@ -154,7 +154,7 @@ export default function NotificationInboxBell() {
       <DropdownMenuContent
         align="end"
         sideOffset={10}
-        className="w-[calc(100vw-1rem)] min-w-0 max-w-[380px] overflow-hidden rounded-2xl border border-[#1e2536] bg-[#161b27] p-0 text-white shadow-2xl sm:w-[380px] sm:min-w-[380px]"
+        className="w-[calc(100vw-1.5rem)] min-w-0 max-w-[380px] rounded-2xl border border-[#1e2536] bg-[#161b27] p-0 text-white shadow-2xl sm:w-[380px] sm:min-w-[380px]"
       >
         <div className="flex items-center justify-between px-4 pt-3">
           <div>
@@ -177,8 +177,8 @@ export default function NotificationInboxBell() {
         </div>
         <DropdownMenuSeparator className="mx-0 bg-[#1e2536]" />
 
-        <ScrollArea className="max-h-[min(60vh,320px)]">
-          <div className="space-y-2 px-3 py-3">
+        <ScrollArea className="max-h-[320px] ">
+          <div className="space-y-2 py-3 px-3 pb-20">
             {isLoading && (
               <>
                 {Array.from({ length: 4 }).map((_, index) => (
@@ -215,11 +215,11 @@ export default function NotificationInboxBell() {
         </ScrollArea>
 
         <DropdownMenuSeparator className="mx-0 bg-[#1e2536]" />
-        <div className="px-2 py-2">
+        <div className="px-2 pt-2 bottom-0 absolute w-full z-10">
           <Button
             asChild
             variant="ghost"
-            className="h-10 w-full justify-between rounded-xl bg-[#0f1117] text-slate-300 hover:bg-[#0f1117] hover:text-white"
+            className="bg-[#161b27] h-10 w-full justify-between rounded-xl text-slate-300 hover:bg-[#161b27] z-10 hover:text-white"
           >
             <Link href="/notifications">
               View all notifications

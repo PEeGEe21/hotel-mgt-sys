@@ -710,6 +710,12 @@ export class PosOrdersService {
       throw new BadRequestException('Order must have at least one item.');
     }
 
+    if (dto.type === 'ROOM_SERVICE' && !dto.reservationId) {
+      throw new BadRequestException(
+        'Room-service orders must be linked to an active checked-in reservation.',
+      );
+    }
+
     const terminalContext = await this.resolveTerminalOperator({
       hotelId,
       posTerminalId: dto.posTerminalId,
@@ -727,8 +733,17 @@ export class PosOrdersService {
     if (dto.reservationId) {
       const res = await this.prisma.reservation.findFirst({
         where: { id: dto.reservationId, hotelId, status: 'CHECKED_IN' },
+        select: {
+          id: true,
+          room: { select: { number: true } },
+        },
       });
       if (!res) throw new NotFoundException('Active reservation not found for room charge.');
+      if (dto.roomNo && res.room?.number && dto.roomNo !== res.room.number) {
+        throw new BadRequestException(
+          'Room number does not match the selected checked-in reservation.',
+        );
+      }
     }
 
     // Fetch all products in one query
@@ -1236,22 +1251,24 @@ export class PosOrdersService {
       }
 
       // 4. Walk-in path — auto-create Invoice (payment recorded separately via PayOrderDto)
-      // Invoice is created here but payment is recorded when guest actually pays
-      // The order stays isPaid=false until payOrder() is called
-      const invoiceNo = await this.genUniqueInvoiceNo(tx, order.orderNo);
-      const invoice = await tx.invoice.create({
-        data: {
-          hotelId,
-          posOrderId: id,
-          invoiceNo,
-          type: 'POS',
-          subtotal: order.subtotal,
-          tax: order.tax,
-          discount: order.discount,
-          total: order.total,
-          paymentStatus: 'UNPAID',
-        },
-      });
+      // Room-service orders settle against the reservation folio at checkout, so they must not
+      // create a separate POS invoice here.
+      if (!order.reservationId) {
+        const invoiceNo = await this.genUniqueInvoiceNo(tx, order.orderNo);
+        await tx.invoice.create({
+          data: {
+            hotelId,
+            posOrderId: id,
+            invoiceNo,
+            type: 'POS',
+            subtotal: order.subtotal,
+            tax: order.tax,
+            discount: order.discount,
+            total: order.total,
+            paymentStatus: 'UNPAID',
+          },
+        });
+      }
 
       const updated = await tx.posOrder.findFirst({
         where: { id },
@@ -1390,7 +1407,13 @@ export class PosOrdersService {
   }
 
   // ── Cancel order ───────────────────────────────────────────────────────────
-  async cancel(hotelId: string, id: string, reason?: string) {
+  async cancel(
+    hotelId: string,
+    actorUserId: string,
+    id: string,
+    reason?: string,
+    meta?: { ipAddress?: string | null; userAgent?: string | null },
+  ) {
     const order = await this.findOne(hotelId, id);
 
     if (order.status === OrderStatus.DELIVERED) {
@@ -1415,6 +1438,19 @@ export class PosOrdersService {
         },
       },
       include: ORDER_INCLUDE,
+    });
+    await this.logAudit({
+      actorUserId,
+      hotelId,
+      action: 'pos.order.cancelled',
+      targetId: updated.id,
+      ipAddress: meta?.ipAddress ?? null,
+      userAgent: meta?.userAgent ?? null,
+      metadata: {
+        orderNo: updated.orderNo,
+        status: updated.status,
+        reason: reason ?? null,
+      },
     });
     this.emitOrderSync('cancelled', updated);
     updated.items.forEach((item) => {

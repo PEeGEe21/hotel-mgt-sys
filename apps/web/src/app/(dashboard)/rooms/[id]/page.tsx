@@ -286,20 +286,20 @@ export default function RoomDetailPage() {
 
   return (
     <>
-      <div className="max-w-full flex w-full gap-4 flex-wrap">
-        <div className="space-y-6 flex-[7]">
+      <div className="max-w-full flex w-full gap-4 flex-wrap xl:flex-nowrap">
+        <div className="space-y-6 min-w-0 flex-1 xl:flex-[7]">
           {/* Back + header */}
           <div className="flex items-start justify-between gap-4 flex-wrap">
-            <div className="flex items-center gap-3">
+            <div className="flex items-start sm:items-center gap-3 min-w-0">
               <button
                 onClick={() => router.back()}
                 className="w-9 h-9 rounded-lg bg-[#161b27] border border-[#1e2536] flex items-center justify-center text-slate-400 hover:text-slate-200 transition-colors shrink-0"
               >
                 <ArrowLeft size={16} />
               </button>
-              <div>
-                <div className="flex items-center gap-3">
-                  <h1 className="text-2xl font-bold text-white tracking-tight">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                  <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
                     Room {room.number}
                   </h1>
                   <span
@@ -314,27 +314,27 @@ export default function RoomDetailPage() {
                     </span>
                   )}
                 </div>
-                <p className="text-slate-500 text-sm mt-0.5 flex items-center gap-2">
+                <p className="text-slate-500 text-sm mt-0.5 flex flex-wrap items-center gap-2">
                   <MapPin size={12} />
                   {(room as any).floor?.name ?? '—'} · <span className={t?.color}>{room.type}</span>{' '}
                   · {room.maxGuests} guests max
                 </p>
               </div>
             </div>
-            <div className="flex gap-2">
+            <div className="flex w-full sm:w-auto flex-col sm:flex-row gap-2">
               <button
                 onClick={() => setStatusModal(true)}
-                className="flex items-center gap-2 bg-[#161b27] border border-[#1e2536] hover:border-slate-500 text-slate-300 px-3 py-2 rounded-lg text-sm font-medium transition-all"
+                className="flex items-center justify-center gap-2 bg-[#161b27] border border-[#1e2536] hover:border-slate-500 text-slate-300 px-3 py-2 rounded-lg text-sm font-medium transition-all"
               >
                 <Pencil size={13} /> Change Status
               </button>
               {room.status === 'AVAILABLE' && (
-                <button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors">
+                <button className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors">
                   <CalendarCheck size={14} /> New Booking
                 </button>
               )}
               {room.status === 'OCCUPIED' && (
-                <button className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors">
+                <button className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors">
                   <CheckCircle2 size={14} /> Check Out
                 </button>
               )}
@@ -418,7 +418,7 @@ export default function RoomDetailPage() {
                 {activeRes && guest ? (
                   <div className="bg-[#161b27] border border-[#1e2536] rounded-xl p-5">
                     {/* Header row */}
-                    <div className="flex items-center justify-between mb-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
                       <p className="text-xs text-slate-500 uppercase tracking-wider font-medium">
                         {activeRes.bookingType === 'COMPANY'
                           ? 'Company Booking'
@@ -430,7 +430,7 @@ export default function RoomDetailPage() {
                                 ? 'Guests'
                                 : 'Current Guest'}
                       </p>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         {company && (
                           <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
                             <Building2 size={10} /> {company.name}
@@ -448,13 +448,13 @@ export default function RoomDetailPage() {
                     <div className="space-y-3">
                       {allGuests.length > 0 ? (
                         allGuests.map((rg) => (
-                          <div key={rg.id} className="flex items-center gap-3">
+                          <div key={rg.id} className="flex items-start sm:items-center gap-3">
                             <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500/30 to-violet-500/30 border border-white/10 flex items-center justify-center text-sm font-bold text-white shrink-0">
                               {rg.guest.firstName[0]}
                               {rg.guest.lastName[0]}
                             </div>
                             <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
+                              <div className="flex flex-wrap items-center gap-2">
                                 <p className="text-sm font-semibold text-white">
                                   {rg.guest.firstName} {rg.guest.lastName}
                                 </p>
@@ -486,7 +486,7 @@ export default function RoomDetailPage() {
                         ))
                       ) : (
                         /* fallback to primary guest if ReservationGuest not populated */
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-start sm:items-center gap-3">
                           <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500/30 to-violet-500/30 border border-white/10 flex items-center justify-center text-sm font-bold text-white shrink-0">
                             {guest.firstName[0]}
                             {guest.lastName[0]}
@@ -508,7 +508,7 @@ export default function RoomDetailPage() {
                     </div>
 
                     {/* Check-in / out strip */}
-                    <div className="flex gap-4 mt-3 pt-3 border-t border-[#1e2536]">
+                    <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 sm:gap-4 mt-3 pt-3 border-t border-[#1e2536]">
                       <p className="text-xs text-slate-500 flex items-center gap-1">
                         <CalendarCheck size={11} /> {fmt(activeRes.checkIn)}
                       </p>
@@ -580,7 +580,7 @@ export default function RoomDetailPage() {
                   <p className="text-xs text-slate-500 uppercase tracking-wider font-medium mb-4">
                     Room Details
                   </p>
-                  <div className="grid grid-cols-2 gap-x-8 gap-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3">
                     {[
                       { label: 'Room Number', value: room.number },
                       { label: 'Floor / Area', value: (room as any).floor?.name ?? '—' },
@@ -675,7 +675,7 @@ export default function RoomDetailPage() {
             <div className="space-y-4">
               {activeRes && guest ? (
                 <>
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     <div>
                       <p className="text-sm font-semibold text-white flex items-center gap-2">
                         Active Folio
@@ -699,7 +699,7 @@ export default function RoomDetailPage() {
                         {fmt(activeRes.checkOut)}
                       </p>
                     </div>
-                    <button className="text-xs bg-blue-500/15 text-blue-400 hover:bg-blue-500/25 px-3 py-1.5 rounded-lg font-medium transition-colors">
+                    <button className="w-full sm:w-auto text-xs bg-blue-500/15 text-blue-400 hover:bg-blue-500/25 px-3 py-1.5 rounded-lg font-medium transition-colors">
                       + Add Charge
                     </button>
                   </div>
@@ -781,9 +781,9 @@ export default function RoomDetailPage() {
           {/* ── Housekeeping ── */}
           {activeTab === 'housekeeping' && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <p className="text-sm font-semibold text-white">Housekeeping Log</p>
-                <button className="text-xs bg-amber-500/15 text-amber-400 hover:bg-amber-500/25 px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center gap-1.5">
+                <button className="w-full sm:w-auto text-xs bg-amber-500/15 text-amber-400 hover:bg-amber-500/25 px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center justify-center gap-1.5">
                   <Sparkles size={12} /> Request Cleaning
                 </button>
               </div>
@@ -867,9 +867,9 @@ export default function RoomDetailPage() {
           {/* ── Maintenance ── */}
           {activeTab === 'maintenance' && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <p className="text-sm font-semibold text-white">Maintenance History</p>
-                <button className="text-xs bg-orange-500/15 text-orange-400 hover:bg-orange-500/25 px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center gap-1.5">
+                <button className="w-full sm:w-auto text-xs bg-orange-500/15 text-orange-400 hover:bg-orange-500/25 px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center justify-center gap-1.5">
                   <Wrench size={12} /> Log Issue
                 </button>
               </div>
@@ -933,10 +933,10 @@ export default function RoomDetailPage() {
             </div>
           )}
         </div>
-        <div className="flex-[5]">
+        <div className="w-full xl:w-auto xl:flex-[5]">
           {/* Room bookings */}
           <div className="bg-[#161b27] border border-[#1e2536] rounded-xl p-5">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
               <p className="text-xs text-slate-500 uppercase tracking-wider font-medium">
                 Room Bookings
               </p>
@@ -951,7 +951,7 @@ export default function RoomDetailPage() {
                   return (
                     <div
                       key={r.id}
-                      className="flex items-center justify-between gap-4 p-3 rounded-lg border border-[#1e2536] bg-[#0f1117]/60"
+                      className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-3 rounded-lg border border-[#1e2536] bg-[#0f1117]/60"
                     >
                       <div>
                         <p className="text-sm text-slate-200 font-medium">
@@ -969,7 +969,7 @@ export default function RoomDetailPage() {
                           )}
                         </p>
                       </div>
-                      <div className="text-right">
+                      <div className="text-left sm:text-right">
                         <span
                           className={`text-[10px] px-2 py-0.5 rounded-full uppercase tracking-wider ${resStatusClass[r.status] ?? 'bg-slate-500/15 text-slate-400 border border-slate-500/25'}`}
                         >
@@ -982,11 +982,11 @@ export default function RoomDetailPage() {
                     </div>
                   );
                 })}
-                <div className="flex items-center justify-between pt-2">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-2">
                   <span className="text-xs text-slate-600">
                     Page {resPage} of {resTotalPages}
                   </span>
-                  <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
                     <button
                       onClick={() => setResPage((p) => Math.max(1, p - 1))}
                       disabled={resPage <= 1}

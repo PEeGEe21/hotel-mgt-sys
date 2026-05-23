@@ -217,27 +217,27 @@ export default function TablesSettingsPage() {
     <>
       <div className="space-y-6 max-w-3xl">
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start sm:items-center gap-3">
             <button
               onClick={() => router.back()}
               className="w-9 h-9 rounded-lg bg-[#161b27] border border-[#1e2536] flex items-center justify-center text-slate-400 hover:text-slate-200 transition-colors"
             >
               <ArrowLeft size={16} />
             </button>
-            <div>
+            <div className="min-w-0">
               <h1 className="text-2xl font-bold text-white tracking-tight">Tables & Sections</h1>
               <p className="text-slate-500 text-sm mt-0.5">
                 Configure tables for the POS terminal — {data?.total ?? '—'} total
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
             {allTables.length === 0 && !isLoading && (
               <button
                 onClick={() => seedTables.mutate()}
                 disabled={seedTables.isPending}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-700/50 border border-[#1e2536] hover:border-slate-500 text-slate-300 text-sm font-medium transition-colors"
+                className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-slate-700/50 border border-[#1e2536] hover:border-slate-500 text-slate-300 text-sm font-medium transition-colors"
               >
                 {seedTables.isPending ? (
                   <Loader2 size={13} className="animate-spin" />
@@ -249,7 +249,7 @@ export default function TablesSettingsPage() {
             )}
             <button
               onClick={() => setShowInactive((v) => !v)}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium transition-colors ${showInactive ? 'bg-blue-600/15 border-blue-500/30 text-blue-400' : 'bg-[#161b27] border-[#1e2536] text-slate-400 hover:text-slate-200'}`}
+              className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium transition-colors ${showInactive ? 'bg-blue-600/15 border-blue-500/30 text-blue-400' : 'bg-[#161b27] border-[#1e2536] text-slate-400 hover:text-slate-200'}`}
             >
               {showInactive ? <Eye size={13} /> : <EyeOff size={13} />}
               {showInactive ? 'Hiding inactive' : 'Show inactive'}
@@ -259,7 +259,7 @@ export default function TablesSettingsPage() {
                 setEditing(null);
                 setShowModal(true);
               }}
-              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
+              className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
             >
               <Plus size={15} /> Add Table
             </button>
@@ -286,8 +286,8 @@ export default function TablesSettingsPage() {
                 className="bg-[#161b27] border border-[#1e2536] rounded-xl overflow-hidden"
               >
                 {/* Section header */}
-                <div className="flex items-center justify-between px-5 py-3 border-b border-[#1e2536] bg-[#0f1117]/40">
-                  <div className="flex items-center gap-2">
+                <div className="flex flex-col gap-2 px-5 py-3 border-b border-[#1e2536] bg-[#0f1117]/40 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex flex-wrap items-center gap-2">
                     <Layers size={14} className="text-slate-500" />
                     <p className="text-sm font-semibold text-white">{section.name}</p>
                     <span className="text-xs text-slate-600">
@@ -359,22 +359,22 @@ function TableRow({
 
   return (
     <div
-      className={`flex items-center justify-between px-5 py-3.5 hover:bg-white/[0.02] transition-colors ${!table.isActive ? 'opacity-50' : ''}`}
+      className={`flex flex-col gap-3 px-5 py-3.5 hover:bg-white/[0.02] transition-colors sm:flex-row sm:items-center sm:justify-between ${!table.isActive ? 'opacity-50' : ''}`}
     >
-      <div className="flex items-center gap-3">
+      <div className="flex items-start gap-3 min-w-0">
         {/* Reorder buttons */}
-        <div className="flex flex-col gap-0.5">
+        <div className="flex sm:flex-col gap-1 shrink-0">
           <button
             onClick={onMoveUp}
             disabled={index === 0}
-            className="w-5 h-5 flex items-center justify-center rounded text-slate-700 hover:text-slate-400 disabled:opacity-20 transition-colors"
+            className="w-7 h-7 sm:w-5 sm:h-5 flex items-center justify-center rounded text-slate-700 hover:text-slate-400 disabled:opacity-20 transition-colors"
           >
             <ArrowUp size={11} />
           </button>
           <button
             onClick={onMoveDown}
             disabled={index === totalInSection - 1}
-            className="w-5 h-5 flex items-center justify-center rounded text-slate-700 hover:text-slate-400 disabled:opacity-20 transition-colors"
+            className="w-7 h-7 sm:w-5 sm:h-5 flex items-center justify-center rounded text-slate-700 hover:text-slate-400 disabled:opacity-20 transition-colors"
           >
             <ArrowDown size={11} />
           </button>
@@ -384,9 +384,9 @@ function TableRow({
           <Table2 size={14} className="text-slate-500" />
         </div>
 
-        <div>
-          <div className="flex items-center gap-2">
-            <p className="text-sm font-medium text-slate-200">{table.name}</p>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm font-medium text-slate-200 break-words">{table.name}</p>
             {!table.isActive && (
               <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-700/50 text-slate-500">
                 Inactive
@@ -405,17 +405,17 @@ function TableRow({
         </div>
       </div>
 
-      <div className="flex items-center gap-1">
+      <div className="grid grid-cols-3 sm:flex items-center gap-1 sm:shrink-0">
         <button
           onClick={onEdit}
-          className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-600 hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
+          className="h-9 w-full sm:w-8 sm:h-8 rounded-lg flex items-center justify-center text-slate-600 hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
         >
           <Pencil size={13} />
         </button>
         <button
           onClick={() => toggle.mutate()}
           disabled={toggle.isPending}
-          className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${table.isActive ? 'text-slate-600 hover:text-amber-400 hover:bg-amber-500/10' : 'text-slate-600 hover:text-emerald-400 hover:bg-emerald-500/10'}`}
+          className={`h-9 w-full sm:w-8 sm:h-8 rounded-lg flex items-center justify-center transition-colors ${table.isActive ? 'text-slate-600 hover:text-amber-400 hover:bg-amber-500/10' : 'text-slate-600 hover:text-emerald-400 hover:bg-emerald-500/10'}`}
         >
           {toggle.isPending ? (
             <Loader2 size={13} className="animate-spin" />
@@ -428,7 +428,7 @@ function TableRow({
         <button
           onClick={onDelete}
           disabled={openOrders > 0}
-          className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-600 hover:text-red-400 hover:bg-red-500/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          className="h-9 w-full sm:w-8 sm:h-8 rounded-lg flex items-center justify-center text-slate-600 hover:text-red-400 hover:bg-red-500/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
           title={openOrders > 0 ? 'Cannot delete — has open orders' : 'Delete table'}
         >
           <Trash2 size={13} />

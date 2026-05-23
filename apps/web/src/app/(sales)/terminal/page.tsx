@@ -50,6 +50,9 @@ import { useDebounce } from '@/hooks/useDebounce';
 import { usePosProductCategories } from '@/hooks/pos/usePosProductCategories';
 import { useAppStore } from '@/store/app.store';
 import { usePosOrdersRealtime } from '@/hooks/pos/usePosOrdersRealtime';
+import { useReservations, type ApiReservation } from '@/hooks/useReservations';
+import { usePermissions } from '@/hooks/usePermissions';
+import CancelPosOrderModal from '@/components/pos/CancelPosOrderModal';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmtMoney(n: number) {
@@ -339,14 +342,30 @@ function RoomChargeModal({
 }: {
   total: number;
   onClose: () => void;
-  onConfirm: (roomNo: string) => void;
+  onConfirm: (reservation: ApiReservation) => void;
 }) {
-  const [roomNo, setRoomNo] = useState('');
+  const [search, setSearch] = useState('');
+  const [selectedReservationId, setSelectedReservationId] = useState('');
+  const [verificationValue, setVerificationValue] = useState('');
   const [error, setError] = useState('');
+  const debouncedSearch = useDebounce(search, 300);
+  const { data, isLoading } = useReservations(
+    {
+      status: 'CHECKED_IN',
+      search: debouncedSearch || undefined,
+      limit: 8,
+    },
+    {
+      enabled: debouncedSearch.trim().length > 0,
+    },
+  );
+
+  const reservations = data?.reservations ?? [];
+  const selectedReservation = reservations.find((reservation) => reservation.id === selectedReservationId);
 
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-[#161b27] border border-[#1e2536] rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+      <div className="bg-[#161b27] border border-[#1e2536] rounded-2xl p-6 w-full max-w-lg shadow-2xl">
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-base font-bold text-white">Charge to Room</h2>
           <button
@@ -363,17 +382,104 @@ function RoomChargeModal({
           </div>
           <div>
             <label className="text-xs text-slate-500 uppercase tracking-wider mb-1.5 block">
-              Room Number
+              Room / Reservation Number
             </label>
             <input
-              value={roomNo}
-              onChange={(e) => setRoomNo(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && roomNo.trim() && onConfirm(roomNo.trim())}
-              placeholder="e.g. 304"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setSelectedReservationId('');
+                setError('');
+              }}
+              placeholder="e.g. 304 or RSV-24001"
               autoFocus
-              className="w-full bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-3 text-2xl font-bold text-white text-center outline-none focus:border-blue-500 transition-colors"
+              className="w-full bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-3 text-lg font-bold text-white text-center outline-none focus:border-blue-500 transition-colors"
             />
           </div>
+          <div className="rounded-xl border border-[#1e2536] bg-[#0f1117] p-3">
+            {debouncedSearch.trim().length === 0 ? (
+              <p className="text-xs text-slate-500">
+                Search with the room number or reservation number, then select the active checked-in guest.
+              </p>
+            ) : isLoading ? (
+              <div className="flex items-center justify-center py-6">
+                <Loader2 size={16} className="animate-spin text-slate-500" />
+              </div>
+            ) : reservations.length > 0 ? (
+              <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                {reservations.map((reservation) => {
+                  const isSelected = reservation.id === selectedReservationId;
+                  return (
+                    <button
+                      key={reservation.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedReservationId(reservation.id);
+                        setVerificationValue('');
+                        setError('');
+                      }}
+                      className={`w-full rounded-xl border px-3 py-3 text-left transition-colors ${
+                        isSelected
+                          ? 'border-blue-500/40 bg-blue-600/10'
+                          : 'border-[#1e2536] bg-[#161b27] hover:bg-white/[0.03]'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-white">
+                            {reservation.guest?.firstName} {reservation.guest?.lastName}
+                          </p>
+                          <p className="text-xs text-slate-400 mt-1">
+                            Reservation {reservation.reservationNo}
+                          </p>
+                          <p className="text-xs text-slate-500 mt-1">
+                            Room {reservation.room?.number ?? '—'}
+                            {reservation.guest?.phone ? ` · ${reservation.guest.phone}` : ''}
+                          </p>
+                        </div>
+                        {isSelected && (
+                          <span className="text-[10px] rounded-full border border-blue-500/30 bg-blue-500/10 px-2 py-1 font-semibold uppercase tracking-wider text-blue-300">
+                            Selected
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-xs text-amber-400">
+                No active checked-in reservation found for that search.
+              </p>
+            )}
+          </div>
+          {selectedReservation && (
+            <div className="space-y-3 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3">
+              <div>
+                <p className="text-xs uppercase tracking-wider text-emerald-300">Charge Target</p>
+                <p className="text-sm font-semibold text-white mt-1">
+                  {selectedReservation.guest?.firstName} {selectedReservation.guest?.lastName}
+                </p>
+                <p className="text-xs text-emerald-200/80 mt-1">
+                  Reservation {selectedReservation.reservationNo} · Room {selectedReservation.room?.number ?? '—'}
+                </p>
+              </div>
+              <div>
+                <label className="text-xs text-emerald-200/80 uppercase tracking-wider mb-1.5 block">
+                  Confirm Reservation No. or Phone Last 4
+                </label>
+                <input
+                  value={verificationValue}
+                  onChange={(e) => {
+                    setVerificationValue(e.target.value);
+                    setError('');
+                  }}
+                  placeholder="Enter reservation no. or last 4 digits"
+                  className="w-full bg-[#0f1117] border border-emerald-500/20 rounded-lg px-3 py-2.5 text-sm text-white outline-none focus:border-emerald-400 transition-colors"
+                />
+              </div>
+            </div>
+          )}
           {error && <p className="text-xs text-red-400">{error}</p>}
         </div>
         <div className="flex gap-3 mt-5">
@@ -385,8 +491,25 @@ function RoomChargeModal({
           </button>
           <button
             onClick={() => {
-              if (!roomNo.trim()) return setError('Enter a room number.');
-              onConfirm(roomNo.trim());
+              if (!selectedReservation) {
+                setError('Select the active checked-in reservation to charge.');
+                return;
+              }
+              const normalizedVerification = verificationValue.trim().toLowerCase();
+              const reservationMatch =
+                normalizedVerification.length > 0 &&
+                normalizedVerification === selectedReservation.reservationNo.toLowerCase();
+              const phoneDigits = (selectedReservation.guest?.phone ?? '').replace(/\D/g, '');
+              const phoneLast4 = phoneDigits.slice(-4);
+              const phoneMatch =
+                normalizedVerification.length > 0 &&
+                phoneLast4.length === 4 &&
+                normalizedVerification.replace(/\D/g, '') === phoneLast4;
+              if (!reservationMatch && !phoneMatch) {
+                setError('Enter the matching reservation number or the guest phone last 4 digits.');
+                return;
+              }
+              onConfirm(selectedReservation);
             }}
             className="flex-1 px-4 py-2.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold transition-colors"
           >
@@ -506,6 +629,7 @@ function PaymentModal({
 function OrderScreen({ terminalId, staff }: { terminalId: string; staff: TerminalStaff }) {
   const router = useRouter();
   const { hotel } = useAppStore();
+  const { can } = usePermissions();
   usePosOrdersRealtime({ enabled: true });
 
   // ── Store ──────────────────────────────────────────────────────────────────
@@ -529,9 +653,11 @@ function OrderScreen({ terminalId, staff }: { terminalId: string; staff: Termina
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('');
   const [view, setView] = useState<'order' | 'receipts'>('order');
+  const [mobileOrderTab, setMobileOrderTab] = useState<'products' | 'cart'>('products');
   const [showPay, setShowPay] = useState(false);
   const [showRoom, setShowRoom] = useState(false);
   const [continueOrder, setContinueOrder] = useState<ApiOrder | null>(null);
+  const [cancelOrder, setCancelOrder] = useState<ApiOrder | null>(null);
 
   // ── Data ───────────────────────────────────────────────────────────────────
   const debouncedSearch = useDebounce(search, 300);
@@ -548,7 +674,6 @@ function OrderScreen({ terminalId, staff }: { terminalId: string; staff: Termina
 
   const { data: ordersData, isLoading: ordersLoading } = usePosOrders({
     posTerminalId: terminalId,
-    status: 'DELIVERED',
     limit: 30,
   }, {
     refetchInterval: false,
@@ -558,8 +683,19 @@ function OrderScreen({ terminalId, staff }: { terminalId: string; staff: Termina
   // const categories = productsData?.categories ?? [];
   const tableSections = tablesData?.sections ?? [];
   const recentOrders = ordersData?.orders ?? [];
-  const unpaidOrders = recentOrders.filter((order) => !order.isPaid && !order.reservationId);
-  const settledOrders = recentOrders.filter((order) => order.isPaid || order.reservationId);
+  const activeOrders = recentOrders.filter(
+    (order) =>
+      order.status === 'PENDING' || order.status === 'PREPARING' || order.status === 'READY',
+  );
+  const unpaidOrders = recentOrders.filter(
+    (order) =>
+      (order.status === 'READY' || order.status === 'DELIVERED') &&
+      !order.isPaid &&
+      !order.reservationId,
+  );
+  const settledOrders = recentOrders.filter(
+    (order) => order.status !== 'CANCELLED' && (order.isPaid || !!order.reservationId),
+  );
 
   // ── Mutations ──────────────────────────────────────────────────────────────
   const createOrder = useCreateOrder();
@@ -575,12 +711,19 @@ function OrderScreen({ terminalId, staff }: { terminalId: string; staff: Termina
 
   // ── Totals ─────────────────────────────────────────────────────────────────
   const subtotal = items.reduce((s, i) => s + i.price * i.qty, 0);
+  const cartCount = items.reduce((count, item) => count + item.qty, 0);
   const discountAmt = Math.round(subtotal * (discount / 100));
   const taxable = subtotal - discountAmt;
   const taxRate = (Number(hotel?.taxRate) || 0) / 100;
   const tax = Math.round(taxable * taxRate);
   // const tax = Math.round(taxable * 0.075);
   const total = taxable + tax;
+
+  useEffect(() => {
+    if (items.length === 0) {
+      setMobileOrderTab('products');
+    }
+  }, [items.length]);
 
   // ── Handlers ───────────────────────────────────────────────────────────────
   const handleAddItem = (product: any) => {
@@ -637,12 +780,13 @@ function OrderScreen({ terminalId, staff }: { terminalId: string; staff: Termina
     }
   };
 
-  const handleRoomCharge = async (roomNo: string) => {
+  const handleRoomCharge = async (reservation: ApiReservation) => {
     if (!items.length) return;
     try {
       await createOrder.mutateAsync({
         type: 'ROOM_SERVICE',
-        roomNo,
+        roomNo: reservation.room?.number,
+        reservationId: reservation.id,
         posTerminalId: terminalId,
         terminalDeviceKey: terminalDeviceKey ?? undefined,
         staffId: staff.id,
@@ -652,7 +796,10 @@ function OrderScreen({ terminalId, staff }: { terminalId: string; staff: Termina
       clearCart();
       setDiscount(0);
       setShowRoom(false);
-      openToast('success', `Charged to Room ${roomNo}`);
+      openToast(
+        'success',
+        `Charge created for Room ${reservation.room?.number ?? '—'} · ${reservation.reservationNo}`,
+      );
     } catch (e: any) {
       openToast('error', e?.response?.data?.message ?? 'Room charge failed');
     }
@@ -716,8 +863,8 @@ function OrderScreen({ terminalId, staff }: { terminalId: string; staff: Termina
         </div>
 
         {/* Staff session */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-1.5">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className="hidden sm:flex items-center gap-2 bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-1.5">
             <div className="w-5 h-5 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center">
               <User size={10} className="text-emerald-400" />
             </div>
@@ -744,9 +891,31 @@ function OrderScreen({ terminalId, staff }: { terminalId: string; staff: Termina
       {view === 'order' && (
         <div className="flex flex-1 overflow-hidden">
           {/* Left: product grid */}
-          <div className="flex flex-col flex-1 overflow-hidden">
+          <div
+            className={`flex-col flex-1 overflow-hidden ${
+              mobileOrderTab === 'cart' ? 'hidden lg:flex' : 'flex'
+            }`}
+          >
             {/* Search + categories */}
             <div className="px-4 pt-3 pb-2 space-y-2 shrink-0 border-b border-[#1e2536]">
+              <div className="flex items-center gap-2 lg:hidden">
+                {([
+                  { id: 'products', label: 'Products' },
+                  { id: 'cart', label: `Cart${cartCount > 0 ? ` (${cartCount})` : ''}` },
+                ] as const).map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setMobileOrderTab(tab.id)}
+                    className={`flex-1 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${
+                      mobileOrderTab === tab.id
+                        ? 'bg-blue-600/20 border-blue-500/30 text-blue-300'
+                        : 'bg-[#161b27] border-[#1e2536] text-slate-400'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
               <div className="flex items-center gap-2 bg-[#161b27] border border-[#1e2536] rounded-lg px-3 py-2">
                 <Search size={13} className="text-slate-500 shrink-0" />
                 <input
@@ -848,9 +1017,31 @@ function OrderScreen({ terminalId, staff }: { terminalId: string; staff: Termina
           </div>
 
           {/* Right: order panel */}
-          <div className="w-72 xl:w-80 flex flex-col border-l border-[#1e2536] shrink-0">
+          <div
+            className={`w-full lg:w-72 xl:w-80 flex-col shrink-0 ${
+              mobileOrderTab === 'products' ? 'hidden lg:flex' : 'flex'
+            } border-t lg:border-t-0 lg:border-l border-[#1e2536]`}
+          >
             {/* Table selector — grouped by section */}
             <div className="px-4 pt-3 pb-2 border-b border-[#1e2536] shrink-0 max-h-52 overflow-y-auto">
+              <div className="flex items-center gap-2 mb-3 lg:hidden">
+                {([
+                  { id: 'products', label: 'Products' },
+                  { id: 'cart', label: `Cart${cartCount > 0 ? ` (${cartCount})` : ''}` },
+                ] as const).map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setMobileOrderTab(tab.id)}
+                    className={`flex-1 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${
+                      mobileOrderTab === tab.id
+                        ? 'bg-blue-600/20 border-blue-500/30 text-blue-300'
+                        : 'bg-[#161b27] border-[#1e2536] text-slate-400'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
               {tableSections.length > 0 ? (
                 tableSections.map((section) => (
                   <div key={section.name} className="mb-3 last:mb-0">
@@ -1104,6 +1295,68 @@ function OrderScreen({ terminalId, staff }: { terminalId: string; staff: Termina
                 </div>
               )}
 
+              {activeOrders.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold text-sky-200">Open orders</p>
+                    <p className="text-xs text-slate-500">
+                      {activeOrders.length} active order{activeOrders.length === 1 ? '' : 's'}
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                    {activeOrders.map((order) => (
+                      <div
+                        key={order.id}
+                        className="bg-sky-500/10 border border-sky-500/20 rounded-xl p-4 space-y-3"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Table2 size={13} className="text-sky-300" />
+                            <span className="text-sm font-bold text-white">
+                              {order.tableNo ?? order.roomNo ?? '—'}
+                            </span>
+                            <span className="text-xs font-mono text-sky-200/70">
+                              {order.orderNo}
+                            </span>
+                          </div>
+                          <span className="text-[10px] px-2 py-0.5 rounded-full border font-medium bg-sky-500/10 border-sky-500/20 text-sky-300">
+                            {order.status}
+                          </span>
+                        </div>
+                        <div className="space-y-1">
+                          {order.items.slice(0, 3).map((item) => (
+                            <div key={item.id} className="flex justify-between text-xs">
+                              <span className="text-slate-300">
+                                {item.name} ×{item.quantity}
+                              </span>
+                              <span className="text-slate-400">{fmtMoney(Number(item.total))}</span>
+                            </div>
+                          ))}
+                          {order.items.length > 3 && (
+                            <p className="text-xs text-slate-500">+{order.items.length - 3} more</p>
+                          )}
+                        </div>
+                        <div className="border-t border-sky-500/10 pt-2 flex justify-between">
+                          <span className="text-xs text-slate-400">Total</span>
+                          <span className="text-sm font-bold text-white">
+                            {fmtMoney(Number(order.total))}
+                          </span>
+                        </div>
+                        {can('void:pos') ? (
+                          <button
+                            onClick={() => setCancelOrder(order)}
+                            className="w-full flex items-center justify-center gap-2 rounded-xl bg-red-600/85 hover:bg-red-500 text-white py-2.5 text-sm font-semibold transition-colors"
+                          >
+                            <Trash2 size={14} />
+                            Cancel order
+                          </button>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {settledOrders.length > 0 && (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
@@ -1163,6 +1416,20 @@ function OrderScreen({ terminalId, staff }: { terminalId: string; staff: Termina
         </div>
       )}
 
+      {view === 'order' && items.length > 0 && mobileOrderTab === 'products' && (
+        <div className="lg:hidden shrink-0 border-t border-[#1e2536] bg-[#161b27] px-4 py-3">
+          <button
+            onClick={() => setMobileOrderTab('cart')}
+            className="w-full flex items-center justify-between rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white"
+          >
+            <span>
+              {cartCount} item{cartCount === 1 ? '' : 's'} in cart
+            </span>
+            <span>{fmtMoney(total)}</span>
+          </button>
+        </div>
+      )}
+
       {showPay && (
         <PaymentModal
           total={total}
@@ -1187,6 +1454,9 @@ function OrderScreen({ terminalId, staff }: { terminalId: string; staff: Termina
           onClose={() => setShowRoom(false)}
           onConfirm={handleRoomCharge}
         />
+      )}
+      {cancelOrder && (
+        <CancelPosOrderModal order={cancelOrder} onClose={() => setCancelOrder(null)} />
       )}
     </div>
   );

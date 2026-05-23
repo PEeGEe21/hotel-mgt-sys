@@ -836,7 +836,7 @@ export default function InventoryPage() {
                             key={item.id}
                             className="border-b border-[#1e2536] last:border-0 hover:bg-white/[0.02] transition-colors"
                           >
-                            <td className="px-4 py-3">
+                            <td className="px-4 py-3 whitespace-nowrap">
                               <div>
                                 <p className="text-sm font-medium text-slate-200">
                                   {(page - 1) * (data?.meta.per_page ?? Number(pageLimit)) +
@@ -845,40 +845,50 @@ export default function InventoryPage() {
                                 </p>
                               </div>
                             </td>
-                            <td className="px-4 py-3">
+                            <td className="px-4 py-3 whitespace-nowrap">
                               <div>
-                                <p className="text-sm font-medium text-slate-200">{item.name}</p>
-                                <p className="text-xs text-slate-600 font-mono">{item.sku}</p>
+                                <p className="text-sm font-medium text-slate-200 whitespace-nowrap">
+                                  {item.name}
+                                </p>
+                                <p className="text-xs text-slate-600 font-mono whitespace-nowrap">
+                                  {item.sku}
+                                </p>
                                 {item.supplier && (
-                                  <p className="text-xs text-slate-600">{item.supplier}</p>
+                                  <p className="text-xs text-slate-600 whitespace-nowrap">
+                                    {item.supplier}
+                                  </p>
                                 )}
                               </div>
                             </td>
-                            <td className="px-4 py-3">
-                              <span className="text-xs bg-slate-500/15 text-slate-400 px-2.5 py-1 rounded-full">
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <span className="text-xs bg-slate-500/15 text-slate-400 px-2.5 py-1 rounded-full whitespace-nowrap">
                                 {item.category}
                               </span>
                             </td>
-                            <td className="px-4 py-3">
-                              <div className="flex items-center gap-2">
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <div className="flex items-center gap-2 whitespace-nowrap">
                                 <span
                                   className={`text-sm font-bold ${isLow ? 'text-red-400' : 'text-slate-200'}`}
                                 >
                                   {item.quantity}
                                 </span>
-                                <span className="text-xs text-slate-600">{item.unit}s</span>
+                                <span className="text-xs text-slate-600 whitespace-nowrap">
+                                  {item.unit}s
+                                </span>
                                 {isLow && <AlertTriangle size={12} className="text-red-400" />}
                               </div>
                             </td>
-                            <td className="px-4 py-3 text-sm text-slate-500">{item.minStock}</td>
-                            <td className="px-4 py-3 text-sm text-slate-400">
+                            <td className="px-4 py-3 text-sm text-slate-500 whitespace-nowrap">
+                              {item.minStock}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-slate-400 whitespace-nowrap">
                               {fmtMoney(item.costPrice)}
                             </td>
-                            <td className="px-4 py-3 text-sm text-emerald-400 font-medium">
+                            <td className="px-4 py-3 text-sm text-emerald-400 font-medium whitespace-nowrap">
                               {item.sellPrice ? fmtMoney(item.sellPrice) : '—'}
                             </td>
-                            <td className="px-4 py-3">
-                              <div className="flex items-center gap-1">
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <div className="flex items-center gap-1 whitespace-nowrap">
                                 <button
                                   onClick={() => setMovement({ item, type: 'IN' })}
                                   title="Restock"

@@ -138,6 +138,9 @@ export class PosOrdersController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Cancel an order (not allowed after DELIVERED)' })
   cancel(@Request() req: any, @Param('id') id: string, @Body() dto: CancelDto) {
-    return this.svc.cancel(req.user.hotelId, id, dto.reason);
+    return this.svc.cancel(req.user.hotelId, req.user.sub, id, dto.reason, {
+      ipAddress: req.ip ?? null,
+      userAgent: req.headers['user-agent'] ?? null,
+    });
   }
 }

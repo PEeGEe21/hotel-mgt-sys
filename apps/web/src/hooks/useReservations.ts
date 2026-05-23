@@ -127,7 +127,10 @@ export type CreateReservationInput = {
 };
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
-export function useReservations(filters: ReservationFilters = {}) {
+export function useReservations(
+  filters: ReservationFilters = {},
+  options: { enabled?: boolean } = {},
+) {
   return useQuery<ReservationsResponse>({
     queryKey: ['reservations', filters],
     queryFn: async () => {
@@ -144,6 +147,7 @@ export function useReservations(filters: ReservationFilters = {}) {
       const { data } = await api.get(`/reservations?${params}`);
       return data;
     },
+    enabled: options.enabled ?? true,
     staleTime: 30_000,
     placeholderData: keepPreviousData,
   });

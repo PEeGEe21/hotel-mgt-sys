@@ -82,6 +82,14 @@ export default function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="min-w-44 !bg-[#161b27] border border-[#1e2536] ring-0 text-white">
+              <div className="px-3 py-2.5">
+                <p className="text-sm font-medium text-slate-100 md:block lg:hidden">{user?.name ?? 'User'}</p>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {user?.username ? `@${user.username}` : 'No username'}
+                </p>
+                <p className="text-xs text-slate-500 mt-0.5 break-all">{user?.email ?? '—'}</p>
+              </div>
+              <DropdownMenuSeparator className="bg-[#1e2536]" />
               <DropdownMenuItem asChild>
                 <Link href="/profile" className="flex items-center gap-2 cursor-pointer hover:!bg-white/5 !text-white outline-none focus-visible:outline-none">
                   <User size={14} /> Profile

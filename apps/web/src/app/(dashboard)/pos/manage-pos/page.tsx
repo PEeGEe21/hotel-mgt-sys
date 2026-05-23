@@ -43,6 +43,7 @@ import StationSlaPanel from '@/components/pos/StationSlaPanel';
 import { useStaffAll } from '@/hooks/staff/useStaff';
 import { useAuditLogs } from '@/hooks/useAuditLogs';
 import { useAllUserAccounts } from '@/hooks/useUserAccounts';
+import CancelPosOrderModal from '@/components/pos/CancelPosOrderModal';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmtMoney(n: number) {
@@ -225,11 +226,13 @@ function ContinuePaymentModal({
 
 // ─── Sales Tab ────────────────────────────────────────────────────────────────
 function SalesTab() {
+  const { can } = usePermissions();
   const [search, setSearch] = useState('');
   const [dateFrom, setDateFrom] = useState(new Date().toISOString().slice(0, 10));
   const [dateTo, setDateTo] = useState(new Date().toISOString().slice(0, 10));
   const [page, setPage] = useState(1);
   const [continueOrder, setContinueOrder] = useState<ApiOrder | null>(null);
+  const [cancelOrder, setCancelOrder] = useState<ApiOrder | null>(null);
   const [quickFilter, setQuickFilter] = useState<'all' | 'ready' | 'awaitingPayment'>('all');
   const [billing, setBilling] = useState<'all' | 'walk_in' | 'room_charge'>('all');
   const [terminalId, setTerminalId] = useState('all');
@@ -590,6 +593,17 @@ function SalesTab() {
                         ) : order.status !== 'READY' ? (
                           <span className="text-xs text-slate-600">—</span>
                         ) : null}
+                        {can('void:pos') &&
+                        (order.status === 'PENDING' ||
+                          order.status === 'PREPARING' ||
+                          order.status === 'READY') ? (
+                          <button
+                            onClick={() => setCancelOrder(order)}
+                            className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-300 transition-colors hover:bg-red-500/20"
+                          >
+                            Cancel order
+                          </button>
+                        ) : null}
                       </div>
                     </td>
                   </tr>
@@ -618,6 +632,9 @@ function SalesTab() {
 
       {continueOrder && (
         <ContinuePaymentModal order={continueOrder} onClose={() => setContinueOrder(null)} />
+      )}
+      {cancelOrder && (
+        <CancelPosOrderModal order={cancelOrder} onClose={() => setCancelOrder(null)} />
       )}
     </div>
   );
