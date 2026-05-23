@@ -455,14 +455,27 @@ function RoomChargeModal({
           </div>
           {selectedReservation && (
             <div className="space-y-3 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3">
-              <div>
-                <p className="text-xs uppercase tracking-wider text-emerald-300">Charge Target</p>
-                <p className="text-sm font-semibold text-white mt-1">
-                  {selectedReservation.guest?.firstName} {selectedReservation.guest?.lastName}
-                </p>
-                <p className="text-xs text-emerald-200/80 mt-1">
-                  Reservation {selectedReservation.reservationNo} · Room {selectedReservation.room?.number ?? '—'}
-                </p>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-wider text-emerald-300">Charge Target</p>
+                  <p className="text-sm font-semibold text-white mt-1">
+                    {selectedReservation.guest?.firstName} {selectedReservation.guest?.lastName}
+                  </p>
+                  <p className="text-xs text-emerald-200/80 mt-1">
+                    Reservation {selectedReservation.reservationNo} · Room {selectedReservation.room?.number ?? '—'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedReservationId('');
+                    setVerificationValue('');
+                    setError('');
+                  }}
+                  className="shrink-0 rounded-lg border border-emerald-500/20 px-2.5 py-1.5 text-xs font-medium text-emerald-200 transition-colors hover:bg-emerald-500/10"
+                >
+                  Clear
+                </button>
               </div>
               <div>
                 <label className="text-xs text-emerald-200/80 uppercase tracking-wider mb-1.5 block">
