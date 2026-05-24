@@ -39,7 +39,15 @@ import {
   useAddFolioItem,
   type ApiReservation,
 } from '@/hooks/useReservations';
+import {
+  useIssueKeycard,
+  useReportLostKeycard,
+  useReservationKeycards,
+  useRevokeKeycard,
+  type ReservationKeycard,
+} from '@/hooks/useKeycards';
 import { useReservationFolioItems } from '@/hooks/useFolioItems';
+import { useHotelFeatureAccess } from '@/hooks/hotel/useHotelFeatureAccess';
 import TableScroll from '@/components/ui/table-scroll';
 import {
   loadReservationReceiptIntoWindow,
@@ -71,8 +79,199 @@ function fmtDateTime(iso: string) {
     minute: '2-digit',
   });
 }
+function fmtDateTimeInput(iso: string) {
+  const date = new Date(iso);
+  const offset = date.getTimezoneOffset();
+  const localDate = new Date(date.getTime() - offset * 60_000);
+  return localDate.toISOString().slice(0, 16);
+}
 function nightsBetween(a: string, b: string) {
   return Math.ceil((new Date(b).getTime() - new Date(a).getTime()) / 86_400_000);
+}
+
+function getDerivedKeycardStatus(keycard: ReservationKeycard) {
+  if (keycard.status !== 'ACTIVE') return keycard.status;
+  return new Date(keycard.validUntil).getTime() < Date.now() ? 'EXPIRED' : 'ACTIVE';
+}
+
+function KeycardStatusBadge({ keycard }: { keycard: ReservationKeycard }) {
+  const status = getDerivedKeycardStatus(keycard);
+  const styles: Record<string, string> = {
+    ACTIVE: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20',
+    EXPIRED: 'bg-amber-500/15 text-amber-400 border-amber-500/20',
+    REVOKED: 'bg-slate-500/15 text-slate-400 border-slate-500/20',
+    LOST: 'bg-red-500/15 text-red-400 border-red-500/20',
+  };
+
+  return (
+    <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${styles[status]}`}>
+      {status}
+    </span>
+  );
+}
+
+function IssueKeycardModal({
+  reservation,
+  onClose,
+}: {
+  reservation: ApiReservation;
+  onClose: () => void;
+}) {
+  const issueKeycard = useIssueKeycard(reservation.id);
+  const [form, setForm] = useState({
+    guestId: '',
+    type: 'PHYSICAL',
+    cardUid: '',
+    validFrom: reservation.status === 'CHECKED_IN' ? '' : fmtDateTimeInput(reservation.checkIn),
+    validUntil: fmtDateTimeInput(reservation.checkOut),
+  });
+  const [error, setError] = useState('');
+
+  const inputCls =
+    'w-full bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 outline-none focus:border-cyan-500 transition-colors';
+
+  const guestOptions = [
+    {
+      id: '',
+      label: 'Stay-level keycard',
+    },
+    {
+      id: reservation.guestId,
+      label: `${reservation.guest?.firstName ?? ''} ${reservation.guest?.lastName ?? ''}`.trim(),
+    },
+    ...((reservation.guests ?? [])
+      .filter((entry) => entry.guest.id !== reservation.guestId)
+      .map((entry) => ({
+        id: entry.guest.id,
+        label: `${entry.guest.firstName} ${entry.guest.lastName}`.trim(),
+      })) ?? []),
+  ];
+
+  const handleSave = async () => {
+    setError('');
+    try {
+      await issueKeycard.mutateAsync({
+        reservationId: reservation.id,
+        roomId: reservation.roomId,
+        guestId: form.guestId || undefined,
+        cardUid: form.cardUid.trim() || undefined,
+        type: form.type as 'PHYSICAL' | 'MOBILE',
+        validFrom: form.validFrom || undefined,
+        validUntil: form.validUntil || undefined,
+      });
+      onClose();
+    } catch (e: any) {
+      setError(e?.response?.data?.message ?? 'Failed to issue keycard.');
+    }
+  };
+
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-[#161b27] border border-[#1e2536] rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
+        <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-[#1e2536]">
+          <h2 className="text-base font-bold text-white">Issue Keycard</h2>
+          <button onClick={onClose} className="text-slate-500 hover:text-slate-300">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="px-5 py-4 space-y-4">
+          <div>
+            <label className="text-xs text-slate-500 uppercase tracking-wider mb-1.5 block">
+              Assign To
+            </label>
+            <select
+              value={form.guestId}
+              onChange={(e) => setForm((current) => ({ ...current, guestId: e.target.value }))}
+              className={inputCls}
+            >
+              {guestOptions.map((guest) => (
+                <option key={guest.id || 'stay-level'} value={guest.id}>
+                  {guest.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-slate-500 uppercase tracking-wider mb-1.5 block">
+                Type
+              </label>
+              <select
+                value={form.type}
+                onChange={(e) => setForm((current) => ({ ...current, type: e.target.value }))}
+                className={inputCls}
+              >
+                <option value="PHYSICAL">Physical</option>
+                <option value="MOBILE">Mobile</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 uppercase tracking-wider mb-1.5 block">
+                Card UID
+              </label>
+              <input
+                value={form.cardUid}
+                onChange={(e) => setForm((current) => ({ ...current, cardUid: e.target.value }))}
+                placeholder="Optional"
+                className={inputCls}
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-slate-500 uppercase tracking-wider mb-1.5 block">
+                Valid From
+              </label>
+              <input
+                type="datetime-local"
+                value={form.validFrom}
+                onChange={(e) => setForm((current) => ({ ...current, validFrom: e.target.value }))}
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 uppercase tracking-wider mb-1.5 block">
+                Valid Until
+              </label>
+              <input
+                type="datetime-local"
+                value={form.validUntil}
+                onChange={(e) => setForm((current) => ({ ...current, validUntil: e.target.value }))}
+                className={inputCls}
+              />
+            </div>
+          </div>
+          {error && (
+            <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+              {error}
+            </p>
+          )}
+        </div>
+        <div className="flex gap-3 px-5 pb-5">
+          <button
+            onClick={onClose}
+            className="flex-1 px-4 py-2.5 rounded-lg border border-[#1e2536] text-slate-400 text-sm hover:text-white transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={issueKeycard.isPending}
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white text-sm font-semibold transition-colors"
+          >
+            {issueKeycard.isPending ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <Check size={14} />
+            )}
+            Issue Keycard
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
 }
 
 const FOLIO_CATEGORIES = ['ROOM', 'FOOD', 'LAUNDRY', 'SPA', 'MISC'];
@@ -425,6 +624,7 @@ export default function ReservationDetailPage() {
   const resId = id as string;
 
   const { data: res, isLoading, isError } = useReservation(resId);
+  const { data: featureAccess } = useHotelFeatureAccess();
   const checkIn = useCheckIn(resId);
   const checkOut = useCheckOut(resId);
   const cancel = useCancelReservation(resId);
@@ -436,10 +636,17 @@ export default function ReservationDetailPage() {
     fetchNextPage: loadMoreFolio,
     isFetchingNextPage: isLoadingMoreFolio,
   } = useReservationFolioItems(resId, { limit: 5, enabled: !!resId });
+  const keycardEnabled = featureAccess?.flags.keycard_auth === true;
+  const { data: keycardData, isLoading: isKeycardsLoading } = useReservationKeycards(resId, {
+    enabled: !!resId && keycardEnabled,
+  });
+  const revokeKeycard = useRevokeKeycard(resId);
+  const reportLostKeycard = useReportLostKeycard(resId);
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('overview');
   const [showFolio, setShowFolio] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
+  const [showIssueKeycard, setShowIssueKeycard] = useState(false);
 
   if (isLoading)
     return (
@@ -476,6 +683,7 @@ export default function ReservationDetailPage() {
           .slice()
           .sort((a, b) => new Date(b.paidAt).getTime() - new Date(a.paidAt).getTime())[0]
       : null;
+  const keycards = keycardData?.keycards ?? [];
 
   // Timeline from reservation events (derived from available data)
   const timeline = [
@@ -828,6 +1036,111 @@ export default function ReservationDetailPage() {
               )}
             </div>
 
+            {keycardEnabled && (
+              <div className="bg-[#161b27] border border-[#1e2536] rounded-xl p-5">
+                <div className="flex items-start justify-between gap-3 mb-4">
+                  <div>
+                    <p className="text-xs text-slate-500 uppercase tracking-wider font-medium">
+                      Keycards
+                    </p>
+                    <p className="text-xs text-slate-600 mt-1">
+                      Room {res.room?.number} access for this stay
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowIssueKeycard(true)}
+                    className="shrink-0 bg-cyan-600/20 hover:bg-cyan-600/30 border border-cyan-500/20 text-cyan-400 rounded-lg px-3 py-2 text-xs font-semibold transition-colors"
+                  >
+                    + Issue
+                  </button>
+                </div>
+
+                {isKeycardsLoading ? (
+                  <div className="py-6 text-center">
+                    <Loader2 size={18} className="animate-spin text-slate-500 mx-auto mb-2" />
+                    <p className="text-xs text-slate-500">Loading keycards…</p>
+                  </div>
+                ) : keycards.length > 0 ? (
+                  <div className="space-y-3">
+                    {keycards.map((keycard) => {
+                      const derivedStatus = getDerivedKeycardStatus(keycard);
+                      const assignedName = keycard.guest
+                        ? `${keycard.guest.firstName} ${keycard.guest.lastName}`.trim()
+                        : 'Stay-level';
+                      return (
+                        <div
+                          key={keycard.id}
+                          className="rounded-xl border border-[#1e2536] bg-[#0f1117]/70 px-4 py-3"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm font-semibold text-white">{assignedName}</p>
+                                <KeycardStatusBadge keycard={keycard} />
+                              </div>
+                              <p className="text-xs text-slate-500 mt-1">
+                                {keycard.type} {keycard.cardUid ? `· UID ${keycard.cardUid}` : ''}
+                              </p>
+                            </div>
+                            {(derivedStatus === 'ACTIVE' || derivedStatus === 'EXPIRED') && (
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => {
+                                    if (!confirm('Revoke this keycard?')) return;
+                                    revokeKeycard.mutate({
+                                      keycardId: keycard.id,
+                                      reason: 'manual_revoke_from_reservation',
+                                    });
+                                  }}
+                                  className="text-[11px] px-2.5 py-1 rounded-md border border-slate-600/40 text-slate-300 hover:text-white"
+                                >
+                                  Revoke
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    if (!confirm('Mark this keycard as lost?')) return;
+                                    reportLostKeycard.mutate({
+                                      keycardId: keycard.id,
+                                      reason: 'reported_lost_from_reservation',
+                                    });
+                                  }}
+                                  className="text-[11px] px-2.5 py-1 rounded-md border border-red-500/20 text-red-400 hover:bg-red-500/10"
+                                >
+                                  Report Lost
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                          <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
+                            <div>
+                              <p className="text-slate-600">Valid from</p>
+                              <p className="text-slate-300 mt-0.5">{fmtDateTime(keycard.validFrom)}</p>
+                            </div>
+                            <div>
+                              <p className="text-slate-600">Valid until</p>
+                              <p className="text-slate-300 mt-0.5">{fmtDateTime(keycard.validUntil)}</p>
+                            </div>
+                          </div>
+                          {keycard.revokedReason && (
+                            <p className="text-[11px] text-slate-500 mt-3">
+                              Reason: {keycard.revokedReason}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-dashed border-[#1e2536] px-4 py-6 text-center">
+                    <p className="text-sm text-slate-400">No keycards issued yet</p>
+                    <p className="text-xs text-slate-600 mt-1">
+                      Issue a card for the primary guest, an attached guest, or the stay itself.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Quick actions */}
             <div className="bg-[#161b27] border border-[#1e2536] rounded-xl p-5">
               <p className="text-xs text-slate-500 uppercase tracking-wider font-medium mb-3">
@@ -1018,6 +1331,9 @@ export default function ReservationDetailPage() {
       {showFolio && <AddFolioModal reservationId={resId} onClose={() => setShowFolio(false)} />}
       {showPayment && (
         <RecordPaymentModal reservation={res} onClose={() => setShowPayment(false)} />
+      )}
+      {keycardEnabled && showIssueKeycard && (
+        <IssueKeycardModal reservation={res} onClose={() => setShowIssueKeycard(false)} />
       )}
     </div>
   );

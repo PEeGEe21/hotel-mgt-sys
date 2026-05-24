@@ -29,6 +29,20 @@ export function AuditLogsPageClient() {
   const logsQuery = usePlatformAuditLogs(page, limit, filters);
   const logs = logsQuery.data?.logs ?? [];
   const authMessage = logsQuery.error instanceof PlatformClientError ? logsQuery.error.message : null;
+  const quickFilters = [
+    {
+      label: 'Keycard actions',
+      params: { action: 'keycard' },
+    },
+    {
+      label: 'Hotel keycard settings',
+      params: { action: 'hotel.keycard.settings_update' },
+    },
+    {
+      label: 'Platform rollout changes',
+      params: { action: 'platform.hotel.keycard_config_update' },
+    },
+  ];
 
   const changePage = (nextPage: number) => {
     const params = new URLSearchParams(searchParams?.toString() ?? '');
@@ -43,6 +57,14 @@ export function AuditLogsPageClient() {
       if (value) params.set(key, value);
     }
     router.push(`/audit-logs?${params.toString()}`);
+  };
+
+  const applyQuickFilter = (params: Record<string, string>) => {
+    const nextParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value) nextParams.set(key, value);
+    });
+    router.push(`/audit-logs?${nextParams.toString()}`);
   };
 
   return (
@@ -122,6 +144,25 @@ export function AuditLogsPageClient() {
             </Link>
           </div>
         </form>
+
+        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-sm font-semibold uppercase tracking-[0.22em] text-teal-800">Quick filters</p>
+          <div className="mt-4 flex flex-wrap gap-3">
+            {quickFilters.map((filter) => (
+              <button
+                key={filter.label}
+                type="button"
+                onClick={() => applyQuickFilter(filter.params)}
+                className="rounded-full border border-slate-300 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-900 transition hover:bg-white"
+              >
+                {filter.label}
+              </button>
+            ))}
+          </div>
+          <p className="mt-3 text-sm text-slate-600">
+            Use these presets to review hotel-level enablement changes, tenant settings updates, and keycard-related operational actions.
+          </p>
+        </section>
 
         <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
           <table className="min-w-full divide-y divide-slate-200 text-left">

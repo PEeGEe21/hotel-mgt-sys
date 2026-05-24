@@ -42,6 +42,7 @@ import { SeedModule } from './modules/seed/seed.module';
 import { RootController } from './root.controller';
 import { PlatformModule } from './modules/platform/platform.module';
 import { HotelLifecycleModule } from './modules/hotel-lifecycle/hotel-lifecycle.module';
+import { KeycardsModule } from './modules/keycards/keycards.module';
 
 @Module({
   imports: [
@@ -102,6 +103,7 @@ import { HotelLifecycleModule } from './modules/hotel-lifecycle/hotel-lifecycle.
     JobTitlesModule,
     SeedModule,
     HotelLifecycleModule,
+    KeycardsModule,
     PlatformModule,
   ],
   controllers: [RootController],

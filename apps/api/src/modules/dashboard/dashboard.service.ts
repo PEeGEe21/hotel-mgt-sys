@@ -96,8 +96,8 @@ export class DashboardService {
   }
 
   async getFeatureFlags(userId: string) {
-    await this.getDashboardContext(userId);
-    const flags = await this.getFeatureFlagMap();
+    const ctx = await this.getDashboardContext(userId);
+    const flags = await this.getFeatureFlagMap(ctx.hotelId);
     return { flags };
   }
 
@@ -197,7 +197,7 @@ export class DashboardService {
       throw new ForbiddenException('Insufficient permissions for this widget.');
     }
 
-    const featureFlags = await this.getFeatureFlagMap();
+    const featureFlags = await this.getFeatureFlagMap(ctx.hotelId);
     if (widget.featureFlag && featureFlags[widget.featureFlag] === false) {
       throw new ForbiddenException('This widget is disabled.');
     }
@@ -276,16 +276,28 @@ export class DashboardService {
     };
   }
 
-  private async getFeatureFlagMap() {
+  private async getFeatureFlagMap(hotelId: string) {
     return this.cache.getOrSet(
-      this.dashboardFeatureFlagsCacheKey(),
+      this.dashboardFeatureFlagsCacheKey(hotelId),
       DASHBOARD_FEATURE_FLAGS_TTL_SECONDS,
       async () => {
-        const flags = await this.prisma.featureFlag.findMany();
-        return flags.reduce<Record<string, boolean>>((acc, flag) => {
+        const [flags, hotel] = await Promise.all([
+          this.prisma.featureFlag.findMany(),
+          (this.prisma.hotel as any).findUnique({
+            where: { id: hotelId },
+            select: { keycardAuthEnabled: true },
+          }),
+        ]);
+
+        const resolved = flags.reduce<Record<string, boolean>>((acc, flag) => {
           acc[flag.key] = flag.enabled !== false;
           return acc;
         }, {});
+
+        resolved.keycard_auth =
+          resolved.keycard_auth !== false && hotel?.keycardAuthEnabled === true;
+
+        return resolved;
       },
     );
   }
@@ -301,8 +313,8 @@ export class DashboardService {
     return `dashboard:config:${hotelId}:${role}`;
   }
 
-  private dashboardFeatureFlagsCacheKey() {
-    return 'dashboard:feature-flags';
+  private dashboardFeatureFlagsCacheKey(hotelId: string) {
+    return `dashboard:feature-flags:${hotelId}`;
   }
 
   private dashboardAdminLayoutsCacheKey(hotelId: string) {

@@ -23,6 +23,7 @@ import {
   useRunHotelCronJob,
   useUpdateHotelProfile,
 } from '@/hooks/hotel/useHotelProfile';
+import { useHotelFeatureAccess } from '@/hooks/hotel/useHotelFeatureAccess';
 import { useRealtimeSettings, useUpdateRealtimeSettings } from '@/hooks/useRealtimeSettings';
 import { validateImageFile } from '@/utils/image-file';
 
@@ -423,6 +424,7 @@ function SectionHeader({
 export default function HotelProfilePage() {
   const router = useRouter();
   const { data, isLoading } = useHotelProfile();
+  const { data: featureAccess } = useHotelFeatureAccess();
   const { data: realtimeSettings } = useRealtimeSettings();
   const updateHotel = useUpdateHotelProfile();
   const updateRealtimeSettings = useUpdateRealtimeSettings();
@@ -444,6 +446,10 @@ export default function HotelProfilePage() {
     logo: null as string | null,
     currency: 'NGN',
     timezone: 'Africa/Lagos',
+    keycardAuthEnabled: false,
+    lockVendor: 'MOCK',
+    lockApiKey: '',
+    lockApiConfig: '{\n  \n}',
     taxRate: '0',
     description: '',
     latitude: '',
@@ -508,6 +514,12 @@ export default function HotelProfilePage() {
       logo: data.logo ?? null,
       currency: data.currency ?? 'NGN',
       timezone: data.timezone ?? 'Africa/Lagos',
+      keycardAuthEnabled: Boolean(data.keycardAuthEnabled),
+      lockVendor: data.lockVendor ?? 'MOCK',
+      lockApiKey: data.lockApiKey ?? '',
+      lockApiConfig: data.lockApiConfig
+        ? JSON.stringify(data.lockApiConfig, null, 2)
+        : '{\n  \n}',
       taxRate: data.taxRate != null ? String(data.taxRate) : '0',
       description: data.description ?? '',
       latitude: data.latitude != null ? String(data.latitude) : '',
@@ -575,6 +587,7 @@ export default function HotelProfilePage() {
   }, [realtimeSettings]);
 
   const schedulerTimezone = form.timezone || 'Africa/Lagos';
+  const keycardGlobalEnabled = featureAccess?.sources.keycard_auth.globalEnabled === true;
 
   const attendanceHealth = getSchedulerHealth({
     enabled: form.attendanceAbsenceScanEnabled,
@@ -839,6 +852,19 @@ export default function HotelProfilePage() {
     let payload: Record<string, unknown> = {};
 
     if (section === 'profile') {
+      let parsedLockApiConfig: Record<string, unknown> | undefined;
+      if (keycardGlobalEnabled) {
+        const raw = form.lockApiConfig.trim();
+        if (raw) {
+          try {
+            parsedLockApiConfig = JSON.parse(raw);
+          } catch {
+            openToast('error', 'Lock API config must be valid JSON.');
+            return;
+          }
+        }
+      }
+
       payload = {
         name: form.name,
         address: form.address,
@@ -851,6 +877,14 @@ export default function HotelProfilePage() {
         logo: form.logo || null,
         currency: form.currency,
         timezone: form.timezone,
+        ...(keycardGlobalEnabled
+          ? {
+              keycardAuthEnabled: form.keycardAuthEnabled,
+              lockVendor: form.lockVendor.trim() || null,
+              lockApiKey: form.lockApiKey.trim() || null,
+              lockApiConfig: parsedLockApiConfig ?? {},
+            }
+          : {}),
         taxRate: Number(form.taxRate || 0),
         description: form.description || null,
       };
@@ -1002,7 +1036,7 @@ export default function HotelProfilePage() {
             <>
               <SectionHeader
                 title="Profile"
-                description="Hotel identity, contact details, location, and accounting basics."
+                description="Hotel identity, contact details, location, accounting basics, and lock configuration."
                 saved={savedSection === 'profile'}
                 saving={isLoading || updateHotel.isPending}
                 onSave={() => saveSection('profile')}
@@ -1144,6 +1178,83 @@ export default function HotelProfilePage() {
                     />
                   </div>
                 </div>
+
+                {keycardGlobalEnabled && (
+                  <div className="mt-5 border-t border-[#1e2536] pt-5 space-y-4">
+                    <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                      <div>
+                        <h3 className="text-base font-semibold text-white">Lock Configuration</h3>
+                        <p className="mt-1 text-sm text-slate-500">
+                          Set the hotel-wide default vendor and credentials. Room-level lock mappings stay on each room record.
+                        </p>
+                      </div>
+                      <span
+                        className={`inline-flex self-start items-center rounded-full border px-3 py-1 text-xs font-semibold ${
+                          form.keycardAuthEnabled
+                            ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
+                            : 'border-slate-600/40 bg-slate-700/30 text-slate-300'
+                        }`}
+                      >
+                        {form.keycardAuthEnabled ? 'Keycard access enabled' : 'Keycard access disabled'}
+                      </span>
+                    </div>
+
+                    <ToggleRow
+                      title="Enable keycard access for this hotel"
+                      description="Allows reservation and room surfaces to use the hotel’s lock configuration when the platform rollout is enabled."
+                      enabled={form.keycardAuthEnabled}
+                      onToggle={() => set('keycardAuthEnabled', !form.keycardAuthEnabled)}
+                    />
+
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                      <div>
+                        <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
+                          Default Lock Vendor
+                        </label>
+                        <select
+                          value={form.lockVendor}
+                          onChange={(e) => set('lockVendor', e.target.value)}
+                          className="w-full rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-2.5 text-sm text-slate-200 outline-none transition-colors focus:border-blue-500"
+                        >
+                          {['MOCK', 'TTLOCK', 'VINGCARD', 'SAFLOK', 'ONITY', 'DORMAKABA', 'CUSTOM'].map((vendor) => (
+                            <option key={vendor} value={vendor}>
+                              {vendor}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
+                          Vendor API Key
+                        </label>
+                        <input
+                          type="password"
+                          value={form.lockApiKey}
+                          onChange={(e) => set('lockApiKey', e.target.value)}
+                          placeholder="Optional for MOCK provider"
+                          className="w-full rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-2.5 text-sm text-slate-200 outline-none transition-colors focus:border-blue-500"
+                        />
+                      </div>
+
+                      <div className="md:col-span-2">
+                        <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
+                          Vendor API Config JSON
+                        </label>
+                        <textarea
+                          value={form.lockApiConfig}
+                          onChange={(e) => set('lockApiConfig', e.target.value)}
+                          rows={8}
+                          spellCheck={false}
+                          className="w-full rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-2.5 font-mono text-sm text-slate-200 outline-none transition-colors focus:border-blue-500"
+                        />
+                        <p className="mt-1 text-xs text-slate-500">
+                          Store vendor-specific JSON like site identifiers, endpoints, or environment switches.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </>
           )}

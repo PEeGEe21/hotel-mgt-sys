@@ -29,6 +29,8 @@ export type ApiRoom = {
   description: string | null;
   amenities: string[];
   images: string[];
+  lockDeviceId?: string | null;
+  lockVendor?: string | null;
   createdAt: string;
   updatedAt: string;
 };

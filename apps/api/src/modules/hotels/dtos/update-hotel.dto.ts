@@ -5,6 +5,7 @@ import {
   IsBoolean,
   IsInt,
   IsNumber,
+  IsObject,
   IsOptional,
   IsString,
   Max,
@@ -101,6 +102,10 @@ export class UpdateHotelDto {
   @ApiPropertyOptional() @IsString() @IsOptional() description?: string;
   @ApiPropertyOptional() @IsString() @IsOptional() currency?: string;
   @ApiPropertyOptional() @IsString() @IsOptional() timezone?: string;
+  @ApiPropertyOptional() @IsBoolean() @IsOptional() keycardAuthEnabled?: boolean;
+  @ApiPropertyOptional() @IsString() @IsOptional() lockVendor?: string;
+  @ApiPropertyOptional() @IsString() @IsOptional() lockApiKey?: string;
+  @ApiPropertyOptional({ type: Object }) @IsObject() @IsOptional() lockApiConfig?: Record<string, unknown>;
   @ApiPropertyOptional() @IsNumber() @IsOptional() taxRate?: number;
   @ApiPropertyOptional() @IsNumber() @IsOptional() latitude?: number;
   @ApiPropertyOptional() @IsNumber() @IsOptional() longitude?: number;

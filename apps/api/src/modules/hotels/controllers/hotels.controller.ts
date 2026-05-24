@@ -19,10 +19,16 @@ export class HotelsController {
     return this.hotelsService.getProfile(req.user.hotelId);
   }
 
+  @Get('me/features')
+  @Permissions('view:settings')
+  getFeatureAccess(@Request() req: any) {
+    return this.hotelsService.getFeatureAccess(req.user.hotelId);
+  }
+
   @Patch('me')
   @Permissions('manage:settings')
   updateProfile(@Request() req: any, @Body() dto: UpdateHotelDto) {
-    return this.hotelsService.updateProfile(req.user.hotelId, dto);
+    return this.hotelsService.updateProfile(req.user.hotelId, dto, req.user.sub);
   }
 
   @Post('me/cron/run')

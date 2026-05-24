@@ -6,6 +6,7 @@ import { LedgerModule } from '../ledger/ledger.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { EmailModule } from '../../common/email/email.module';
 import { FacilitiesModule } from '../facilities/facilities.module';
+import { KeycardsModule } from '../keycards/keycards.module';
 import { RESERVATIONS_QUEUE } from './reservations.constants';
 import { ReservationsSchedulerService } from './services/reservations-scheduler.service';
 import { ReservationsProcessor } from './workers/reservations.processor';
@@ -15,6 +16,7 @@ import { ReservationsProcessor } from './workers/reservations.processor';
     NotificationsModule,
     EmailModule,
     FacilitiesModule,
+    KeycardsModule,
     BullModule.registerQueue({
       name: RESERVATIONS_QUEUE,
     }),

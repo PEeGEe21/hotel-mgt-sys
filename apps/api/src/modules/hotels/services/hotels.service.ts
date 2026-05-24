@@ -528,8 +528,55 @@ export class HotelsService {
     };
   }
 
-  async updateProfile(hotelId: string, dto: UpdateHotelDto) {
-    await this.getProfile(hotelId);
+  async getFeatureAccess(hotelId: string) {
+    const [hotel, flags] = await Promise.all([
+      (this.prisma.hotel as any).findUnique({
+        where: { id: hotelId },
+        select: {
+          id: true,
+          keycardAuthEnabled: true,
+        },
+      }),
+      this.prisma.featureFlag.findMany({
+        where: {
+          key: {
+            in: ['keycard_auth'],
+          },
+        },
+        select: {
+          key: true,
+          enabled: true,
+        },
+      }),
+    ]);
+
+    if (!hotel) {
+      throw new NotFoundException('Hotel not found.');
+    }
+
+    const globalFlags = flags.reduce<Record<string, boolean>>((acc, flag) => {
+      acc[flag.key] = flag.enabled !== false;
+      return acc;
+    }, {});
+
+    const globalEnabled = globalFlags.keycard_auth !== false;
+    const hotelEnabled = hotel.keycardAuthEnabled === true;
+
+    return {
+      flags: {
+        keycard_auth: globalEnabled && hotelEnabled,
+      },
+      sources: {
+        keycard_auth: {
+          globalEnabled,
+          hotelEnabled,
+        },
+      },
+    };
+  }
+
+  async updateProfile(hotelId: string, dto: UpdateHotelDto, actorUserId?: string) {
+    const currentProfile = await this.getProfile(hotelId);
     const { cronSettings, invoiceTemplateSettings, hrContractSettings, ...hotelData } = dto;
 
     await this.prisma.$transaction(async (tx) => {
@@ -722,6 +769,31 @@ export class HotelsService {
         });
       }
     });
+
+    if (actorUserId) {
+      const keycardChangedFields = ['keycardAuthEnabled', 'lockVendor', 'lockApiKey', 'lockApiConfig']
+        .filter((field) => field in hotelData)
+        .filter((field) => {
+          const before = (currentProfile as Record<string, unknown>)[field] ?? null;
+          const after = (hotelData as Record<string, unknown>)[field] ?? null;
+          return JSON.stringify(before) !== JSON.stringify(after);
+        });
+
+      if (keycardChangedFields.length > 0) {
+        await this.prisma.auditLog.create({
+          data: {
+            hotelId,
+            actorUserId,
+            action: 'hotel.keycard.settings_update',
+            targetType: 'HOTEL',
+            targetId: hotelId,
+            metadata: {
+              changedFields: keycardChangedFields,
+            },
+          },
+        });
+      }
+    }
 
     return this.getProfile(hotelId);
   }

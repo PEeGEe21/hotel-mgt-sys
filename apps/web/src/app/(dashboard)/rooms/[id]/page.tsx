@@ -35,6 +35,8 @@ import {
 import { STATUS_CONFIG, TYPE_CONFIG, ALL_ROOM_STATUSES, type RoomStatus } from '@/lib/rooms-data';
 import { useRoom, useUpdateRoomStatus } from '@/hooks/room/useRooms';
 import { useRoomReservations } from '@/hooks/room/useRoomReservations';
+import { useHotelFeatureAccess } from '@/hooks/hotel/useHotelFeatureAccess';
+import { useHotelProfile } from '@/hooks/hotel/useHotelProfile';
 import TableScroll from '@/components/ui/table-scroll';
 import { useAppStore } from '@/store/app.store';
 import {
@@ -235,6 +237,8 @@ export default function RoomDetailPage() {
   const hotel = useAppStore((state) => state.hotel);
   const currency = hotel?.currency || 'NGN';
   const { data: room, isLoading, isError } = useRoom(id);
+  const { data: hotelProfile } = useHotelProfile();
+  const { data: featureAccess } = useHotelFeatureAccess();
   const [resPage, setResPage] = useState(1);
   const resLimit = 6;
   const { data: resPageData, isLoading: resLoading } = useRoomReservations(id, {
@@ -276,6 +280,15 @@ export default function RoomDetailPage() {
   const resTotalPages = resPageData?.totalPages ?? 1;
   const maintenance = hkTasks.filter((t) => t.type === 'MAINTENANCE');
   const cleaning = hkTasks.filter((t) => t.type !== 'MAINTENANCE');
+  const keycardFeatureVisible = featureAccess?.flags.keycard_auth === true;
+  const roomLockVendor = room.lockVendor?.trim() || null;
+  const hotelLockVendor = hotelProfile?.lockVendor?.trim() || null;
+  const effectiveLockVendor = roomLockVendor || hotelLockVendor || 'MOCK';
+  const lockConfigStatus = hotelProfile?.lockApiKey || hotelProfile?.lockApiConfig
+    ? 'Configured'
+    : effectiveLockVendor === 'MOCK'
+      ? 'Mock provider'
+      : 'Needs credentials';
 
   const folioBalance = folioItems.reduce((sum, f) => sum + Number(f.amount), 0);
 
@@ -602,6 +615,46 @@ export default function RoomDetailPage() {
                     </div>
                   )}
                 </div>
+
+                {keycardFeatureVisible && (
+                  <div className="bg-[#161b27] border border-[#1e2536] rounded-xl p-5">
+                    <div className="flex items-start justify-between gap-3 mb-4">
+                      <div>
+                        <p className="text-xs text-slate-500 uppercase tracking-wider font-medium">
+                          Lock Mapping
+                        </p>
+                        <p className="text-xs text-slate-600 mt-1">
+                          Reference only. Keycard issue and revoke stay on the reservation workflow.
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => router.push('/settings/hotel')}
+                        className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                      >
+                        Manage Settings
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {[
+                        { label: 'Lock Device ID', value: room.lockDeviceId ?? 'Not mapped' },
+                        { label: 'Room Lock Vendor', value: roomLockVendor ?? 'Uses hotel default' },
+                        { label: 'Hotel Default Vendor', value: hotelLockVendor ?? 'Not configured' },
+                        { label: 'Effective Provider', value: effectiveLockVendor },
+                        {
+                          label: 'Keycard Access',
+                          value: hotelProfile?.keycardAuthEnabled ? 'Enabled for hotel' : 'Disabled for hotel',
+                        },
+                        { label: 'Vendor Credentials', value: lockConfigStatus },
+                      ].map(({ label, value }) => (
+                        <div key={label} className="rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-3">
+                          <p className="text-[11px] uppercase tracking-wider text-slate-600">{label}</p>
+                          <p className="text-sm text-slate-200 font-medium mt-1 break-words">{value}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Right — amenities + actions */}

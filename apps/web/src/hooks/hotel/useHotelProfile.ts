@@ -20,6 +20,10 @@ export type HotelProfile = {
   description?: string | null;
   currency: string;
   timezone: string;
+  keycardAuthEnabled?: boolean;
+  lockVendor?: string | null;
+  lockApiKey?: string | null;
+  lockApiConfig?: Record<string, unknown> | null;
   taxRate?: number | string | null;
   latitude?: number | null;
   longitude?: number | null;

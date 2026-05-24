@@ -33,7 +33,23 @@ function createService(overrides = {}) {
     reservation: {
       findMany: async () => [],
       count: async () => 0,
+      findFirst: async () => null,
       ...overrides.reservation,
+    },
+    room: {
+      findMany: async () => [],
+      count: async () => 0,
+      ...overrides.room,
+    },
+    keycardAccessLog: {
+      count: async () => 0,
+      groupBy: async () => [],
+      findMany: async () => [],
+      ...overrides.keycardAccessLog,
+    },
+    invoice: {
+      count: async () => 0,
+      ...overrides.invoice,
     },
     auditLog: {
       create: async () => ({}),
@@ -371,4 +387,140 @@ test('listHotels includes derived warning health when activity is stale and invo
   assert.equal(result.hotels[0].health.status, 'warning');
   assert.equal(result.hotels[0].health.overdueInvoices, 2);
   assert.ok(result.hotels[0].health.score < 80);
+});
+
+test('getStats includes keycard rollout and failure signals', async () => {
+  const service = createService({
+    hotel: {
+      count: async ({ where } = {}) => {
+        if (where?.suspendedAt) return 1;
+        if (where?.staff?.none) return 2;
+        return 4;
+      },
+      findMany: async ({ where } = {}) => {
+        if (where?.keycardAuthEnabled) {
+          return [
+            {
+              id: 'hotel-1',
+              name: 'Hotel Alpha',
+              lockVendor: 'MOCK',
+              rooms: [{ id: 'room-1', lockDeviceId: 'lock-1' }, { id: 'room-2', lockDeviceId: null }],
+            },
+            {
+              id: 'hotel-2',
+              name: 'Hotel Beta',
+              lockVendor: 'VINGCARD',
+              rooms: [{ id: 'room-3', lockDeviceId: 'lock-3' }],
+            },
+          ];
+        }
+
+        return [
+          { id: 'hotel-1', name: 'Hotel Alpha' },
+          { id: 'hotel-2', name: 'Hotel Beta' },
+        ];
+      },
+    },
+    user: {
+      count: async () => 10,
+    },
+    reservation: {
+      count: async () => 6,
+    },
+    keycardAccessLog: {
+      groupBy: async () => [
+        { hotelId: 'hotel-1', _count: { _all: 5 } },
+        { hotelId: 'hotel-2', _count: { _all: 1 } },
+      ],
+    },
+  });
+
+  const result = await service.getStats();
+
+  assert.equal(result.keycards.enabledHotels, 2);
+  assert.equal(result.keycards.mockProviderHotels, 1);
+  assert.equal(result.keycards.liveProviderHotels, 1);
+  assert.equal(result.keycards.hotelsWithMissingRoomLockMappings, 1);
+  assert.equal(result.keycards.recentFailureEvents24h, 6);
+  assert.equal(result.keycards.denialSpikeHotels[0].name, 'Hotel Alpha');
+});
+
+test('getHotelDetail includes keycard support signals and recent incident summaries', async () => {
+  const service = createService({
+    hotel: {
+      findUnique: async () => ({
+        id: 'hotel-1',
+        name: 'Hotel Alpha',
+        domain: 'alpha',
+        address: '1 Street',
+        city: 'Lagos',
+        state: null,
+        country: 'Nigeria',
+        phone: '+234',
+        email: 'hello@alpha.com',
+        website: null,
+        description: null,
+        currency: 'NGN',
+        timezone: 'Africa/Lagos',
+        keycardAuthEnabled: true,
+        lockVendor: 'VINGCARD',
+        lockApiKey: null,
+        lockApiConfig: null,
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-05-01T00:00:00.000Z'),
+        onboardingStatus: 'ACTIVE',
+        suspendedAt: null,
+        suspensionReason: null,
+        deletedAt: null,
+        purgeAfterAt: null,
+        _count: { rooms: 2, staff: 3, guests: 5, reservations: 8, facilities: 1, invoices: 2, payments: 3 },
+      }),
+    },
+    user: {
+      findMany: async () => [],
+    },
+    staff: {
+      findMany: async () => [],
+    },
+    reservation: {
+      findMany: async () => [],
+      findFirst: async () => ({ createdAt: new Date('2026-05-20T00:00:00.000Z') }),
+    },
+    invoice: {
+      count: async () => 0,
+    },
+    room: {
+      findMany: async () => [
+        { id: 'room-1', number: '101', lockDeviceId: 'lock-101', lockVendor: null },
+        { id: 'room-2', number: '102', lockDeviceId: null, lockVendor: null },
+      ],
+    },
+    keycardAccessLog: {
+      groupBy: async () => [
+        { result: 'DENIED', _count: { _all: 2 } },
+        { result: 'GRANTED', _count: { _all: 6 } },
+        { result: 'UNKNOWN', _count: { _all: 1 } },
+      ],
+      findMany: async () => [
+        {
+          id: 'log-1',
+          createdAt: new Date('2026-05-24T10:00:00.000Z'),
+          result: 'DENIED',
+          reason: 'device_not_mapped',
+          deviceId: 'front-door',
+          accessToken: 'abcdefgh12345678',
+          room: { number: '102' },
+        },
+      ],
+    },
+  });
+
+  const result = await service.getHotelDetail('hotel-1');
+
+  assert.equal(result.keycards.providerMode, 'live');
+  assert.equal(result.keycards.missingRoomLockMappings, 1);
+  assert.equal(result.keycards.lockApiConfigured, false);
+  assert.equal(result.keycards.accessSummary.denied24h, 2);
+  assert.equal(result.keycards.supportSignals.configurationIssues.length > 0, true);
+  assert.equal(result.keycards.accessSummary.recentEvents[0].diagnosis, 'configuration');
 });

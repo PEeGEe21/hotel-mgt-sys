@@ -217,6 +217,13 @@ const DASHBOARD_ROLE_LAYOUTS: Record<Role, string[]> = {
 
 const DASHBOARD_FEATURE_FLAGS = [
   {
+    key: 'keycard_auth',
+    enabled: true,
+    planRequired: null,
+    description:
+      'Reservation-backed keycard access. Hotel-level rollout stays disabled until explicitly enabled.',
+  },
+  {
     key: 'revenue_analytics',
     enabled: true,
     planRequired: null,

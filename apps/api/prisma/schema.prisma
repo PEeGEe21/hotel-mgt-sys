@@ -155,6 +155,36 @@ enum BookingType {
   GROUP // multiple rooms under one booking
 }
 
+enum KeycardStatus {
+  PENDING
+  ACTIVE
+  FAILED
+  EXPIRED
+  REVOKED
+  LOST
+}
+
+enum KeycardType {
+  PHYSICAL
+  MOBILE
+}
+
+enum KeycardAccessResult {
+  GRANTED
+  DENIED
+  EXPIRED
+  REVOKED
+  UNKNOWN
+}
+
+enum KeycardAccessMethod {
+  RFID
+  NFC
+  BLE
+  MANUAL
+  VENDOR_SYNC
+}
+
 // ─── HOTEL ────────────────────────────────────────────────────────────────────
 
 model Hotel {
@@ -174,6 +204,10 @@ model Hotel {
   currency                            String   @default("NGN")
   timezone                            String   @default("Africa/Lagos")
   onboardingStatus                    HotelOnboardingStatus @default(PENDING_SETUP)
+  keycardAuthEnabled                  Boolean  @default(false)
+  lockVendor                          String?
+  lockApiKey                          String?
+  lockApiConfig                       Json?
   suspendedAt                         DateTime?
   suspensionReason                    String?
   deletedAt                           DateTime?
@@ -252,6 +286,8 @@ model Hotel {
   roleDashboardConfigs    RoleDashboardConfig[]
   realtimeModuleHealth    RealtimeModuleHealth[]
   realtimeEventLogs       RealtimeEventLog[]
+  keycards                Keycard[]
+  keycardAccessLogs       KeycardAccessLog[]
 }
 
 model DashboardWidget {
@@ -1002,6 +1038,8 @@ model Room {
   description String?
   amenities   String[]
   images      String[]
+  lockDeviceId String?
+  lockVendor   String?
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
@@ -1011,6 +1049,8 @@ model Room {
   housekeepingTasks   HousekeepingTask[]
   maintenanceRequests MaintenanceRequest[]
   facilityComplaints  FacilityComplaint[]
+  keycards            Keycard[]
+  keycardAccessLogs   KeycardAccessLog[]
 
   @@unique([hotelId, number])
   @@index([hotelId, status])
@@ -1086,6 +1126,7 @@ model Guest {
   reservationGuests  ReservationGuest[] // all reservations this guest appears on
   facilityBookings   FacilityBooking[]
   facilityComplaints FacilityComplaint[]
+  keycards           Keycard[]
 
   @@index([hotelId])
   @@index([hotelId, email])
@@ -1126,6 +1167,7 @@ model Reservation {
   facilityBookings FacilityBooking[]
   folioItems       FolioItem[]
   posOrders        PosOrder[]
+  keycards         Keycard[]
 
   @@index([hotelId, status])
   @@index([hotelId, checkIn, checkOut])
@@ -1148,6 +1190,62 @@ model ReservationGuest {
   @@unique([reservationId, guestId]) // a guest can only appear once per reservation
   @@index([reservationId])
   @@index([guestId])
+}
+
+model Keycard {
+  id              String         @id @default(uuid())
+  hotelId         String
+  reservationId   String
+  roomId          String
+  guestId         String?
+  cardUid         String?
+  accessToken     String         @unique
+  type            KeycardType    @default(PHYSICAL)
+  status          KeycardStatus  @default(ACTIVE)
+  issuedAt        DateTime       @default(now())
+  validFrom       DateTime
+  validUntil      DateTime
+  revokedAt       DateTime?
+  revokedReason   String?
+  issuedByStaffId String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  hotel      Hotel               @relation(fields: [hotelId], references: [id])
+  reservation Reservation        @relation(fields: [reservationId], references: [id])
+  room       Room                @relation(fields: [roomId], references: [id])
+  guest      Guest?              @relation(fields: [guestId], references: [id])
+  accessLogs KeycardAccessLog[]
+
+  @@index([hotelId])
+  @@index([reservationId])
+  @@index([roomId])
+  @@index([guestId])
+  @@index([status, validUntil])
+}
+
+model KeycardAccessLog {
+  id            String              @id @default(uuid())
+  hotelId       String?
+  keycardId     String?
+  roomId        String?
+  accessToken   String
+  result        KeycardAccessResult
+  reason        String?
+  method        KeycardAccessMethod
+  deviceId      String?
+  vendorEventId String?
+  ipAddress     String?
+  createdAt     DateTime            @default(now())
+
+  hotel   Hotel?   @relation(fields: [hotelId], references: [id])
+  keycard Keycard? @relation(fields: [keycardId], references: [id])
+  room    Room?    @relation(fields: [roomId], references: [id])
+
+  @@index([hotelId, createdAt])
+  @@index([keycardId])
+  @@index([roomId, createdAt])
+  @@index([accessToken])
 }
 
 // ─── FINANCE ──────────────────────────────────────────────────────────────────

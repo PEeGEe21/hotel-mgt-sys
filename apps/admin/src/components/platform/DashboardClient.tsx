@@ -46,6 +46,10 @@ function healthClasses(status: 'healthy' | 'warning' | 'critical' | 'setup') {
   }
 }
 
+function keycardModeLabel(mode: 'mock' | 'live') {
+  return mode === 'mock' ? 'Mock provider' : 'Live provider';
+}
+
 export function DashboardClient() {
   const statsQuery = usePlatformStats();
   const hotelsQuery = usePlatformHotels(1, 8);
@@ -89,6 +93,11 @@ export function DashboardClient() {
   const hotels = hotelsQuery.data?.hotels ?? [];
   const incompleteOnboardings = hotels.filter((hotel) => hotel.onboardingStatus !== 'ACTIVE');
   const activity = activityQuery.data?.events ?? [];
+  const keycardStats = statsQuery.data?.keycards;
+  const keycardHotels = hotels.filter((hotel) => hotel.keycards.enabled);
+  const hotelsWithKeycardIssues = keycardHotels.filter(
+    (hotel) => hotel.keycards.missingRoomLockMappings > 0 || hotel.keycards.deniedEvents24h > 0,
+  );
 
   return (
     <main className="min-h-screen px-6 py-10 text-slate-900 md:px-10">
@@ -157,6 +166,83 @@ export function DashboardClient() {
           ))}
         </section>
 
+        <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+          <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-[0.22em] text-teal-800">Keycard rollout</p>
+                <h2 className="mt-2 text-2xl font-semibold tracking-tight">Platform lock posture</h2>
+              </div>
+              <Link href="/hotels" className="text-sm font-semibold text-teal-900">
+                Review hotels
+              </Link>
+            </div>
+            <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-sm font-medium text-slate-500">Enabled hotels</p>
+                <p className="mt-3 text-3xl font-semibold tracking-tight">{formatCount(keycardStats?.enabledHotels ?? 0)}</p>
+                <p className="mt-2 text-sm text-slate-600">Hotels currently allowed to use keycard auth.</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-sm font-medium text-slate-500">Mock providers</p>
+                <p className="mt-3 text-3xl font-semibold tracking-tight">{formatCount(keycardStats?.mockProviderHotels ?? 0)}</p>
+                <p className="mt-2 text-sm text-slate-600">Tenants still validating with software-only locks.</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-sm font-medium text-slate-500">Live vendors</p>
+                <p className="mt-3 text-3xl font-semibold tracking-tight">{formatCount(keycardStats?.liveProviderHotels ?? 0)}</p>
+                <p className="mt-2 text-sm text-slate-600">Hotels configured against a real lock vendor.</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-sm font-medium text-slate-500">Recent failures</p>
+                <p className="mt-3 text-3xl font-semibold tracking-tight">{formatCount(keycardStats?.recentFailureEvents24h ?? 0)}</p>
+                <p className="mt-2 text-sm text-slate-600">Denied, expired, revoked, or unknown events in the last 24 hours.</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-sm font-medium text-slate-500">Missing mappings</p>
+                <p className="mt-3 text-3xl font-semibold tracking-tight">
+                  {formatCount(keycardStats?.hotelsWithMissingRoomLockMappings ?? 0)}
+                </p>
+                <p className="mt-2 text-sm text-slate-600">Enabled hotels with at least one unmapped room lock.</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-sm font-medium text-slate-500">Generated</p>
+                <p className="mt-3 text-lg font-semibold tracking-tight">{statsQuery.data ? formatDate(statsQuery.data.generatedAt) : '—'}</p>
+                <p className="mt-2 text-sm text-slate-600">Latest dashboard signal snapshot.</p>
+              </div>
+            </div>
+          </article>
+
+          <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-teal-800">Keycard watchlist</p>
+            <h2 className="mt-2 text-2xl font-semibold tracking-tight">Hotels needing follow-up</h2>
+            <div className="mt-6 space-y-3">
+              {statsQuery.isLoading ? (
+                <p className="text-sm text-slate-600">Loading keycard health signals...</p>
+              ) : keycardStats && keycardStats.denialSpikeHotels.length === 0 && keycardStats.missingMappingHotels.length === 0 ? (
+                <p className="text-sm text-slate-600">No denial spikes or missing lock mappings are standing out right now.</p>
+              ) : (
+                <>
+                  {keycardStats?.denialSpikeHotels.map((hotel) => (
+                    <Link key={`denials-${hotel.id}`} href={`/hotels/${hotel.id}`} className="block rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                      <p className="font-semibold text-amber-950">{hotel.name}</p>
+                      <p className="mt-1 text-sm text-amber-900">{hotel.deniedEvents24h} access failures recorded in the last 24 hours.</p>
+                    </Link>
+                  ))}
+                  {keycardStats?.missingMappingHotels.map((hotel) => (
+                    <Link key={`mapping-${hotel.id}`} href={`/hotels/${hotel.id}`} className="block rounded-2xl border border-rose-200 bg-rose-50 p-4">
+                      <p className="font-semibold text-rose-950">{hotel.name}</p>
+                      <p className="mt-1 text-sm text-rose-900">
+                        {hotel.missingRooms} of {hotel.totalRooms} rooms still need lock mappings.
+                      </p>
+                    </Link>
+                  ))}
+                </>
+              )}
+            </div>
+          </article>
+        </section>
+
         {authMessage ? <AuthNotice message={authMessage} /> : null}
 
         <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
@@ -204,6 +290,12 @@ export function DashboardClient() {
                       <p>Staff: {hotel.counts.staff}</p>
                       <p>Reservations: {hotel.counts.reservations}</p>
                     </div>
+                    {hotel.keycards.enabled ? (
+                      <div className="mt-3 grid gap-2 text-sm text-slate-600 md:grid-cols-2">
+                        <p>Keycards: {keycardModeLabel(hotel.keycards.providerMode)}</p>
+                        <p>Missing mappings: {hotel.keycards.missingRoomLockMappings}</p>
+                      </div>
+                    ) : null}
                     <div className="mt-3">
                       <OnboardingStatusBadge status={hotel.onboardingStatus} />
                     </div>
@@ -280,6 +372,47 @@ export function DashboardClient() {
                     <p className="mt-3 text-sm text-slate-500">{hotel.health.signals[0]}</p>
                   </div>
                 ))
+            )}
+          </div>
+        </section>
+
+        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.22em] text-teal-800">Tenant support</p>
+              <h2 className="mt-2 text-2xl font-semibold tracking-tight">Keycard support triage</h2>
+            </div>
+            <Link href="/audit-logs?action=keycard" className="text-sm font-semibold text-teal-900">
+              Review incidents
+            </Link>
+          </div>
+
+          <div className="mt-6 space-y-4">
+            {hotelsQuery.isLoading ? (
+              <p className="text-sm text-slate-600">Loading tenant support signals...</p>
+            ) : hotelsWithKeycardIssues.length === 0 ? (
+              <p className="text-sm text-slate-600">No recent keycard mapping gaps or denial activity in the latest hotel snapshot.</p>
+            ) : (
+              hotelsWithKeycardIssues.map((hotel) => (
+                <Link key={hotel.id} href={`/hotels/${hotel.id}`} className="block rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <h3 className="text-lg font-semibold text-slate-900">{hotel.name}</h3>
+                      <p className="mt-1 text-sm text-slate-600">
+                        {hotel.city}, {hotel.country} · {keycardModeLabel(hotel.keycards.providerMode)}
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white">
+                      {hotel.keycards.enabled ? 'Enabled' : 'Disabled'}
+                    </span>
+                  </div>
+                  <div className="mt-3 grid gap-3 text-sm text-slate-600 md:grid-cols-3">
+                    <p>Missing mappings: {hotel.keycards.missingRoomLockMappings}</p>
+                    <p>Denied events 24h: {hotel.keycards.deniedEvents24h}</p>
+                    <p>Mapped rooms: {hotel.keycards.roomsWithLockMapping} / {hotel.keycards.totalRooms}</p>
+                  </div>
+                </Link>
+              ))
             )}
           </div>
         </section>

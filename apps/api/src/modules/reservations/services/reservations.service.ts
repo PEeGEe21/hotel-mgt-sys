@@ -21,6 +21,7 @@ import { compileTemplate } from 'src/common/utils/compile-template.utils';
 import { LedgerService } from '../../ledger/ledger.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { EmailService } from '../../../common/email/email.service';
+import { KeycardsService } from '../../keycards/services/keycards.service';
 
 // ─── Service ──────────────────────────────────────────────────────────────────
 
@@ -53,7 +54,13 @@ export class ReservationsService {
     private ledger: LedgerService,
     private notifications: NotificationsService,
     private email: EmailService,
+    private keycardsService: KeycardsService,
   ) {}
+
+  private readonly emptyAuditMeta = {
+    ipAddress: null,
+    userAgent: null,
+  };
 
   private applyDefaultCheckoutTime(value: Date, hour: number, minute: number) {
     const next = new Date(value);
@@ -2132,7 +2139,13 @@ export class ReservationsService {
   }
 
   // ── Update ──────────────────────────────────────────────────────────────────
-  async update(hotelId: string, id: string, dto: UpdateReservationDto) {
+  async update(
+    hotelId: string,
+    id: string,
+    dto: UpdateReservationDto,
+    actorUserId?: string,
+    issuedByStaffId?: string | null,
+  ) {
     const data = this.normalizeOptionalRelations(dto);
     const current = await this.findOne(hotelId, id);
     const hotelSettings = await this.prisma.hotel.findUnique({
@@ -2153,18 +2166,44 @@ export class ReservationsService {
           hotelSettings?.defaultCheckoutMinute ?? 0,
         )
       : current.checkOut;
-    const roomOrDateChanged =
-      nextRoomId !== current.roomId ||
+    const roomChanged = nextRoomId !== current.roomId;
+    const datesChanged =
       nextCheckIn.getTime() !== current.checkIn.getTime() ||
       nextCheckOut.getTime() !== current.checkOut.getTime();
+    const roomOrDateChanged = roomChanged || datesChanged;
 
     if (nextCheckOut <= nextCheckIn) {
       throw new BadRequestException('Check-out must be after check-in.');
     }
 
-    if (roomOrDateChanged && !['PENDING', 'CONFIRMED'].includes(current.status)) {
-      throw new BadRequestException(`Cannot change room or dates for status ${current.status}.`);
+    if (datesChanged && !['PENDING', 'CONFIRMED'].includes(current.status)) {
+      throw new BadRequestException(`Cannot change dates for status ${current.status}.`);
     }
+
+    if (roomChanged && !['PENDING', 'CONFIRMED', 'CHECKED_IN'].includes(current.status)) {
+      throw new BadRequestException(`Cannot change room for status ${current.status}.`);
+    }
+
+    const activeKeycardsForRoomMove =
+      roomChanged && current.status === 'CHECKED_IN'
+        ? await (this.prisma as any).keycard.findMany({
+            where: {
+              hotelId,
+              reservationId: current.id,
+              roomId: current.roomId,
+              status: {
+                notIn: ['FAILED', 'REVOKED', 'LOST'],
+              },
+            },
+            select: {
+              id: true,
+              guestId: true,
+              cardUid: true,
+              type: true,
+              validUntil: true,
+            },
+          })
+        : [];
 
     await Promise.all([
       this.assertGuestBelongsToHotel(hotelId, data.guestId),
@@ -2186,13 +2225,56 @@ export class ReservationsService {
         include: RESERVATION_INCLUDE as any,
       });
 
-      if (data.roomId && data.roomId !== current.roomId && ['PENDING', 'CONFIRMED'].includes(reservation.status)) {
-        await tx.room.update({ where: { id: current.roomId }, data: { status: RoomStatus.AVAILABLE } });
-        await tx.room.update({ where: { id: data.roomId }, data: { status: RoomStatus.RESERVED } });
+      if (roomChanged) {
+        if (reservation.status === 'CHECKED_IN') {
+          await tx.room.update({
+            where: { id: current.roomId },
+            data: { status: RoomStatus.DIRTY },
+          });
+          await tx.room.update({
+            where: { id: nextRoomId },
+            data: { status: RoomStatus.OCCUPIED },
+          });
+        } else if (['PENDING', 'CONFIRMED'].includes(reservation.status)) {
+          await tx.room.update({
+            where: { id: current.roomId },
+            data: { status: RoomStatus.AVAILABLE },
+          });
+          await tx.room.update({
+            where: { id: nextRoomId },
+            data: { status: RoomStatus.RESERVED },
+          });
+        }
       }
 
       return reservation;
     });
+
+    if (roomChanged && current.status === 'CHECKED_IN' && actorUserId && activeKeycardsForRoomMove.length) {
+      for (const keycard of activeKeycardsForRoomMove) {
+        await this.keycardsService.revoke(
+          hotelId,
+          actorUserId,
+          keycard.id,
+          { reason: 'room_move_reissue' },
+          this.emptyAuditMeta,
+        );
+        await this.keycardsService.issue(
+          hotelId,
+          actorUserId,
+          issuedByStaffId ?? null,
+          {
+            reservationId: updated.id,
+            roomId: updated.roomId,
+            guestId: keycard.guestId ?? undefined,
+            cardUid: keycard.cardUid ?? undefined,
+            type: keycard.type,
+            validUntil: keycard.validUntil.toISOString(),
+          },
+          this.emptyAuditMeta,
+        );
+      }
+    }
 
     return updated;
   }
@@ -2331,11 +2413,21 @@ export class ReservationsService {
       );
     }
 
+    if (actorUserId) {
+      await this.keycardsService.revokeAllForReservation(
+        hotelId,
+        actorUserId,
+        updated.id,
+        { reason: 'checkout' },
+        this.emptyAuditMeta,
+      );
+    }
+
     return updated;
   }
 
   // ── Cancel ──────────────────────────────────────────────────────────────────
-  async cancel(hotelId: string, id: string) {
+  async cancel(hotelId: string, id: string, actorUserId?: string) {
     const res = await this.findOne(hotelId, id);
     if (['CHECKED_IN', 'CHECKED_OUT'].includes(res.status)) {
       throw new BadRequestException(`Cannot cancel a reservation with status ${res.status}.`);
@@ -2352,6 +2444,16 @@ export class ReservationsService {
         data: { status: RoomStatus.AVAILABLE },
       }),
     ]);
+
+    if (actorUserId) {
+      await this.keycardsService.revokeAllForReservation(
+        hotelId,
+        actorUserId,
+        updated.id,
+        { reason: 'reservation_cancelled' },
+        this.emptyAuditMeta,
+      );
+    }
 
     return updated;
   }

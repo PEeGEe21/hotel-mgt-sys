@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEmail, IsOptional, IsString, Length, MaxLength } from 'class-validator';
+import { IsBoolean, IsEmail, IsOptional, IsString, Length, MaxLength } from 'class-validator';
 
 export class UpdatePlatformHotelDto {
   @ApiPropertyOptional()
@@ -73,4 +73,15 @@ export class UpdatePlatformHotelDto {
   @IsString()
   @MaxLength(120)
   timezone?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  keycardAuthEnabled?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  lockVendor?: string;
 }

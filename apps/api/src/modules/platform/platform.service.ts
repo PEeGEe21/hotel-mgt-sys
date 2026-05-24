@@ -34,6 +34,8 @@ type PlatformHotelHealth = {
   signals: string[];
 };
 
+type PlatformKeycardProviderMode = 'mock' | 'live';
+
 const ADMIN_ROLE = 'ADMIN';
 const OVERDUE_PAYMENT_STATUSES = ['UNPAID', 'PARTIAL'] as const;
 
@@ -99,6 +101,29 @@ export class PlatformService {
     private readonly hotelLifecycleService: HotelLifecycleService,
     private readonly email: EmailService,
   ) {}
+
+  private normalizeLockVendor(vendor?: string | null) {
+    const normalized = vendor?.trim().toUpperCase();
+    return normalized || null;
+  }
+
+  private deriveKeycardProviderMode(vendor?: string | null): PlatformKeycardProviderMode {
+    return this.normalizeLockVendor(vendor) && this.normalizeLockVendor(vendor) !== 'MOCK'
+      ? 'live'
+      : 'mock';
+  }
+
+  private buildKeycardAccessDiagnosis(args: {
+    result: string;
+    hasConfigurationIssues: boolean;
+  }) {
+    if (['REVOKED', 'EXPIRED'].includes(args.result)) return 'lifecycle';
+    if (['UNKNOWN', 'DENIED'].includes(args.result) && args.hasConfigurationIssues) {
+      return 'configuration';
+    }
+    if (['DENIED', 'LOST'].includes(args.result)) return 'lifecycle';
+    return 'unknown';
+  }
 
   private getTenantAppUrl(hotelDomain?: string | null) {
     const baseUrl =
@@ -468,11 +493,39 @@ export class PlatformService {
   }
 
   async getStats() {
+    type FailureGroup = {
+      hotelId: string;
+      _count?: {
+        _all?: number | null;
+      } | null;
+    };
+    type MissingMappingHotel = {
+      id: string;
+      name: string;
+      totalRooms: number;
+      missingRooms: number;
+    };
+    type DenialSpikeHotel = {
+      id: string;
+      name: string;
+      deniedEvents24h: number;
+    };
+
     const now = Date.now();
     const last24Hours = new Date(now - 24 * 60 * 60 * 1000);
     const last30Days = new Date(now - 30 * 24 * 60 * 60 * 1000);
 
-    const [totalHotels, totalUsers, activeUsers, recentLogins, recentReservations, staleHotels, suspendedHotels] =
+    const [
+      totalHotels,
+      totalUsers,
+      activeUsers,
+      recentLogins,
+      recentReservations,
+      staleHotels,
+      suspendedHotels,
+      keycardHotels,
+      recentKeycardFailures,
+    ] =
       await Promise.all([
         this.prisma.hotel.count(),
         this.prisma.user.count(),
@@ -491,7 +544,74 @@ export class PlatformService {
           },
         }),
         this.prisma.hotel.count({ where: { suspendedAt: { not: null } } }),
+        this.prisma.hotel.findMany({
+          where: { keycardAuthEnabled: true },
+          select: {
+            id: true,
+            name: true,
+            lockVendor: true,
+            rooms: {
+              select: {
+                id: true,
+                lockDeviceId: true,
+              },
+            },
+          },
+        }),
+        (this.prisma as any).keycardAccessLog.groupBy({
+          by: ['hotelId'],
+          where: {
+            hotelId: { not: null },
+            createdAt: { gte: last24Hours },
+            result: { not: 'GRANTED' },
+          },
+          _count: {
+            _all: true,
+          },
+        }),
       ]);
+
+    const enabledHotels = keycardHotels.length;
+    const mockProviderHotels = keycardHotels.filter(
+      (hotel) => this.deriveKeycardProviderMode(hotel.lockVendor) === 'mock',
+    ).length;
+    const liveProviderHotels = enabledHotels - mockProviderHotels;
+    const missingMappingHotels: MissingMappingHotel[] = keycardHotels
+      .map((hotel) => {
+        const totalRooms = hotel.rooms.length;
+        const mappedRooms = hotel.rooms.filter((room) => Boolean(room.lockDeviceId)).length;
+        return {
+          id: hotel.id,
+          name: hotel.name,
+          totalRooms,
+          missingRooms: Math.max(0, totalRooms - mappedRooms),
+        };
+      })
+      .filter((hotel) => hotel.missingRooms > 0);
+    const failureGroups = recentKeycardFailures as FailureGroup[];
+    const failureEvents24h = failureGroups.reduce(
+      (sum, item) => sum + (item._count?._all ?? 0),
+      0,
+    );
+    const failureHotelIds = failureGroups
+      .map((item) => item.hotelId)
+      .filter(Boolean);
+    const failureHotelsById = failureHotelIds.length
+      ? await this.prisma.hotel.findMany({
+          where: { id: { in: failureHotelIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+    const failureHotelMap = new Map(failureHotelsById.map((hotel) => [hotel.id, hotel.name]));
+    const denialSpikeHotels: DenialSpikeHotel[] = failureGroups
+      .map((item) => ({
+        id: item.hotelId,
+        name: failureHotelMap.get(item.hotelId) ?? 'Unknown hotel',
+        deniedEvents24h: item._count?._all ?? 0,
+      }))
+      .filter((hotel) => hotel.id && hotel.deniedEvents24h >= 3)
+      .sort((a, b) => b.deniedEvents24h - a.deniedEvents24h)
+      .slice(0, 5);
 
     return {
       totals: {
@@ -502,6 +622,15 @@ export class PlatformService {
         recentReservations30d: recentReservations,
         staleHotels30d: staleHotels,
         suspendedHotels,
+      },
+      keycards: {
+        enabledHotels,
+        mockProviderHotels,
+        liveProviderHotels,
+        hotelsWithMissingRoomLockMappings: missingMappingHotels.length,
+        recentFailureEvents24h: failureEvents24h,
+        denialSpikeHotels,
+        missingMappingHotels: missingMappingHotels.slice(0, 5),
       },
       generatedAt: new Date().toISOString(),
     };
@@ -525,7 +654,7 @@ export class PlatformService {
       : {};
 
     const [rows, total] = await Promise.all([
-      this.prisma.hotel.findMany({
+      (this.prisma.hotel as any).findMany({
         where,
         orderBy: { createdAt: 'desc' },
         ...(params.all ? {} : { skip, take: limit }),
@@ -539,6 +668,8 @@ export class PlatformService {
           phone: true,
           createdAt: true,
           updatedAt: true,
+          keycardAuthEnabled: true,
+          lockVendor: true,
           onboardingStatus: true,
           suspendedAt: true,
           suspensionReason: true,
@@ -557,7 +688,7 @@ export class PlatformService {
     ]);
 
     const hotels = await Promise.all(
-      rows.map(async (hotel) => {
+      rows.map(async (hotel: any) => {
         const [primaryAdmin, latestStaffLogin, recentReservation, overdueInvoices] = await Promise.all([
           this.prisma.user.findFirst({
             where: {
@@ -592,6 +723,17 @@ export class PlatformService {
             },
           }),
         ]);
+        const roomMappings = await this.prisma.room.findMany({
+          where: { hotelId: hotel.id },
+          select: { id: true, lockDeviceId: true },
+        });
+        const deniedEvents24h = await (this.prisma as any).keycardAccessLog.count({
+          where: {
+            hotelId: hotel.id,
+            createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+            result: { not: 'GRANTED' },
+          },
+        });
 
         const onboardingStatus = this.hotelLifecycleService.deriveOnboardingStatus(
           hotel._count.rooms,
@@ -630,6 +772,7 @@ export class PlatformService {
           phone: hotel.phone,
           createdAt: hotel.createdAt,
           updatedAt: hotel.updatedAt,
+          keycardAuthEnabled: hotel.keycardAuthEnabled,
           onboardingStatus,
           suspendedAt: hotel.suspendedAt,
           suspensionReason: hotel.suspensionReason,
@@ -656,6 +799,15 @@ export class PlatformService {
             ...health,
             lastStaffLoginAt: health.lastStaffLoginAt,
             lastReservationCreatedAt: health.lastReservationCreatedAt,
+          },
+          keycards: {
+            enabled: hotel.keycardAuthEnabled,
+            hotelLockVendor: this.normalizeLockVendor(hotel.lockVendor),
+            providerMode: this.deriveKeycardProviderMode(hotel.lockVendor),
+            totalRooms: roomMappings.length,
+            roomsWithLockMapping: roomMappings.filter((room) => Boolean(room.lockDeviceId)).length,
+            missingRoomLockMappings: roomMappings.filter((room) => !room.lockDeviceId).length,
+            deniedEvents24h,
           },
         };
       }),
@@ -885,7 +1037,25 @@ export class PlatformService {
   }
 
   async getHotelDetail(hotelId: string) {
-    const hotel = await this.prisma.hotel.findUnique({
+    type ResultGroup = {
+      result: string;
+      _count?: {
+        _all?: number | null;
+      } | null;
+    };
+    type RecentKeycardEvent = {
+      id: string;
+      createdAt: Date;
+      result: string;
+      reason?: string | null;
+      deviceId?: string | null;
+      accessToken: string;
+      room?: {
+        number: string;
+      } | null;
+    };
+
+    const hotel = await (this.prisma.hotel as any).findUnique({
       where: { id: hotelId },
       select: {
         id: true,
@@ -901,6 +1071,10 @@ export class PlatformService {
         description: true,
         currency: true,
         timezone: true,
+        keycardAuthEnabled: true,
+        lockVendor: true,
+        lockApiKey: true,
+        lockApiConfig: true,
         createdAt: true,
         updatedAt: true,
         onboardingStatus: true,
@@ -928,7 +1102,7 @@ export class PlatformService {
 
     const onboardingStatus = this.hotelLifecycleService.deriveOnboardingStatus(hotel._count.rooms, hotel._count.staff);
 
-    const [admins, recentReservations, recentStaffLogins, latestReservation, overdueInvoices] = await Promise.all([
+    const [admins, recentReservations, recentStaffLogins, latestReservation, overdueInvoices, rooms, keycardEventGroups, recentKeycardEvents] = await Promise.all([
       this.prisma.user.findMany({
         where: {
           role: { in: ['SUPER_ADMIN', 'ADMIN'] },
@@ -985,6 +1159,37 @@ export class PlatformService {
           paymentStatus: { in: [...OVERDUE_PAYMENT_STATUSES] },
         },
       }),
+      this.prisma.room.findMany({
+        where: { hotelId },
+        select: {
+          id: true,
+          number: true,
+          lockDeviceId: true,
+          lockVendor: true,
+        },
+      }),
+      (this.prisma as any).keycardAccessLog.groupBy({
+        by: ['result'],
+        where: {
+          hotelId,
+          createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+        },
+        _count: {
+          _all: true,
+        },
+      }),
+      (this.prisma as any).keycardAccessLog.findMany({
+        where: { hotelId },
+        orderBy: { createdAt: 'desc' },
+        take: 8,
+        include: {
+          room: {
+            select: {
+              number: true,
+            },
+          },
+        },
+      }),
     ]);
 
     const latestStaffLoginAt = recentStaffLogins[0]?.user.lastLoginAt ?? null;
@@ -998,6 +1203,43 @@ export class PlatformService {
       staffCount: hotel._count.staff,
       roomCount: hotel._count.rooms,
     });
+    const roomMappingCount = rooms.filter((room) => Boolean(room.lockDeviceId)).length;
+    const missingRoomLockMappings = Math.max(0, rooms.length - roomMappingCount);
+    const hasLiveProvider = this.deriveKeycardProviderMode(hotel.lockVendor) === 'live';
+    const lockApiConfigured = Boolean(hotel.lockApiKey || hotel.lockApiConfig);
+    const keycardCountsByResult = new Map<string, number>(
+      (keycardEventGroups as ResultGroup[]).map((group) => [group.result, group._count?._all ?? 0]),
+    );
+    const configurationIssues: string[] = [];
+    if (hotel.keycardAuthEnabled && !this.normalizeLockVendor(hotel.lockVendor)) {
+      configurationIssues.push('Hotel keycard access is enabled without a default lock vendor.');
+    }
+    if (hotel.keycardAuthEnabled && hasLiveProvider && !lockApiConfigured) {
+      configurationIssues.push('A live lock vendor is selected but vendor credentials/config are missing.');
+    }
+    if (hotel.keycardAuthEnabled && missingRoomLockMappings > 0) {
+      configurationIssues.push(
+        `${missingRoomLockMappings} room${missingRoomLockMappings === 1 ? '' : 's'} are missing lock device mappings.`,
+      );
+    }
+    const lifecycleIssues: string[] = [];
+    const revoked24h = keycardCountsByResult.get('REVOKED') ?? 0;
+    const expired24h = keycardCountsByResult.get('EXPIRED') ?? 0;
+    const denied24h = keycardCountsByResult.get('DENIED') ?? 0;
+    const unknown24h = keycardCountsByResult.get('UNKNOWN') ?? 0;
+    if (denied24h > 0) {
+      lifecycleIssues.push(`${denied24h} denied access event${denied24h === 1 ? '' : 's'} in the last 24 hours.`);
+    }
+    if (revoked24h > 0) {
+      lifecycleIssues.push(`${revoked24h} revoked-card access attempt${revoked24h === 1 ? '' : 's'} in the last 24 hours.`);
+    }
+    if (expired24h > 0) {
+      lifecycleIssues.push(`${expired24h} expired-card access attempt${expired24h === 1 ? '' : 's'} in the last 24 hours.`);
+    }
+    if (unknown24h > 0) {
+      lifecycleIssues.push(`${unknown24h} unknown-token access event${unknown24h === 1 ? '' : 's'} in the last 24 hours.`);
+    }
+    const hasConfigurationIssues = configurationIssues.length > 0;
 
     return {
       ...hotel,
@@ -1024,11 +1266,51 @@ export class PlatformService {
         lastStaffLoginAt: health.lastStaffLoginAt,
         lastReservationCreatedAt: health.lastReservationCreatedAt,
       },
+      keycards: {
+        enabled: hotel.keycardAuthEnabled,
+        hotelLockVendor: this.normalizeLockVendor(hotel.lockVendor),
+        providerMode: this.deriveKeycardProviderMode(hotel.lockVendor),
+        lockApiConfigured,
+        totalRooms: rooms.length,
+        roomsWithLockMapping: roomMappingCount,
+        missingRoomLockMappings,
+        roomVendors: Array.from(
+          rooms.reduce((map, room) => {
+            const vendor = this.normalizeLockVendor(room.lockVendor) || this.normalizeLockVendor(hotel.lockVendor) || 'MOCK';
+            map.set(vendor, (map.get(vendor) ?? 0) + 1);
+            return map;
+          }, new Map<string, number>()),
+        ).map(([vendor, rooms]) => ({ vendor, rooms })),
+        accessSummary: {
+          granted24h: keycardCountsByResult.get('GRANTED') ?? 0,
+          denied24h,
+          expired24h,
+          revoked24h,
+          unknown24h,
+          recentEvents: (recentKeycardEvents as RecentKeycardEvent[]).map((event) => ({
+            id: event.id,
+            createdAt: event.createdAt,
+            result: event.result,
+            reason: event.reason ?? null,
+            roomNumber: event.room?.number ?? null,
+            deviceId: event.deviceId ?? null,
+            accessTokenPreview: `${event.accessToken.slice(0, 8)}...`,
+            diagnosis: this.buildKeycardAccessDiagnosis({
+              result: event.result,
+              hasConfigurationIssues,
+            }),
+          })),
+        },
+        supportSignals: {
+          configurationIssues,
+          lifecycleIssues,
+        },
+      },
     };
   }
 
   async updateHotel(actorUserId: string, hotelId: string, dto: UpdatePlatformHotelDto) {
-    const hotel = await this.prisma.hotel.findUnique({
+    const hotel = await (this.prisma.hotel as any).findUnique({
       where: { id: hotelId },
       select: {
         id: true,
@@ -1044,6 +1326,8 @@ export class PlatformService {
         description: true,
         currency: true,
         timezone: true,
+        keycardAuthEnabled: true,
+        lockVendor: true,
       },
     });
 
@@ -1075,6 +1359,10 @@ export class PlatformService {
       ...(dto.description !== undefined ? { description: normalizeOptional(dto.description) } : {}),
       ...(dto.currency !== undefined ? { currency: dto.currency.trim().toUpperCase() } : {}),
       ...(dto.timezone !== undefined ? { timezone: dto.timezone.trim() } : {}),
+      ...(dto.keycardAuthEnabled !== undefined
+        ? { keycardAuthEnabled: dto.keycardAuthEnabled }
+        : {}),
+      ...(dto.lockVendor !== undefined ? { lockVendor: normalizeOptional(dto.lockVendor)?.toUpperCase() } : {}),
     };
 
     if (Object.keys(data).length === 0) {
@@ -1106,6 +1394,24 @@ export class PlatformService {
         },
       },
     });
+
+    if (changedFields.some((field) => ['keycardAuthEnabled', 'lockVendor'].includes(field))) {
+      await this.prisma.auditLog.create({
+        data: {
+          hotelId,
+          actorUserId,
+          action: 'platform.hotel.keycard_config_update',
+          targetType: 'HOTEL',
+          targetId: hotelId,
+          metadata: {
+            hotelName: data.name ?? hotel.name,
+            changedFields: changedFields.filter((field) =>
+              ['keycardAuthEnabled', 'lockVendor'].includes(field),
+            ),
+          },
+        },
+      });
+    }
 
     return this.getHotelDetail(hotelId);
   }

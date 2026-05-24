@@ -8,6 +8,24 @@ export type PlatformStatsResponse = {
     staleHotels30d: number;
     suspendedHotels: number;
   };
+  keycards: {
+    enabledHotels: number;
+    mockProviderHotels: number;
+    liveProviderHotels: number;
+    hotelsWithMissingRoomLockMappings: number;
+    recentFailureEvents24h: number;
+    denialSpikeHotels: Array<{
+      id: string;
+      name: string;
+      deniedEvents24h: number;
+    }>;
+    missingMappingHotels: Array<{
+      id: string;
+      name: string;
+      totalRooms: number;
+      missingRooms: number;
+    }>;
+  };
   generatedAt: string;
 };
 
@@ -40,6 +58,7 @@ export type PlatformHotelsResponse = {
     phone: string;
     createdAt: string;
     updatedAt: string;
+    keycardAuthEnabled: boolean;
     onboardingStatus: 'PENDING_SETUP' | 'ROOMS_ADDED' | 'STAFF_INVITED' | 'ACTIVE';
     suspendedAt: string | null;
     suspensionReason: string | null;
@@ -66,6 +85,15 @@ export type PlatformHotelsResponse = {
       lastReservationCreatedAt: string | null;
       overdueInvoices: number;
       signals: string[];
+    };
+    keycards: {
+      enabled: boolean;
+      hotelLockVendor: string | null;
+      providerMode: 'mock' | 'live';
+      totalRooms: number;
+      roomsWithLockMapping: number;
+      missingRoomLockMappings: number;
+      deniedEvents24h: number;
     };
   }>;
   total: number;
@@ -160,6 +188,8 @@ export type PlatformHotelDetailResponse = {
   description: string | null;
   currency: string;
   timezone: string;
+  keycardAuthEnabled: boolean;
+  lockVendor: string | null;
   createdAt: string;
   updatedAt: string;
   onboardingStatus: 'PENDING_SETUP' | 'ROOMS_ADDED' | 'STAFF_INVITED' | 'ACTIVE';
@@ -207,6 +237,40 @@ export type PlatformHotelDetailResponse = {
     lastReservationCreatedAt: string | null;
     overdueInvoices: number;
     signals: string[];
+  };
+  keycards: {
+    enabled: boolean;
+    hotelLockVendor: string | null;
+    providerMode: 'mock' | 'live';
+    lockApiConfigured: boolean;
+    totalRooms: number;
+    roomsWithLockMapping: number;
+    missingRoomLockMappings: number;
+    roomVendors: Array<{
+      vendor: string;
+      rooms: number;
+    }>;
+    accessSummary: {
+      granted24h: number;
+      denied24h: number;
+      expired24h: number;
+      revoked24h: number;
+      unknown24h: number;
+      recentEvents: Array<{
+        id: string;
+        createdAt: string;
+        result: string;
+        reason: string | null;
+        roomNumber: string | null;
+        deviceId: string | null;
+        accessTokenPreview: string | null;
+        diagnosis: 'configuration' | 'lifecycle' | 'unknown';
+      }>;
+    };
+    supportSignals: {
+      configurationIssues: string[];
+      lifecycleIssues: string[];
+    };
   };
 };
 

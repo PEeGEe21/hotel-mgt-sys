@@ -62,7 +62,7 @@ export class ReservationsController {
   @Permissions('edit:reservations')
   @ApiOperation({ summary: 'Update reservation details' })
   update(@Request() req: any, @Param('id') id: string, @Body() dto: UpdateReservationDto) {
-    return this.svc.update(req.user.hotelId, id, dto);
+    return this.svc.update(req.user.hotelId, id, dto, req.user.sub, req.user.staffId ?? null);
   }
 
   @Patch(':id/check-in')
@@ -86,7 +86,7 @@ export class ReservationsController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Cancel a reservation' })
   cancel(@Request() req: any, @Param('id') id: string) {
-    return this.svc.cancel(req.user.hotelId, id);
+    return this.svc.cancel(req.user.hotelId, id, req.user.sub);
   }
 
   @Patch(':id/no-show')

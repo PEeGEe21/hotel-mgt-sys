@@ -42,6 +42,21 @@ function healthClasses(status: 'healthy' | 'warning' | 'critical' | 'setup') {
   }
 }
 
+function accessResultLabel(result: string) {
+  return result.replaceAll('_', ' ').toLowerCase();
+}
+
+function incidentClasses(diagnosis: 'configuration' | 'lifecycle' | 'unknown') {
+  switch (diagnosis) {
+    case 'configuration':
+      return 'bg-amber-100 text-amber-900';
+    case 'lifecycle':
+      return 'bg-sky-100 text-sky-900';
+    case 'unknown':
+      return 'bg-slate-200 text-slate-700';
+  }
+}
+
 export function HotelDetailClient({ id, fallbackName }: { id: string; fallbackName?: string }) {
   const detailQuery = usePlatformHotelDetail(id);
   const hotel = detailQuery.data as PlatformHotelDetailResponse | undefined;
@@ -255,6 +270,108 @@ export function HotelDetailClient({ id, fallbackName }: { id: string; fallbackNa
               </article>
             </section>
 
+            <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+              <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-semibold uppercase tracking-[0.22em] text-teal-800">Keycard oversight</p>
+                    <h2 className="mt-2 text-2xl font-semibold tracking-tight">Rollout and lock posture</h2>
+                  </div>
+                  <span
+                    className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
+                      hotel.keycards.enabled ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700'
+                    }`}
+                  >
+                    {hotel.keycards.enabled ? 'Enabled' : 'Disabled'}
+                  </span>
+                </div>
+                <div className="mt-5 grid gap-3 text-sm text-slate-600 md:grid-cols-2">
+                  <p>Hotel lock vendor: {hotel.keycards.hotelLockVendor ?? 'Not configured'}</p>
+                  <p>Provider mode: {hotel.keycards.providerMode === 'mock' ? 'Mock provider' : 'Live provider'}</p>
+                  <p>Lock API configured: {hotel.keycards.lockApiConfigured ? 'Yes' : 'No'}</p>
+                  <p>Missing room lock mappings: {hotel.keycards.missingRoomLockMappings}</p>
+                  <p>Rooms with lock mapping: {hotel.keycards.roomsWithLockMapping} / {hotel.keycards.totalRooms}</p>
+                  <p>Denied events in last 24h: {hotel.keycards.accessSummary.denied24h}</p>
+                </div>
+                <div className="mt-5 space-y-3">
+                  <p className="text-sm font-medium text-slate-700">Vendor coverage</p>
+                  {hotel.keycards.roomVendors.length === 0 ? (
+                    <p className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                      No room-specific vendor overrides yet.
+                    </p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {hotel.keycards.roomVendors.map((vendor) => (
+                        <span
+                          key={vendor.vendor}
+                          className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-700"
+                        >
+                          {vendor.vendor} · {vendor.rooms} rooms
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                  <p className="font-medium text-slate-900">Configuration completeness</p>
+                  <p className="mt-2">
+                    {hotel.keycards.missingRoomLockMappings === 0
+                      ? 'All rooms currently have lock mappings.'
+                      : `${hotel.keycards.missingRoomLockMappings} room${hotel.keycards.missingRoomLockMappings === 1 ? '' : 's'} still need a lock device mapping.`}
+                  </p>
+                  <p className="mt-1">
+                    Platform can use this panel to confirm whether the hotel is still on mock credentials or has moved to a live vendor.
+                  </p>
+                </div>
+              </article>
+
+              <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                <p className="text-sm font-semibold uppercase tracking-[0.22em] text-teal-800">Support signals</p>
+                <h2 className="mt-2 text-2xl font-semibold tracking-tight">Recent keycard health</h2>
+                <div className="mt-5 grid gap-3 text-sm text-slate-600">
+                  <p>Granted in last 24h: {hotel.keycards.accessSummary.granted24h}</p>
+                  <p>Denied in last 24h: {hotel.keycards.accessSummary.denied24h}</p>
+                  <p>Expired in last 24h: {hotel.keycards.accessSummary.expired24h}</p>
+                  <p>Revoked in last 24h: {hotel.keycards.accessSummary.revoked24h}</p>
+                  <p>Unknown in last 24h: {hotel.keycards.accessSummary.unknown24h}</p>
+                </div>
+                <div className="mt-5 space-y-3">
+                  <div>
+                    <p className="text-sm font-medium text-slate-700">Configuration issues</p>
+                    {hotel.keycards.supportSignals.configurationIssues.length === 0 ? (
+                      <p className="mt-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+                        No obvious configuration issues detected.
+                      </p>
+                    ) : (
+                      <div className="mt-2 space-y-2">
+                        {hotel.keycards.supportSignals.configurationIssues.map((issue) => (
+                          <p key={issue} className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                            {issue}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-slate-700">Guest lifecycle issues</p>
+                    {hotel.keycards.supportSignals.lifecycleIssues.length === 0 ? (
+                      <p className="mt-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+                        No current lifecycle warnings detected.
+                      </p>
+                    ) : (
+                      <div className="mt-2 space-y-2">
+                        {hotel.keycards.supportSignals.lifecycleIssues.map((issue) => (
+                          <p key={issue} className="rounded-2xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900">
+                            {issue}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </article>
+            </section>
+
             <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
               <h2 className="text-xl font-semibold tracking-tight">Lifecycle controls</h2>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
@@ -372,6 +489,45 @@ export function HotelDetailClient({ id, fallbackName }: { id: string; fallbackNa
                   )}
                 </div>
               </article>
+            </section>
+
+            <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-semibold uppercase tracking-[0.22em] text-teal-800">Incident history</p>
+                  <h2 className="mt-2 text-2xl font-semibold tracking-tight">Recent keycard events</h2>
+                </div>
+                <Link href={`/audit-logs?hotel=${encodeURIComponent(hotel.name)}&action=keycard`} className="text-sm font-semibold text-teal-900">
+                  Open audit logs
+                </Link>
+              </div>
+              <div className="mt-6 space-y-3">
+                {hotel.keycards.accessSummary.recentEvents.length === 0 ? (
+                  <p className="text-sm text-slate-600">No recent keycard access events recorded for this hotel.</p>
+                ) : (
+                  hotel.keycards.accessSummary.recentEvents.map((event) => (
+                    <div key={event.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-semibold uppercase tracking-wide text-slate-900">
+                          {accessResultLabel(event.result)}
+                        </span>
+                        <span className={`rounded-full px-2.5 py-1 text-xs font-semibold uppercase tracking-wide ${incidentClasses(event.diagnosis)}`}>
+                          {event.diagnosis}
+                        </span>
+                      </div>
+                      <p className="mt-2">
+                        {formatDate(event.createdAt)}
+                        {event.roomNumber ? ` · Room ${event.roomNumber}` : ''}
+                        {event.deviceId ? ` · Device ${event.deviceId}` : ''}
+                      </p>
+                      <p className="mt-1">
+                        Reason: {event.reason ?? 'No explicit reason provided'}
+                        {event.accessTokenPreview ? ` · Token ${event.accessTokenPreview}` : ''}
+                      </p>
+                    </div>
+                  ))
+                )}
+              </div>
             </section>
           </>
         ) : (
