@@ -3,6 +3,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { Reflector } from '@nestjs/core';
 import type { Role } from '@hotel-os/shared-types';
 import { PermissionsGuard } from './permissions.guard';
+import { FeatureFlagsGuard, RequireFeatureFlags } from './feature-flags.guard';
 
 export const ROLES_KEY = 'roles';
 export const Roles = (...roles: Role[]) => SetMetadata(ROLES_KEY, roles);
@@ -38,3 +39,4 @@ export class RolesGuard implements CanActivate {
 }
 
 export { PermissionsGuard };
+export { FeatureFlagsGuard, RequireFeatureFlags };

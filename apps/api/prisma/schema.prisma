@@ -185,6 +185,55 @@ enum KeycardAccessMethod {
   VENDOR_SYNC
 }
 
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  GRACE
+  SUSPENDED
+  EXPIRED
+  CANCELLED
+}
+
+enum FeatureScopeType {
+  MODULE
+  SUB_FEATURE
+  LIMIT
+}
+
+enum FeatureRolloutStage {
+  INTERNAL
+  BETA
+  GA
+  DEPRECATED
+}
+
+enum SupportCaseSource {
+  HOTEL
+  PLATFORM
+  SYSTEM
+}
+
+enum SupportCasePriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum SupportCaseStatus {
+  OPEN
+  TRIAGED
+  IN_PROGRESS
+  WAITING_ON_HOTEL
+  RESOLVED
+  CLOSED
+}
+
+enum SupportCommentVisibility {
+  INTERNAL
+  HOTEL_VISIBLE
+}
+
 // ─── HOTEL ────────────────────────────────────────────────────────────────────
 
 model Hotel {
@@ -288,6 +337,9 @@ model Hotel {
   realtimeEventLogs       RealtimeEventLog[]
   keycards                Keycard[]
   keycardAccessLogs       KeycardAccessLog[]
+  subscriptions           HotelSubscription[]
+  featureOverrides        HotelFeatureOverride[]
+  supportCases            SupportCase[]
 }
 
 model DashboardWidget {
@@ -329,11 +381,19 @@ model RoleDashboardConfig {
 
 model FeatureFlag {
   key          String   @id
+  name         String?
   enabled      Boolean  @default(true)
+  defaultEnabled Boolean @default(true)
   planRequired String?
   description  String?
+  category     String?
+  scopeType    FeatureScopeType @default(MODULE)
+  rolloutStage FeatureRolloutStage @default(GA)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  planEntitlements PlanFeatureEntitlement[]
+  hotelOverrides   HotelFeatureOverride[]
 }
 
 model HotelCronSetting {
@@ -424,6 +484,10 @@ model User {
   notifications           Notification[]
   pushSubscriptions       PushSubscription[]
   pushDeliveryLogs        PushDeliveryLog[]
+  supportCasesCreated     SupportCase[]        @relation("SupportCaseCreatedBy")
+  supportCasesAssigned    SupportCase[]        @relation("SupportCaseAssignedAdmin")
+  supportCaseEvents       SupportCaseEvent[]
+  supportCaseComments     SupportCaseComment[]
 }
 
 model PasswordResetToken {
@@ -1246,6 +1310,140 @@ model KeycardAccessLog {
   @@index([keycardId])
   @@index([roomId, createdAt])
   @@index([accessToken])
+}
+
+model SubscriptionPlan {
+  id                     String   @id @default(uuid())
+  code                   String   @unique
+  name                   String
+  description            String?
+  priceMonthly           Decimal?
+  priceYearly            Decimal?
+  billingIntervalOptions String[] @default(["MONTHLY", "YEARLY"])
+  isActive               Boolean  @default(true)
+  isPublic               Boolean  @default(false)
+  sortOrder              Int      @default(0)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  hotelSubscriptions HotelSubscription[]
+  entitlements      PlanFeatureEntitlement[]
+
+  @@index([isActive, sortOrder])
+}
+
+model HotelSubscription {
+  id                 String             @id @default(uuid())
+  hotelId            String
+  planId             String?
+  status             SubscriptionStatus @default(TRIAL)
+  startsAt           DateTime?
+  endsAt             DateTime?
+  trialEndsAt        DateTime?
+  graceEndsAt        DateTime?
+  billingEmail       String?
+  billingContactName String?
+  notes              String?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  hotel Hotel             @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  plan  SubscriptionPlan? @relation(fields: [planId], references: [id], onDelete: SetNull)
+
+  @@index([hotelId, updatedAt])
+  @@index([status])
+  @@index([planId])
+}
+
+model PlanFeatureEntitlement {
+  id         String   @id @default(uuid())
+  planId      String
+  flagKey     String
+  enabled     Boolean @default(true)
+  limitValue  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  plan SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  flag FeatureFlag      @relation(fields: [flagKey], references: [key], onDelete: Cascade)
+
+  @@unique([planId, flagKey])
+  @@index([flagKey])
+}
+
+model HotelFeatureOverride {
+  id         String   @id @default(uuid())
+  hotelId    String
+  flagKey    String
+  enabled    Boolean
+  limitValue String?
+  reason     String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  hotel Hotel       @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  flag  FeatureFlag @relation(fields: [flagKey], references: [key], onDelete: Cascade)
+
+  @@unique([hotelId, flagKey])
+  @@index([flagKey])
+}
+
+model SupportCase {
+  id                   String             @id @default(uuid())
+  hotelId              String
+  createdByUserId      String?
+  source               SupportCaseSource  @default(HOTEL)
+  category             String
+  priority             SupportCasePriority @default(MEDIUM)
+  status               SupportCaseStatus  @default(OPEN)
+  subject              String
+  description          String
+  requestType          String?
+  requestPayload       Json?
+  assignedAdminId      String?
+  subscriptionSnapshot Json?
+  entitlementSnapshot  Json?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  hotel          Hotel                @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  createdByUser  User?                @relation("SupportCaseCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  assignedAdmin  User?                @relation("SupportCaseAssignedAdmin", fields: [assignedAdminId], references: [id], onDelete: SetNull)
+  events         SupportCaseEvent[]
+  comments       SupportCaseComment[]
+
+  @@index([hotelId, createdAt])
+  @@index([status, priority])
+  @@index([assignedAdminId, status])
+  @@index([requestType])
+}
+
+model SupportCaseEvent {
+  id          String   @id @default(uuid())
+  caseId       String
+  actorUserId  String?
+  type         String
+  payload      Json?
+  createdAt    DateTime @default(now())
+
+  supportCase SupportCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  actorUser   User?       @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([caseId, createdAt])
+}
+
+model SupportCaseComment {
+  id            String                  @id @default(uuid())
+  caseId         String
+  authorUserId   String?
+  visibility     SupportCommentVisibility @default(INTERNAL)
+  body           String
+  createdAt      DateTime                @default(now())
+
+  supportCase SupportCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  authorUser  User?       @relation(fields: [authorUserId], references: [id], onDelete: SetNull)
+
+  @@index([caseId, createdAt])
 }
 
 // ─── FINANCE ──────────────────────────────────────────────────────────────────

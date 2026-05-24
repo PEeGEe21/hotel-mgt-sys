@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import {
   ArrowLeft,
@@ -31,21 +31,21 @@ import {
   Users,
   Building2,
   UsersRound,
+  Check,
 } from 'lucide-react';
 import { STATUS_CONFIG, TYPE_CONFIG, ALL_ROOM_STATUSES, type RoomStatus } from '@/lib/rooms-data';
 import { useRoom, useUpdateRoomStatus } from '@/hooks/room/useRooms';
 import { useRoomReservations } from '@/hooks/room/useRoomReservations';
-import { useHotelFeatureAccess } from '@/hooks/hotel/useHotelFeatureAccess';
+import { useAddFolioItem, useCheckOut } from '@/hooks/useReservations';
+import { useCreateTask, useAssignTask, useHKStaff } from '@/hooks/useHousekeeping';
+import { useCreateFacilityMaintenance } from '@/hooks/facility/useFacilityMaintenance';
+import { FeatureGate } from '@/components/hotel/FeatureGate';
 import { useHotelProfile } from '@/hooks/hotel/useHotelProfile';
 import TableScroll from '@/components/ui/table-scroll';
 import { useAppStore } from '@/store/app.store';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogOverlay,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import openToast from '@/components/ToastComponent';
+import NewReservationModal from '../../reservations/_components/NewReservationModal';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 type FolioItem = {
@@ -144,6 +144,511 @@ const resStatusClass: Record<string, string> = {
   NO_SHOW: 'bg-orange-500/15 text-orange-400 border border-orange-500/25',
 };
 
+const inputCls =
+  'w-full bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 outline-none focus:border-blue-500 transition-colors';
+
+const maintenanceCategories = [
+  'PLUMBING',
+  'ELECTRICAL',
+  'HVAC',
+  'FURNITURE',
+  'EQUIPMENT',
+  'STRUCTURAL',
+  'OTHER',
+] as const;
+
+const taskPriorities = ['LOW', 'NORMAL', 'HIGH', 'URGENT'] as const;
+
+function AddFolioChargeModal({
+  reservationId,
+  currency,
+  onClose,
+}: {
+  reservationId: string;
+  currency: string;
+  onClose: () => void;
+}) {
+  const addItem = useAddFolioItem(reservationId);
+  const [form, setForm] = useState({
+    description: '',
+    amount: '',
+    category: 'MISC',
+    quantity: 1,
+  });
+  const [error, setError] = useState('');
+
+  const handleSave = async () => {
+    if (!form.description.trim()) return setError('Description is required.');
+    if (!form.amount || Number(form.amount) <= 0) return setError('Amount is required.');
+    setError('');
+    try {
+      await addItem.mutateAsync({
+        description: form.description.trim(),
+        amount: Number(form.amount),
+        category: form.category,
+        quantity: form.quantity,
+      });
+      onClose();
+    } catch (e: any) {
+      setError(e?.response?.data?.message ?? 'Failed to add charge.');
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        showCloseButton={false}
+        className="bg-[#161b27] border border-[#1e2536] rounded-2xl w-full max-w-sm sm:max-w-md shadow-2xl overflow-hidden p-0"
+      >
+        <DialogHeader className="flex flex-row items-center justify-between px-5 pb-4 pt-5 border-b border-[#1e2536]">
+          <DialogTitle className="text-base font-bold text-white">Add Folio Charge</DialogTitle>
+          <button onClick={onClose} className="text-slate-500 hover:text-slate-300">
+            <X size={18} />
+          </button>
+        </DialogHeader>
+        <div className="space-y-4 px-5 py-4">
+          <div>
+            <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
+              Description
+            </label>
+            <input
+              value={form.description}
+              onChange={(e) => setForm((current) => ({ ...current, description: e.target.value }))}
+              placeholder="e.g. Room service charge"
+              className={inputCls}
+              autoFocus
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
+                Amount ({currency})
+              </label>
+              <input
+                type="number"
+                min={0}
+                value={form.amount}
+                onChange={(e) => setForm((current) => ({ ...current, amount: e.target.value }))}
+                placeholder="5000"
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
+                Qty
+              </label>
+              <input
+                type="number"
+                min={1}
+                value={form.quantity}
+                onChange={(e) =>
+                  setForm((current) => ({
+                    ...current,
+                    quantity: Math.max(1, Number(e.target.value) || 1),
+                  }))
+                }
+                className={inputCls}
+              />
+            </div>
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
+              Category
+            </label>
+            <select
+              value={form.category}
+              onChange={(e) => setForm((current) => ({ ...current, category: e.target.value }))}
+              className={inputCls}
+            >
+              {['ROOM', 'FOOD', 'LAUNDRY', 'SPA', 'MISC'].map((category) => (
+                <option key={category} value={category}>
+                  {category}
+                </option>
+              ))}
+            </select>
+          </div>
+          {error ? (
+            <p className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-400">
+              {error}
+            </p>
+          ) : null}
+        </div>
+        <div className="flex gap-3 px-5 pb-5">
+          <button
+            onClick={onClose}
+            className="flex-1 rounded-lg border border-[#1e2536] px-4 py-2.5 text-sm text-slate-400 transition-colors hover:text-white"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={addItem.isPending}
+            className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:opacity-50"
+          >
+            {addItem.isPending ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <Check size={14} />
+            )}
+            Add Charge
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function CreateMaintenanceIssueModal({
+  roomId,
+  onClose,
+  onCreated,
+}: {
+  roomId: string;
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const createMaintenance = useCreateFacilityMaintenance();
+  const [form, setForm] = useState({
+    title: '',
+    description: '',
+    category: 'OTHER',
+    priority: 'NORMAL',
+  });
+  const [error, setError] = useState('');
+
+  const handleSave = async () => {
+    if (!form.title.trim() || !form.description.trim()) {
+      setError('Title and description are required.');
+      return;
+    }
+    setError('');
+    try {
+      await createMaintenance.mutateAsync({
+        roomId,
+        title: form.title.trim(),
+        description: form.description.trim(),
+        category: form.category,
+        priority: form.priority,
+        status: 'OPEN',
+      });
+      onCreated();
+      onClose();
+    } catch (e: any) {
+      setError(e?.response?.data?.message ?? 'Failed to log issue.');
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        showCloseButton={false}
+        className="bg-[#161b27] border border-[#1e2536] rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden p-0"
+      >
+        <DialogHeader className="flex flex-row items-center justify-between px-5 pb-4 pt-5 border-b border-[#1e2536]">
+          <DialogTitle className="text-base font-bold text-white">
+            Log Maintenance Issue
+          </DialogTitle>
+          <button onClick={onClose} className="text-slate-500 hover:text-slate-300">
+            <X size={18} />
+          </button>
+        </DialogHeader>
+        <div className="space-y-4 px-5 py-4">
+          <div>
+            <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
+              Title
+            </label>
+            <input
+              value={form.title}
+              onChange={(e) => setForm((current) => ({ ...current, title: e.target.value }))}
+              placeholder="e.g. AC not cooling"
+              className={inputCls}
+              autoFocus
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
+                Category
+              </label>
+              <select
+                value={form.category}
+                onChange={(e) => setForm((current) => ({ ...current, category: e.target.value }))}
+                className={inputCls}
+              >
+                {maintenanceCategories.map((category) => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
+                Priority
+              </label>
+              <select
+                value={form.priority}
+                onChange={(e) => setForm((current) => ({ ...current, priority: e.target.value }))}
+                className={inputCls}
+              >
+                {taskPriorities.map((priority) => (
+                  <option key={priority} value={priority}>
+                    {priority}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
+              Description
+            </label>
+            <textarea
+              value={form.description}
+              onChange={(e) => setForm((current) => ({ ...current, description: e.target.value }))}
+              placeholder="Describe the issue clearly for maintenance."
+              className={`${inputCls} min-h-28 resize-none`}
+            />
+          </div>
+          {error ? (
+            <p className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-400">
+              {error}
+            </p>
+          ) : null}
+        </div>
+        <div className="flex gap-3 px-5 pb-5">
+          <button
+            onClick={onClose}
+            className="flex-1 rounded-lg border border-[#1e2536] px-4 py-2.5 text-sm text-slate-400 transition-colors hover:text-white"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={createMaintenance.isPending}
+            className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-orange-500 disabled:opacity-50"
+          >
+            {createMaintenance.isPending ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <Wrench size={14} />
+            )}
+            Log Issue
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function AssignHousekeeperModal({
+  roomId,
+  existingTask,
+  onClose,
+  onAssigned,
+}: {
+  roomId: string;
+  existingTask?: HKTask;
+  onClose: () => void;
+  onAssigned: () => void;
+}) {
+  const { data: staff = [] } = useHKStaff();
+  const createTask = useCreateTask();
+  const assignTask = useAssignTask(existingTask?.id ?? '');
+  const [assignedTo, setAssignedTo] = useState(existingTask?.staff ? '' : '');
+  const [priority, setPriority] = useState(existingTask?.priority ?? 'NORMAL');
+  const [notes, setNotes] = useState(existingTask?.notes ?? '');
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    setPriority(existingTask?.priority ?? 'NORMAL');
+    setNotes(existingTask?.notes ?? '');
+    setAssignedTo('');
+  }, [existingTask]);
+
+  const handleSave = async () => {
+    if (!assignedTo) {
+      setError('Please choose a housekeeper.');
+      return;
+    }
+    setError('');
+    try {
+      if (existingTask) {
+        await assignTask.mutateAsync(assignedTo);
+      } else {
+        await createTask.mutateAsync({
+          roomId,
+          type: 'CLEANING',
+          priority: priority as 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT',
+          assignedTo,
+          notes: notes.trim() || undefined,
+        });
+      }
+      onAssigned();
+      onClose();
+    } catch (e: any) {
+      setError(e?.response?.data?.message ?? 'Could not assign housekeeper.');
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        showCloseButton={false}
+        className="bg-[#161b27] border border-[#1e2536] rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden p-0"
+      >
+        <DialogHeader className="flex flex-row items-center justify-between px-5 pb-4 pt-5 border-b border-[#1e2536]">
+          <DialogTitle className="text-base font-bold text-white">Assign Housekeeper</DialogTitle>
+          <button onClick={onClose} className="text-slate-500 hover:text-slate-300">
+            <X size={18} />
+          </button>
+        </DialogHeader>
+        <div className="space-y-4 px-5 py-4">
+          <div className="rounded-xl border border-[#1e2536] bg-[#0f1117] px-4 py-3 text-sm text-slate-400">
+            {existingTask
+              ? 'This will assign the selected staff member to the current open housekeeping task for this room.'
+              : 'No open housekeeping task exists yet. This will create a cleaning task and assign it immediately.'}
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
+              Housekeeper
+            </label>
+            <select
+              value={assignedTo}
+              onChange={(e) => setAssignedTo(e.target.value)}
+              className={inputCls}
+            >
+              <option value="">Select staff member…</option>
+              {staff.map((member) => (
+                <option key={member.id} value={member.id}>
+                  {member.firstName} {member.lastName}
+                  {member.position ? ` · ${member.position}` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+          {!existingTask ? (
+            <>
+              <div>
+                <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
+                  Priority
+                </label>
+                <select
+                  value={priority}
+                  onChange={(e) => setPriority(e.target.value)}
+                  className={inputCls}
+                >
+                  {taskPriorities.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
+                  Notes
+                </label>
+                <textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Add any room prep notes for housekeeping."
+                  className={`${inputCls} min-h-24 resize-none`}
+                />
+              </div>
+            </>
+          ) : null}
+          {error ? (
+            <p className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-400">
+              {error}
+            </p>
+          ) : null}
+        </div>
+        <div className="flex gap-3 px-5 pb-5">
+          <button
+            onClick={onClose}
+            className="flex-1 rounded-lg border border-[#1e2536] px-4 py-2.5 text-sm text-slate-400 transition-colors hover:text-white"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={createTask.isPending || assignTask.isPending}
+            className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:opacity-50"
+          >
+            {createTask.isPending || assignTask.isPending ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <UserCheck size={14} />
+            )}
+            Assign
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ConfirmActionModal({
+  title,
+  description,
+  confirmLabel,
+  tone = 'emerald',
+  isPending,
+  onClose,
+  onConfirm,
+}: {
+  title: string;
+  description: string;
+  confirmLabel: string;
+  tone?: 'emerald' | 'red';
+  isPending?: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const confirmClass =
+    tone === 'red' ? 'bg-red-600 hover:bg-red-500' : 'bg-emerald-600 hover:bg-emerald-500';
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        showCloseButton={false}
+        className="bg-[#161b27] border border-[#1e2536] rounded-2xl w-full max-w-md shadow-2xl overflow-hidden p-0"
+      >
+        <DialogHeader className="flex flex-row items-center justify-between px-5 pb-4 pt-5 border-b border-[#1e2536]">
+          <DialogTitle className="text-base font-bold text-white">{title}</DialogTitle>
+          <button onClick={onClose} className="text-slate-500 hover:text-slate-300">
+            <X size={18} />
+          </button>
+        </DialogHeader>
+        <div className="px-5 py-4">
+          <p className="text-sm text-slate-400 leading-6">{description}</p>
+        </div>
+        <div className="flex gap-3 px-5 pb-5">
+          <button
+            onClick={onClose}
+            className="flex-1 rounded-lg border border-[#1e2536] px-4 py-2.5 text-sm text-slate-400 transition-colors hover:text-white"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={isPending}
+            className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white transition-colors disabled:opacity-50 ${confirmClass}`}
+          >
+            {isPending ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <CheckCircle2 size={14} />
+            )}
+            {confirmLabel}
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Status Modal ──────────────────────────────────────────────────────────────
 function StatusModal({
   current,
@@ -238,7 +743,6 @@ export default function RoomDetailPage() {
   const currency = hotel?.currency || 'NGN';
   const { data: room, isLoading, isError } = useRoom(id);
   const { data: hotelProfile } = useHotelProfile();
-  const { data: featureAccess } = useHotelFeatureAccess();
   const [resPage, setResPage] = useState(1);
   const resLimit = 6;
   const { data: resPageData, isLoading: resLoading } = useRoomReservations(id, {
@@ -246,9 +750,43 @@ export default function RoomDetailPage() {
     limit: resLimit,
   });
   const updateStatus = useUpdateRoomStatus(id);
+  const createTask = useCreateTask();
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('overview');
   const [statusModal, setStatusModal] = useState(false);
+  const [showNewReservation, setShowNewReservation] = useState(false);
+  const [showAddCharge, setShowAddCharge] = useState(false);
+  const [showLogIssue, setShowLogIssue] = useState(false);
+  const [showAssignHousekeeper, setShowAssignHousekeeper] = useState(false);
+  const [showCheckOutConfirm, setShowCheckOutConfirm] = useState(false);
+
+  const s = STATUS_CONFIG[room?.status as RoomStatus];
+  const t = TYPE_CONFIG[room?.type as keyof typeof TYPE_CONFIG];
+  const activeRes = (room as any)?.reservations?.[0] as Reservation | undefined;
+  const guest = activeRes?.guest; // primary guest
+  const allGuests = activeRes?.guests ?? ([] as ResGuest[]); // everyone in the room
+  const company = activeRes?.company;
+  const groupBooking = activeRes?.groupBooking;
+  const folioItems = activeRes?.folioItems ?? [];
+  const hkTasks = ((room as any)?.housekeepingTasks ?? []) as HKTask[];
+  const resTotalPages = resPageData?.totalPages ?? 1;
+  const maintenance = hkTasks.filter((t) => t.type === 'MAINTENANCE');
+  const cleaning = hkTasks.filter((t) => t.type !== 'MAINTENANCE');
+  const roomLockVendor = room?.lockVendor?.trim() || null;
+  const hotelLockVendor = hotelProfile?.lockVendor?.trim() || null;
+  const effectiveLockVendor = roomLockVendor || hotelLockVendor || 'MOCK';
+  const lockConfigStatus =
+    hotelProfile?.lockApiKey || hotelProfile?.lockApiConfig
+      ? 'Configured'
+      : effectiveLockVendor === 'MOCK'
+        ? 'Mock provider'
+        : 'Needs credentials';
+
+  const folioBalance = folioItems.reduce((sum, f) => sum + Number(f.amount), 0);
+  const checkOut = useCheckOut(activeRes?.id ?? '');
+  const openHousekeepingTask = cleaning.find(
+    (task) => task.status !== 'DONE' && task.status !== 'SKIPPED',
+  );
 
   // ── Loading / error ──
   if (isLoading)
@@ -267,34 +805,31 @@ export default function RoomDetailPage() {
         </button>
       </div>
     );
-
-  const s = STATUS_CONFIG[room.status as RoomStatus];
-  const t = TYPE_CONFIG[room.type as keyof typeof TYPE_CONFIG];
-  const activeRes = (room as any).reservations?.[0] as Reservation | undefined;
-  const guest = activeRes?.guest; // primary guest
-  const allGuests = activeRes?.guests ?? ([] as ResGuest[]); // everyone in the room
-  const company = activeRes?.company;
-  const groupBooking = activeRes?.groupBooking;
-  const folioItems = activeRes?.folioItems ?? [];
-  const hkTasks = ((room as any).housekeepingTasks ?? []) as HKTask[];
-  const resTotalPages = resPageData?.totalPages ?? 1;
-  const maintenance = hkTasks.filter((t) => t.type === 'MAINTENANCE');
-  const cleaning = hkTasks.filter((t) => t.type !== 'MAINTENANCE');
-  const keycardFeatureVisible = featureAccess?.flags.keycard_auth === true;
-  const roomLockVendor = room.lockVendor?.trim() || null;
-  const hotelLockVendor = hotelProfile?.lockVendor?.trim() || null;
-  const effectiveLockVendor = roomLockVendor || hotelLockVendor || 'MOCK';
-  const lockConfigStatus = hotelProfile?.lockApiKey || hotelProfile?.lockApiConfig
-    ? 'Configured'
-    : effectiveLockVendor === 'MOCK'
-      ? 'Mock provider'
-      : 'Needs credentials';
-
-  const folioBalance = folioItems.reduce((sum, f) => sum + Number(f.amount), 0);
-
   const handleStatusSave = async (status: RoomStatus) => {
     await updateStatus.mutateAsync(status);
     setStatusModal(false);
+  };
+
+  const handleRequestCleaning = async () => {
+    try {
+      await createTask.mutateAsync({
+        roomId: room.id,
+        type: 'CLEANING',
+        priority: 'NORMAL',
+        notes: `Requested from room detail for Room ${room.number}`,
+      });
+      setActiveTab('housekeeping');
+    } catch {}
+  };
+
+  const handleCheckOut = async () => {
+    if (!activeRes) return;
+    await checkOut.mutateAsync();
+    setShowCheckOutConfirm(false);
+  };
+
+  const handleViewReservations = () => {
+    router.push(`/reservations?search=${encodeURIComponent(room.number)}`);
   };
 
   return (
@@ -342,12 +877,18 @@ export default function RoomDetailPage() {
                 <Pencil size={13} /> Change Status
               </button>
               {room.status === 'AVAILABLE' && (
-                <button className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors">
+                <button
+                  onClick={() => setShowNewReservation(true)}
+                  className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
+                >
                   <CalendarCheck size={14} /> New Booking
                 </button>
               )}
               {room.status === 'OCCUPIED' && (
-                <button className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors">
+                <button
+                  onClick={() => setShowCheckOutConfirm(true)}
+                  className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
+                >
                   <CheckCircle2 size={14} /> Check Out
                 </button>
               )}
@@ -358,7 +899,9 @@ export default function RoomDetailPage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div className="bg-[#161b27] border border-[#1e2536] rounded-xl px-4 py-4">
               <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Base Rate</p>
-              <p className="text-xl font-bold text-white">{fmtMoney(Number(room.baseRate), currency)}</p>
+              <p className="text-xl font-bold text-white">
+                {fmtMoney(Number(room.baseRate), currency)}
+              </p>
               <p className="text-xs text-slate-600">per night</p>
             </div>
             <div className="bg-[#161b27] border border-[#1e2536] rounded-xl px-4 py-4">
@@ -396,30 +939,30 @@ export default function RoomDetailPage() {
           {/* Tabs */}
           <div className="w-full overflow-x-auto">
             <div className="flex min-w-max gap-1 rounded-xl border border-[#1e2536] bg-[#161b27] p-1">
-            <Tab
-              label="Overview"
-              active={activeTab === 'overview'}
-              icon={BedDouble}
-              onClick={() => setActiveTab('overview')}
-            />
-            <Tab
-              label="Folio"
-              active={activeTab === 'folio'}
-              icon={DollarSign}
-              onClick={() => setActiveTab('folio')}
-            />
-            <Tab
-              label="Housekeeping"
-              active={activeTab === 'housekeeping'}
-              icon={Sparkles}
-              onClick={() => setActiveTab('housekeeping')}
-            />
-            <Tab
-              label="Maintenance"
-              active={activeTab === 'maintenance'}
-              icon={Wrench}
-              onClick={() => setActiveTab('maintenance')}
-            />
+              <Tab
+                label="Overview"
+                active={activeTab === 'overview'}
+                icon={BedDouble}
+                onClick={() => setActiveTab('overview')}
+              />
+              <Tab
+                label="Folio"
+                active={activeTab === 'folio'}
+                icon={DollarSign}
+                onClick={() => setActiveTab('folio')}
+              />
+              <Tab
+                label="Housekeeping"
+                active={activeTab === 'housekeeping'}
+                icon={Sparkles}
+                onClick={() => setActiveTab('housekeeping')}
+              />
+              <Tab
+                label="Maintenance"
+                active={activeTab === 'maintenance'}
+                icon={Wrench}
+                onClick={() => setActiveTab('maintenance')}
+              />
             </div>
           </div>
 
@@ -616,7 +1159,11 @@ export default function RoomDetailPage() {
                   )}
                 </div>
 
-                {keycardFeatureVisible && (
+                <FeatureGate
+                  flagKey="keycard_auth"
+                  title="Lock Mapping"
+                  description="Reference only. Keycard issue and revoke stay on the reservation workflow."
+                >
                   <div className="bg-[#161b27] border border-[#1e2536] rounded-xl p-5">
                     <div className="flex items-start justify-between gap-3 mb-4">
                       <div>
@@ -638,23 +1185,38 @@ export default function RoomDetailPage() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {[
                         { label: 'Lock Device ID', value: room.lockDeviceId ?? 'Not mapped' },
-                        { label: 'Room Lock Vendor', value: roomLockVendor ?? 'Uses hotel default' },
-                        { label: 'Hotel Default Vendor', value: hotelLockVendor ?? 'Not configured' },
+                        {
+                          label: 'Room Lock Vendor',
+                          value: roomLockVendor ?? 'Uses hotel default',
+                        },
+                        {
+                          label: 'Hotel Default Vendor',
+                          value: hotelLockVendor ?? 'Not configured',
+                        },
                         { label: 'Effective Provider', value: effectiveLockVendor },
                         {
                           label: 'Keycard Access',
-                          value: hotelProfile?.keycardAuthEnabled ? 'Enabled for hotel' : 'Disabled for hotel',
+                          value: hotelProfile?.keycardAuthEnabled
+                            ? 'Enabled for hotel'
+                            : 'Disabled for hotel',
                         },
                         { label: 'Vendor Credentials', value: lockConfigStatus },
                       ].map(({ label, value }) => (
-                        <div key={label} className="rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-3">
-                          <p className="text-[11px] uppercase tracking-wider text-slate-600">{label}</p>
-                          <p className="text-sm text-slate-200 font-medium mt-1 break-words">{value}</p>
+                        <div
+                          key={label}
+                          className="rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-3"
+                        >
+                          <p className="text-[11px] uppercase tracking-wider text-slate-600">
+                            {label}
+                          </p>
+                          <p className="text-sm text-slate-200 font-medium mt-1 break-words">
+                            {value}
+                          </p>
                         </div>
                       ))}
                     </div>
                   </div>
-                )}
+                </FeatureGate>
               </div>
 
               {/* Right — amenities + actions */}
@@ -689,28 +1251,52 @@ export default function RoomDetailPage() {
                   <div className="space-y-2">
                     {[
                       {
+                        label: 'Add Charge',
+                        icon: DollarSign,
+                        color: 'text-emerald-400 hover:bg-emerald-500/10',
+                        onClick: () => {
+                          if (!activeRes) {
+                            openToast('info', 'This room has no active folio yet.');
+                            return;
+                          }
+                          setActiveTab('folio');
+                          setShowAddCharge(true);
+                        },
+                      },
+                      {
                         label: 'Request Housekeeping',
                         icon: Sparkles,
                         color: 'text-amber-400  hover:bg-amber-500/10',
+                        onClick: handleRequestCleaning,
                       },
                       {
                         label: 'Log Maintenance Issue',
                         icon: Wrench,
                         color: 'text-orange-400 hover:bg-orange-500/10',
+                        onClick: () => {
+                          setActiveTab('maintenance');
+                          setShowLogIssue(true);
+                        },
                       },
                       {
                         label: 'Assign Housekeeper',
                         icon: UserCheck,
                         color: 'text-blue-400   hover:bg-blue-500/10',
+                        onClick: () => {
+                          setActiveTab('housekeeping');
+                          setShowAssignHousekeeper(true);
+                        },
                       },
                       {
                         label: 'View Reservations',
                         icon: ClipboardList,
                         color: 'text-violet-400 hover:bg-violet-500/10',
+                        onClick: handleViewReservations,
                       },
-                    ].map(({ label, icon: Icon, color }) => (
+                    ].map(({ label, icon: Icon, color, onClick }) => (
                       <button
                         key={label}
+                        onClick={onClick}
                         className={`w-full flex items-center gap-2.5 text-sm font-medium text-slate-400 ${color} px-3 py-2 rounded-lg transition-colors text-left`}
                       >
                         <Icon size={14} />
@@ -752,7 +1338,10 @@ export default function RoomDetailPage() {
                         {fmt(activeRes.checkOut)}
                       </p>
                     </div>
-                    <button className="w-full sm:w-auto text-xs bg-blue-500/15 text-blue-400 hover:bg-blue-500/25 px-3 py-1.5 rounded-lg font-medium transition-colors">
+                    <button
+                      onClick={() => setShowAddCharge(true)}
+                      className="w-full sm:w-auto text-xs bg-blue-500/15 text-blue-400 hover:bg-blue-500/25 px-3 py-1.5 rounded-lg font-medium transition-colors"
+                    >
                       + Add Charge
                     </button>
                   </div>
@@ -760,45 +1349,47 @@ export default function RoomDetailPage() {
                   {folioItems.length > 0 ? (
                     <div className="bg-[#161b27] border border-[#1e2536] rounded-xl overflow-hidden">
                       <TableScroll>
-                      <table className="w-full">
-                        <thead className="border-b border-[#1e2536] bg-[#0f1117]/50">
-                          <tr>
-                            {['Date', 'Description', 'Category', 'Amount'].map((h) => (
-                              <th
-                                key={h}
-                                className="text-xs text-slate-500 uppercase tracking-wider font-medium px-4 py-3 text-left"
-                              >
-                                {h}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-[#1e2536]">
-                          {folioItems.map((f) => (
-                            <tr key={f.id} className="hover:bg-white/[0.02] transition-colors">
-                              <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">
-                                {fmt(f.createdAt)}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-slate-300">{f.description}</td>
-                              <td className="px-4 py-3">
-                                <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-700/50 text-slate-400 uppercase tracking-wider">
-                                  {f.category}
-                                </span>
-                              </td>
-                              <td
-                                className={`px-4 py-3 text-sm font-semibold ${Number(f.amount) < 0 ? 'text-emerald-400' : 'text-slate-200'}`}
-                              >
-                                {fmtMoney(Math.abs(Number(f.amount)), currency)}
-                                {Number(f.amount) < 0 && (
-                                  <span className="text-xs font-normal text-slate-500 ml-1">
-                                    (payment)
-                                  </span>
-                                )}
-                              </td>
+                        <table className="w-full">
+                          <thead className="border-b border-[#1e2536] bg-[#0f1117]/50">
+                            <tr>
+                              {['Date', 'Description', 'Category', 'Amount'].map((h) => (
+                                <th
+                                  key={h}
+                                  className="text-xs text-slate-500 uppercase tracking-wider font-medium px-4 py-3 text-left"
+                                >
+                                  {h}
+                                </th>
+                              ))}
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody className="divide-y divide-[#1e2536]">
+                            {folioItems.map((f) => (
+                              <tr key={f.id} className="hover:bg-white/[0.02] transition-colors">
+                                <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">
+                                  {fmt(f.createdAt)}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-slate-300">
+                                  {f.description}
+                                </td>
+                                <td className="px-4 py-3">
+                                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-700/50 text-slate-400 uppercase tracking-wider">
+                                    {f.category}
+                                  </span>
+                                </td>
+                                <td
+                                  className={`px-4 py-3 text-sm font-semibold ${Number(f.amount) < 0 ? 'text-emerald-400' : 'text-slate-200'}`}
+                                >
+                                  {fmtMoney(Math.abs(Number(f.amount)), currency)}
+                                  {Number(f.amount) < 0 && (
+                                    <span className="text-xs font-normal text-slate-500 ml-1">
+                                      (payment)
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </TableScroll>
                       <div className="px-5 py-3 bg-[#0f1117]/40 border-t border-[#1e2536] flex items-center justify-between">
                         <div>
@@ -836,76 +1427,79 @@ export default function RoomDetailPage() {
             <div className="space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <p className="text-sm font-semibold text-white">Housekeeping Log</p>
-                <button className="w-full sm:w-auto text-xs bg-amber-500/15 text-amber-400 hover:bg-amber-500/25 px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center justify-center gap-1.5">
+                <button
+                  onClick={handleRequestCleaning}
+                  className="w-full sm:w-auto text-xs bg-amber-500/15 text-amber-400 hover:bg-amber-500/25 px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center justify-center gap-1.5"
+                >
                   <Sparkles size={12} /> Request Cleaning
                 </button>
               </div>
               {cleaning.length > 0 ? (
                 <div className="bg-[#161b27] border border-[#1e2536] rounded-xl overflow-hidden">
                   <TableScroll>
-                  <table className="w-full">
-                    <thead className="border-b border-[#1e2536] bg-[#0f1117]/50">
-                      <tr>
-                        {['Date', 'Type', 'Staff', 'Status', 'Priority'].map((h) => (
-                          <th
-                            key={h}
-                            className="text-xs text-slate-500 uppercase tracking-wider font-medium px-4 py-3 text-left whitespace-nowrap"
-                          >
-                            {h}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#1e2536]">
-                      {cleaning.map((t) => (
-                        <tr key={t.id} className="hover:bg-white/[0.02] transition-colors">
-                          <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">
-                            {fmt(t.createdAt)}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-slate-300 capitalize">
-                            {t.type.toLowerCase().replace('_', ' ')}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-slate-400">
-                            {t.staff ? (
-                              `${t.staff.firstName} ${t.staff.lastName}`
-                            ) : (
-                              <span className="text-slate-600">Unassigned</span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3">
-                            <span
-                              className={`text-xs px-2.5 py-1 rounded-full font-medium border ${
-                                t.status === 'DONE'
-                                  ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-                                  : t.status === 'IN_PROGRESS'
-                                    ? 'bg-blue-500/15 text-blue-400 border-blue-500/30'
-                                    : t.status === 'SKIPPED'
-                                      ? 'bg-slate-500/15 text-slate-400 border-slate-500/30'
-                                      : 'bg-amber-500/15 text-amber-400 border-amber-500/30'
-                              }`}
+                    <table className="w-full">
+                      <thead className="border-b border-[#1e2536] bg-[#0f1117]/50">
+                        <tr>
+                          {['Date', 'Type', 'Staff', 'Status', 'Priority'].map((h) => (
+                            <th
+                              key={h}
+                              className="text-xs text-slate-500 uppercase tracking-wider font-medium px-4 py-3 text-left whitespace-nowrap"
                             >
-                              {t.status.replace('_', ' ')}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span
-                              className={`text-xs font-medium ${
-                                t.priority === 'URGENT'
-                                  ? 'text-red-400'
-                                  : t.priority === 'HIGH'
-                                    ? 'text-orange-400'
-                                    : t.priority === 'LOW'
-                                      ? 'text-slate-600'
-                                      : 'text-slate-500'
-                              }`}
-                            >
-                              {t.priority}
-                            </span>
-                          </td>
+                              {h}
+                            </th>
+                          ))}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-[#1e2536]">
+                        {cleaning.map((t) => (
+                          <tr key={t.id} className="hover:bg-white/[0.02] transition-colors">
+                            <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">
+                              {fmt(t.createdAt)}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-slate-300 capitalize">
+                              {t.type.toLowerCase().replace('_', ' ')}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-slate-400">
+                              {t.staff ? (
+                                `${t.staff.firstName} ${t.staff.lastName}`
+                              ) : (
+                                <span className="text-slate-600">Unassigned</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              <span
+                                className={`text-xs px-2.5 py-1 rounded-full font-medium border ${
+                                  t.status === 'DONE'
+                                    ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                                    : t.status === 'IN_PROGRESS'
+                                      ? 'bg-blue-500/15 text-blue-400 border-blue-500/30'
+                                      : t.status === 'SKIPPED'
+                                        ? 'bg-slate-500/15 text-slate-400 border-slate-500/30'
+                                        : 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                                }`}
+                              >
+                                {t.status.replace('_', ' ')}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span
+                                className={`text-xs font-medium ${
+                                  t.priority === 'URGENT'
+                                    ? 'text-red-400'
+                                    : t.priority === 'HIGH'
+                                      ? 'text-orange-400'
+                                      : t.priority === 'LOW'
+                                        ? 'text-slate-600'
+                                        : 'text-slate-500'
+                                }`}
+                              >
+                                {t.priority}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </TableScroll>
                 </div>
               ) : (
@@ -922,59 +1516,62 @@ export default function RoomDetailPage() {
             <div className="space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <p className="text-sm font-semibold text-white">Maintenance History</p>
-                <button className="w-full sm:w-auto text-xs bg-orange-500/15 text-orange-400 hover:bg-orange-500/25 px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center justify-center gap-1.5">
+                <button
+                  onClick={() => setShowLogIssue(true)}
+                  className="w-full sm:w-auto text-xs bg-orange-500/15 text-orange-400 hover:bg-orange-500/25 px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center justify-center gap-1.5"
+                >
                   <Wrench size={12} /> Log Issue
                 </button>
               </div>
               {maintenance.length > 0 ? (
                 <div className="bg-[#161b27] border border-[#1e2536] rounded-xl overflow-hidden">
                   <TableScroll>
-                  <table className="w-full">
-                    <thead className="border-b border-[#1e2536] bg-[#0f1117]/50">
-                      <tr>
-                        {['Date', 'Description', 'Assigned To', 'Status'].map((h) => (
-                          <th
-                            key={h}
-                            className="text-xs text-slate-500 uppercase tracking-wider font-medium px-4 py-3 text-left whitespace-nowrap"
-                          >
-                            {h}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#1e2536]">
-                      {maintenance.map((t) => (
-                        <tr key={t.id} className="hover:bg-white/[0.02] transition-colors">
-                          <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">
-                            {fmt(t.createdAt)}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-slate-300">
-                            {t.notes ?? 'No description'}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-slate-400">
-                            {t.staff ? (
-                              `${t.staff.firstName} ${t.staff.lastName}`
-                            ) : (
-                              <span className="text-slate-600">Unassigned</span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3">
-                            <span
-                              className={`text-xs px-2.5 py-1 rounded-full font-medium border ${
-                                t.status === 'DONE'
-                                  ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-                                  : t.status === 'IN_PROGRESS'
-                                    ? 'bg-blue-500/15 text-blue-400 border-blue-500/30'
-                                    : 'bg-orange-500/15 text-orange-400 border-orange-500/30'
-                              }`}
+                    <table className="w-full">
+                      <thead className="border-b border-[#1e2536] bg-[#0f1117]/50">
+                        <tr>
+                          {['Date', 'Description', 'Assigned To', 'Status'].map((h) => (
+                            <th
+                              key={h}
+                              className="text-xs text-slate-500 uppercase tracking-wider font-medium px-4 py-3 text-left whitespace-nowrap"
                             >
-                              {t.status.replace('_', ' ')}
-                            </span>
-                          </td>
+                              {h}
+                            </th>
+                          ))}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-[#1e2536]">
+                        {maintenance.map((t) => (
+                          <tr key={t.id} className="hover:bg-white/[0.02] transition-colors">
+                            <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">
+                              {fmt(t.createdAt)}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-slate-300">
+                              {t.notes ?? 'No description'}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-slate-400">
+                              {t.staff ? (
+                                `${t.staff.firstName} ${t.staff.lastName}`
+                              ) : (
+                                <span className="text-slate-600">Unassigned</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              <span
+                                className={`text-xs px-2.5 py-1 rounded-full font-medium border ${
+                                  t.status === 'DONE'
+                                    ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                                    : t.status === 'IN_PROGRESS'
+                                      ? 'bg-blue-500/15 text-blue-400 border-blue-500/30'
+                                      : 'bg-orange-500/15 text-orange-400 border-orange-500/30'
+                                }`}
+                              >
+                                {t.status.replace('_', ' ')}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </TableScroll>
                 </div>
               ) : (
@@ -1075,6 +1672,45 @@ export default function RoomDetailPage() {
           saving={updateStatus.isPending}
         />
       )}
+      {showNewReservation && (
+        <NewReservationModal
+          isOpen={showNewReservation}
+          onClose={() => setShowNewReservation(false)}
+          prefillRoom={{ id: room.id, number: room.number }}
+        />
+      )}
+      {showAddCharge && activeRes ? (
+        <AddFolioChargeModal
+          reservationId={activeRes.id}
+          currency={currency}
+          onClose={() => setShowAddCharge(false)}
+        />
+      ) : null}
+      {showLogIssue ? (
+        <CreateMaintenanceIssueModal
+          roomId={room.id}
+          onClose={() => setShowLogIssue(false)}
+          onCreated={() => setActiveTab('maintenance')}
+        />
+      ) : null}
+      {showAssignHousekeeper ? (
+        <AssignHousekeeperModal
+          roomId={room.id}
+          existingTask={openHousekeepingTask}
+          onClose={() => setShowAssignHousekeeper(false)}
+          onAssigned={() => setActiveTab('housekeeping')}
+        />
+      ) : null}
+      {showCheckOutConfirm && activeRes ? (
+        <ConfirmActionModal
+          title="Check Out Guest"
+          description={`This will check out ${guest?.firstName ?? 'the guest'} from Room ${room.number} and close the active stay.`}
+          confirmLabel="Check Out"
+          isPending={checkOut.isPending}
+          onClose={() => setShowCheckOutConfirm(false)}
+          onConfirm={handleCheckOut}
+        />
+      ) : null}
     </>
   );
 }

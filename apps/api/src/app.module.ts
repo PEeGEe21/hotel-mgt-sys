@@ -26,7 +26,7 @@ import { SuppliersModule } from './modules/suppliers/suppliers.module';
 import { ShiftsModule } from './modules/shifts/shifts.module';
 import { RoomTypesModule } from './modules/room-types/room-types.module';
 import { PermissionsModule } from './modules/permissions/permissions.module';
-import { PermissionsGuard, RolesGuard } from './modules/auth/guards';
+import { FeatureFlagsGuard, PermissionsGuard, RolesGuard } from './modules/auth/guards';
 import { LedgerModule } from './modules/ledger/ledger.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { AuditLogsModule } from './modules/audit-logs/audit-logs.module';
@@ -43,6 +43,8 @@ import { RootController } from './root.controller';
 import { PlatformModule } from './modules/platform/platform.module';
 import { HotelLifecycleModule } from './modules/hotel-lifecycle/hotel-lifecycle.module';
 import { KeycardsModule } from './modules/keycards/keycards.module';
+import { EntitlementsModule } from './modules/entitlements/entitlements.module';
+import { SupportModule } from './modules/support/support.module';
 
 @Module({
   imports: [
@@ -104,9 +106,11 @@ import { KeycardsModule } from './modules/keycards/keycards.module';
     SeedModule,
     HotelLifecycleModule,
     KeycardsModule,
+    EntitlementsModule,
+    SupportModule,
     PlatformModule,
   ],
   controllers: [RootController],
-  providers: [PermissionsGuard, RolesGuard],
+  providers: [PermissionsGuard, RolesGuard, FeatureFlagsGuard],
 })
 export class AppModule {}

@@ -337,6 +337,10 @@ Needed in the app:
 
 ## Phase 1: Admin Read Surfaces
 
+Status:
+
+- DONE
+
 Goal:
 
 - give platform operators visibility before full write tooling
@@ -369,6 +373,10 @@ Why this phase belongs here:
 
 ## Phase 2: Subscription Operations
 
+Status:
+
+- DONE
+
 Goal:
 
 - make plan and assignment changes operationally usable
@@ -376,7 +384,7 @@ Goal:
 Build in `apps/admin`:
 
 - plans create/edit page
-- hotel subscription assignment drawer on hotel detail
+- hotel subscription assignment drawer on hotel detail - use shadcn drawer
 - hotel billing contact editor
 - trial/grace state controls
 
@@ -392,6 +400,10 @@ App placement:
 - cross-hotel reporting belongs on `apps/admin/src/app/(platform)/subscriptions/page.tsx`
 
 ## Phase 3: Feature Control Operations
+
+Status:
+
+- DONE
 
 Goal:
 
@@ -422,8 +434,13 @@ Critical integration point:
 
 ## Phase 4: Support Operations
 
+Status:
+
+- DONE
+
 Goal:
 
+- add seed for subscription plans for each current hotels we have
 - build support workflows that do not depend on impersonation
 
 Build in `apps/admin`:
@@ -457,9 +474,17 @@ Why it belongs here:
 
 ## Phase 5: Sensitive Support Controls
 
+Status:
+
+- IN PROGRESS
+
 Goal:
 
+- add seed for support cases data for each current hotels we have
 - add higher-risk operational tools only after the lower-risk support flow is solid
+
+Question: 
+- are routes being gated on the backend, with a feauture flag decorator? isnt this necessary?
 
 Optional later additions:
 

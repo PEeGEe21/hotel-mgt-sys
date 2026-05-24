@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Layers } from '@solar-icons/react';
+import { TenantEntitlementBanner } from '@/components/hotel/TenantEntitlementBanner';
 
 const sections = [
   {
@@ -111,6 +112,23 @@ const sections = [
     adminOnly: true,
   },
   {
+    label: 'Subscription',
+    description: 'View plan status, included features and account warnings',
+    href: '/settings/subscription',
+    icon: ShieldCheck,
+    color: 'text-emerald-400',
+    bg: 'bg-emerald-500/10 border-emerald-500/20',
+    adminOnly: true,
+  },
+  {
+    label: 'Support',
+    description: 'Submit support requests and track case updates',
+    href: '/settings/support',
+    icon: Bell,
+    color: 'text-amber-400',
+    bg: 'bg-amber-500/10 border-amber-500/20',
+  },
+  {
     label: 'Notifications',
     description: 'Manage email, in-app and push alerts',
     href: '/profile?tab=notifications',
@@ -182,7 +200,7 @@ const sections = [
 ];
 
 export default function SettingsPage() {
-  const { isAdmin, isManagement } = usePermissions();
+  const { isAdmin } = usePermissions();
   const [search, setSearch] = useState('');
 
   const visible = useMemo(() => {
@@ -200,6 +218,7 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6 max-w-full">
+      <TenantEntitlementBanner />
       <div className='flex items-center justify-between gap-2 flex-wrap'>
         <div>
           <h1 className="text-2xl font-bold text-white tracking-tight">Settings</h1>

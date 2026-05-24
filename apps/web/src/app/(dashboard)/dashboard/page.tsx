@@ -3,6 +3,7 @@
 import { Clock } from 'lucide-react';
 import { DashboardRenderer } from './_components/DashboardRenderer';
 import { useAuthStore } from '@/store/auth.store';
+import { TenantEntitlementBanner } from '@/components/hotel/TenantEntitlementBanner';
 
 export default function DashboardPage() {
   const { user } = useAuthStore();
@@ -24,6 +25,8 @@ export default function DashboardPage() {
           })}
         </div>
       </div>
+
+      <TenantEntitlementBanner compact />
 
       <DashboardRenderer />
     </div>

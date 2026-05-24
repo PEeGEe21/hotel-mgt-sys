@@ -8,6 +8,16 @@ import { HotelLifecycleService } from '../hotel-lifecycle/hotel-lifecycle.servic
 import { UpdatePlatformHotelDto } from './dtos/update-platform-hotel.dto';
 import { UpdatePlatformHotelLifecycleDto } from './dtos/update-platform-hotel-lifecycle.dto';
 import { EmailService } from '../../common/email/email.service';
+import { CreateSubscriptionPlanDto } from './dtos/create-subscription-plan.dto';
+import { UpdateSubscriptionPlanDto } from './dtos/update-subscription-plan.dto';
+import { UpdateHotelSubscriptionDto } from './dtos/update-hotel-subscription.dto';
+import { UpdatePlanEntitlementsDto } from './dtos/update-plan-entitlements.dto';
+import { UpdateHotelFeatureFlagDto } from './dtos/update-hotel-feature-flag.dto';
+import { RedisCacheService } from '../../common/redis/redis-cache.service';
+import { EntitlementsService, HotelEntitlementSnapshot } from '../entitlements/entitlements.service';
+import { CreateSupportCaseDto } from './dtos/create-support-case.dto';
+import { UpdateSupportCaseDto } from './dtos/update-support-case.dto';
+import { CreateSupportCommentDto } from './dtos/create-support-comment.dto';
 
 type ListHotelsParams = {
   page?: number;
@@ -38,10 +48,44 @@ type PlatformKeycardProviderMode = 'mock' | 'live';
 
 const ADMIN_ROLE = 'ADMIN';
 const OVERDUE_PAYMENT_STATUSES = ['UNPAID', 'PARTIAL'] as const;
+const SUPPORT_CASE_STATUSES = [
+  'OPEN',
+  'TRIAGED',
+  'IN_PROGRESS',
+  'WAITING_ON_HOTEL',
+  'RESOLVED',
+  'CLOSED',
+] as const;
+const SUPPORT_CASE_PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'] as const;
+const SUPPORT_COMMENT_VISIBILITIES = ['INTERNAL', 'HOTEL_VISIBLE'] as const;
 
 function normalizeOptional(value?: string | null) {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
+}
+
+function parseOptionalDate(value?: string | null) {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new BadRequestException(`Invalid date: ${value}`);
+  }
+  return parsed;
+}
+
+function normalizeEnumValue<T extends readonly string[]>(
+  value: string | null | undefined,
+  allowed: T,
+  fieldName: string,
+): T[number] | null {
+  if (value === undefined || value === null) return null;
+  const normalized = value.trim().toUpperCase();
+  if (!normalized) return null;
+  if (!allowed.includes(normalized as T[number])) {
+    throw new BadRequestException(`Invalid ${fieldName}: ${value}`);
+  }
+  return normalized as T[number];
 }
 
 function genUsername(firstName: string, lastName: string, email: string) {
@@ -100,6 +144,8 @@ export class PlatformService {
     private readonly prisma: PrismaService,
     private readonly hotelLifecycleService: HotelLifecycleService,
     private readonly email: EmailService,
+    private readonly cache: RedisCacheService,
+    private readonly entitlementsService: EntitlementsService,
   ) {}
 
   private normalizeLockVendor(vendor?: string | null) {
@@ -329,6 +375,53 @@ export class PlatformService {
       overdueInvoices: params.overdueInvoices,
       signals: signals.length > 0 ? signals : ['Recent activity looks healthy across staff and bookings.'],
     };
+  }
+
+  private async getLatestHotelSubscriptions(hotelIds: string[]) {
+    if (hotelIds.length === 0) return new Map<string, any>();
+
+    const rows = await (this.prisma as any).hotelSubscription.findMany({
+      where: {
+        hotelId: {
+          in: hotelIds,
+        },
+      },
+      orderBy: [{ updatedAt: 'desc' }],
+      include: {
+        plan: true,
+      },
+    });
+
+    const latestByHotel = new Map<string, any>();
+    for (const row of rows) {
+      if (!latestByHotel.has(row.hotelId)) {
+        latestByHotel.set(row.hotelId, row);
+      }
+    }
+
+    return latestByHotel;
+  }
+
+  private async resolveHotelEntitlementsInternal(hotelId: string): Promise<HotelEntitlementSnapshot> {
+    return this.entitlementsService.resolveHotelEntitlements(hotelId);
+  }
+
+  private async invalidateDashboardFeatureFlagsForHotel(hotelId: string) {
+    await this.cache.del(`dashboard:feature-flags:${hotelId}`);
+  }
+
+  private async invalidateDashboardFeatureFlagsForPlan(planId: string) {
+    const subscriptions = await (this.prisma as any).hotelSubscription.findMany({
+      where: { planId },
+      select: { hotelId: true },
+      distinct: ['hotelId'],
+    });
+
+    await Promise.all(
+      subscriptions.map((subscription: { hotelId: string }) =>
+        this.invalidateDashboardFeatureFlagsForHotel(subscription.hotelId),
+      ),
+    );
   }
 
   async createHotelOnboarding(actorUserId: string, dto: CreatePlatformHotelOnboardingDto) {
@@ -633,6 +726,916 @@ export class PlatformService {
         missingMappingHotels: missingMappingHotels.slice(0, 5),
       },
       generatedAt: new Date().toISOString(),
+    };
+  }
+
+  async getSubscriptionsOverview() {
+    const [plans, hotels, subscriptions] = await Promise.all([
+      (this.prisma as any).subscriptionPlan.findMany({
+        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      }),
+      this.prisma.hotel.findMany({
+        orderBy: { name: 'asc' },
+        select: {
+          id: true,
+          name: true,
+        },
+      }),
+      (this.prisma as any).hotelSubscription.findMany({
+        orderBy: [{ updatedAt: 'desc' }],
+        include: {
+          hotel: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          plan: true,
+        },
+      }),
+    ]);
+
+    const latestByHotel = new Map<string, any>();
+    for (const subscription of subscriptions) {
+      if (!latestByHotel.has(subscription.hotelId)) {
+        latestByHotel.set(subscription.hotelId, subscription);
+      }
+    }
+
+    const assignments = hotels.map((hotel) => {
+      const subscription = latestByHotel.get(hotel.id) ?? null;
+      return {
+        id: subscription?.id ?? `none:${hotel.id}`,
+        hotelId: hotel.id,
+        hotelName: hotel.name,
+        planId: subscription?.plan?.id ?? null,
+        planCode: subscription?.plan?.code ?? null,
+        planName: subscription?.plan?.name ?? null,
+        status: subscription?.status ?? 'NONE',
+        startsAt: subscription?.startsAt?.toISOString() ?? null,
+        endsAt: subscription?.endsAt?.toISOString() ?? null,
+        trialEndsAt: subscription?.trialEndsAt?.toISOString() ?? null,
+        graceEndsAt: subscription?.graceEndsAt?.toISOString() ?? null,
+        billingEmail: subscription?.billingEmail ?? null,
+        billingContactName: subscription?.billingContactName ?? null,
+      };
+    });
+
+    const statusCounts = assignments.reduce<Record<string, number>>((acc, assignment) => {
+      acc[assignment.status] = (acc[assignment.status] ?? 0) + 1;
+      return acc;
+    }, {});
+
+    const planCounts = assignments.reduce<Record<string, { total: number; active: number }>>((acc, assignment) => {
+      if (!assignment.planId) return acc;
+      const entry = acc[assignment.planId] ?? { total: 0, active: 0 };
+      entry.total += 1;
+      if (assignment.status === 'ACTIVE' || assignment.status === 'TRIAL' || assignment.status === 'GRACE') {
+        entry.active += 1;
+      }
+      acc[assignment.planId] = entry;
+      return acc;
+    }, {});
+
+    return {
+      plans: plans.map((plan: any) => ({
+        id: plan.id,
+        code: plan.code,
+        name: plan.name,
+        description: plan.description ?? null,
+        priceMonthly: plan.priceMonthly !== null ? Number(plan.priceMonthly) : null,
+        priceYearly: plan.priceYearly !== null ? Number(plan.priceYearly) : null,
+        billingIntervalOptions: plan.billingIntervalOptions ?? [],
+        isActive: plan.isActive,
+        isPublic: plan.isPublic,
+        sortOrder: plan.sortOrder,
+        hotelCount: planCounts[plan.id]?.total ?? 0,
+        activeHotelCount: planCounts[plan.id]?.active ?? 0,
+      })),
+      assignments,
+      statusCounts,
+    };
+  }
+
+  async createSubscriptionPlan(actorUserId: string, dto: CreateSubscriptionPlanDto) {
+    const code = dto.code.trim().toUpperCase();
+    const existing = await (this.prisma as any).subscriptionPlan.findUnique({
+      where: { code },
+      select: { id: true },
+    });
+    if (existing) {
+      throw new ConflictException('A subscription plan with this code already exists.');
+    }
+
+    const plan = await (this.prisma as any).subscriptionPlan.create({
+      data: {
+        code,
+        name: dto.name.trim(),
+        description: normalizeOptional(dto.description),
+        priceMonthly: dto.priceMonthly ?? null,
+        priceYearly: dto.priceYearly ?? null,
+        billingIntervalOptions:
+          dto.billingIntervalOptions?.length
+            ? dto.billingIntervalOptions.map((entry) => entry.trim().toUpperCase()).filter(Boolean)
+            : ['MONTHLY', 'YEARLY'],
+        isActive: dto.isActive ?? true,
+        isPublic: dto.isPublic ?? false,
+        sortOrder: dto.sortOrder ?? 0,
+      },
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        hotelId: null,
+        actorUserId,
+        action: 'platform.subscription_plan.create',
+        targetType: 'SUBSCRIPTION_PLAN',
+        targetId: plan.id,
+        metadata: {
+          code: plan.code,
+          name: plan.name,
+        },
+      },
+    });
+
+    return this.getSubscriptionsOverview();
+  }
+
+  async updateSubscriptionPlan(actorUserId: string, planId: string, dto: UpdateSubscriptionPlanDto) {
+    const plan = await (this.prisma as any).subscriptionPlan.findUnique({
+      where: { id: planId },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        description: true,
+        priceMonthly: true,
+        priceYearly: true,
+        billingIntervalOptions: true,
+        isActive: true,
+        isPublic: true,
+        sortOrder: true,
+      },
+    });
+    if (!plan) {
+      throw new NotFoundException('Subscription plan not found.');
+    }
+
+    const code = dto.code !== undefined ? dto.code.trim().toUpperCase() : undefined;
+    if (code && code !== plan.code) {
+      const existing = await (this.prisma as any).subscriptionPlan.findUnique({
+        where: { code },
+        select: { id: true },
+      });
+      if (existing && existing.id !== planId) {
+        throw new ConflictException('A subscription plan with this code already exists.');
+      }
+    }
+
+    const data = {
+      ...(code !== undefined ? { code } : {}),
+      ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
+      ...(dto.description !== undefined ? { description: normalizeOptional(dto.description) } : {}),
+      ...(dto.priceMonthly !== undefined ? { priceMonthly: dto.priceMonthly } : {}),
+      ...(dto.priceYearly !== undefined ? { priceYearly: dto.priceYearly } : {}),
+      ...(dto.billingIntervalOptions !== undefined
+        ? {
+            billingIntervalOptions: dto.billingIntervalOptions
+              .map((entry) => entry.trim().toUpperCase())
+              .filter(Boolean),
+          }
+        : {}),
+      ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
+      ...(dto.isPublic !== undefined ? { isPublic: dto.isPublic } : {}),
+      ...(dto.sortOrder !== undefined ? { sortOrder: dto.sortOrder } : {}),
+    };
+
+    if (Object.keys(data).length === 0) {
+      throw new BadRequestException('Provide at least one plan field to update.');
+    }
+
+    await (this.prisma as any).subscriptionPlan.update({
+      where: { id: planId },
+      data,
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        hotelId: null,
+        actorUserId,
+        action: 'platform.subscription_plan.update',
+        targetType: 'SUBSCRIPTION_PLAN',
+        targetId: planId,
+        metadata: {
+          before: plan,
+          changedFields: Object.keys(data),
+        },
+      },
+    });
+
+    return this.getSubscriptionsOverview();
+  }
+
+  async updatePlanEntitlements(actorUserId: string, planId: string, dto: UpdatePlanEntitlementsDto) {
+    const plan = await (this.prisma as any).subscriptionPlan.findUnique({
+      where: { id: planId },
+      select: { id: true, code: true, name: true },
+    });
+    if (!plan) {
+      throw new NotFoundException('Subscription plan not found.');
+    }
+
+    const normalizedEntries = dto.entitlements.map((entry) => ({
+      flagKey: entry.flagKey.trim(),
+      enabled: entry.enabled,
+      limitValue: normalizeOptional(entry.limitValue),
+    }));
+    const uniqueKeys = new Set(normalizedEntries.map((entry) => entry.flagKey));
+    if (uniqueKeys.size !== normalizedEntries.length) {
+      throw new BadRequestException('Duplicate feature keys are not allowed in one entitlement update.');
+    }
+
+    const flags = await (this.prisma as any).featureFlag.findMany({
+      where: {
+        key: {
+          in: normalizedEntries.map((entry) => entry.flagKey),
+        },
+      },
+      select: { key: true },
+    });
+    if (flags.length !== normalizedEntries.length) {
+      const known = new Set(flags.map((flag: { key: string }) => flag.key));
+      const missing = normalizedEntries
+        .map((entry) => entry.flagKey)
+        .filter((flagKey) => !known.has(flagKey));
+      throw new NotFoundException(`Unknown feature flag(s): ${missing.join(', ')}`);
+    }
+
+    const existing = await (this.prisma as any).planFeatureEntitlement.findMany({
+      where: { planId },
+      orderBy: [{ flagKey: 'asc' }],
+    });
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.planFeatureEntitlement.deleteMany({
+        where: {
+          planId,
+          ...(normalizedEntries.length
+            ? {
+                flagKey: {
+                  notIn: normalizedEntries.map((entry) => entry.flagKey),
+                },
+              }
+            : {}),
+        },
+      });
+
+      for (const entry of normalizedEntries) {
+        await (tx as any).planFeatureEntitlement.upsert({
+          where: {
+            planId_flagKey: {
+              planId,
+              flagKey: entry.flagKey,
+            },
+          },
+          update: {
+            enabled: entry.enabled,
+            limitValue: entry.limitValue,
+          },
+          create: {
+            planId,
+            flagKey: entry.flagKey,
+            enabled: entry.enabled,
+            limitValue: entry.limitValue,
+          },
+        });
+      }
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        hotelId: null,
+        actorUserId,
+        action: 'platform.subscription_plan.entitlements.update',
+        targetType: 'SUBSCRIPTION_PLAN',
+        targetId: planId,
+        metadata: {
+          planCode: plan.code,
+          planName: plan.name,
+          before: existing.map((entry: any) => ({
+            flagKey: entry.flagKey,
+            enabled: entry.enabled,
+            limitValue: entry.limitValue ?? null,
+          })),
+          after: normalizedEntries,
+        },
+      },
+    });
+
+    await this.invalidateDashboardFeatureFlagsForPlan(planId);
+
+    return this.getFeatureCatalogOverview();
+  }
+
+  async getFeatureCatalogOverview() {
+    const [flags, plans, overrides, recentChanges] = await Promise.all([
+      (this.prisma as any).featureFlag.findMany({
+        orderBy: [{ category: 'asc' }, { key: 'asc' }],
+        include: {
+          planEntitlements: {
+            include: {
+              plan: true,
+            },
+          },
+        },
+      }),
+      (this.prisma as any).subscriptionPlan.findMany({
+        where: { isActive: true },
+        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      }),
+      (this.prisma as any).hotelFeatureOverride.findMany(),
+      (this.prisma.auditLog as any).findMany({
+        where: {
+          action: {
+            in: ['platform.subscription_plan.entitlements.update', 'platform.hotel.feature_override.update'],
+          },
+        },
+        orderBy: [{ createdAt: 'desc' }],
+        take: 12,
+        include: {
+          hotel: { select: { id: true, name: true } },
+          actor: {
+            select: {
+              id: true,
+              email: true,
+              staff: { select: { firstName: true, lastName: true } },
+            },
+          },
+        },
+      }),
+    ]);
+
+    const overrideCounts = overrides.reduce((acc: Record<string, number>, override: any) => {
+      acc[override.flagKey] = (acc[override.flagKey] ?? 0) + 1;
+      return acc;
+    }, {});
+
+    return {
+      features: flags.map((flag: any) => ({
+        key: flag.key,
+        name: flag.name ?? null,
+        description: flag.description ?? null,
+        category: flag.category ?? null,
+        defaultEnabled: flag.defaultEnabled !== false,
+        globalEnabled: flag.enabled !== false,
+        scopeType: flag.scopeType,
+        rolloutStage: flag.rolloutStage,
+        planRequired: flag.planRequired ?? null,
+        planAssignments: flag.planEntitlements.map((entry: any) => ({
+          planId: entry.plan.id,
+          planCode: entry.plan.code,
+          planName: entry.plan.name,
+          enabled: entry.enabled,
+          limitValue: entry.limitValue ?? null,
+        })),
+        overrideCount: overrideCounts[flag.key] ?? 0,
+      })),
+      plans: plans.map((plan: any) => ({
+        id: plan.id,
+        code: plan.code,
+        name: plan.name,
+      })),
+      recentChanges: recentChanges.map((entry: any) => ({
+        id: entry.id,
+        action: entry.action,
+        createdAt: entry.createdAt,
+        hotel: entry.hotel ? { id: entry.hotel.id, name: entry.hotel.name } : null,
+        actorName: entry.actor?.staff
+          ? `${entry.actor.staff.firstName} ${entry.actor.staff.lastName}`.trim()
+          : entry.actor?.email ?? 'Unknown actor',
+        summary:
+          entry.action === 'platform.subscription_plan.entitlements.update'
+            ? `Updated plan entitlements for ${String((entry.metadata as any)?.planCode ?? 'a plan')}.`
+            : `Updated hotel feature override for ${entry.hotel?.name ?? 'a hotel'}.`,
+        metadata: entry.metadata ?? null,
+      })),
+      totals: {
+        features: flags.length,
+        hotelOverrides: overrides.length,
+      },
+    };
+  }
+
+  private async assertSupportAssignee(assignedAdminId: string | null | undefined) {
+    if (!assignedAdminId) return null;
+    const admin = await this.prisma.user.findUnique({
+      where: { id: assignedAdminId },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        staff: { select: { firstName: true, lastName: true } },
+      },
+    });
+    if (!admin || admin.role !== 'SUPER_ADMIN') {
+      throw new NotFoundException('Assigned support admin not found.');
+    }
+    return admin;
+  }
+
+  private async createSupportEvent(
+    tx: any,
+    caseId: string,
+    actorUserId: string | null,
+    type: string,
+    payload?: Record<string, unknown> | null,
+  ) {
+    await tx.supportCaseEvent.create({
+      data: {
+        caseId,
+        actorUserId,
+        type,
+        payload: payload ? (payload as any) : undefined,
+      },
+    });
+  }
+
+  async createSupportCase(actorUserId: string, dto: CreateSupportCaseDto) {
+    const hotel = await this.prisma.hotel.findUnique({
+      where: { id: dto.hotelId },
+      select: { id: true, name: true },
+    });
+    if (!hotel) {
+      throw new NotFoundException('Hotel not found.');
+    }
+
+    const priority = normalizeEnumValue(dto.priority ?? 'MEDIUM', SUPPORT_CASE_PRIORITIES, 'priority') ?? 'MEDIUM';
+    const assignedAdmin = await this.assertSupportAssignee(dto.assignedAdminId ?? null);
+    const [entitlements, subscription] = await Promise.all([
+      this.resolveHotelEntitlementsInternal(dto.hotelId),
+      (this.prisma as any).hotelSubscription.findFirst({
+        where: { hotelId: dto.hotelId },
+        orderBy: [{ updatedAt: 'desc' }],
+        include: { plan: true },
+      }),
+    ]);
+
+    const created = await this.prisma.$transaction(async (tx) => {
+      const supportCase = await (tx as any).supportCase.create({
+        data: {
+          hotelId: dto.hotelId,
+          createdByUserId: actorUserId,
+          source: 'PLATFORM',
+          category: dto.category.trim(),
+          priority,
+          status: 'OPEN',
+          subject: dto.subject.trim(),
+          description: dto.description.trim(),
+          assignedAdminId: assignedAdmin?.id ?? null,
+          subscriptionSnapshot: subscription
+            ? {
+                status: subscription.status,
+                planId: subscription.planId ?? null,
+                planCode: subscription.plan?.code ?? null,
+                planName: subscription.plan?.name ?? null,
+              }
+            : null,
+          entitlementSnapshot: entitlements as any,
+        },
+      });
+
+      await this.createSupportEvent(tx, supportCase.id, actorUserId, 'CASE_CREATED', {
+        hotelName: hotel.name,
+        priority,
+        assignedAdminId: assignedAdmin?.id ?? null,
+      });
+
+      if (assignedAdmin) {
+        await this.createSupportEvent(tx, supportCase.id, actorUserId, 'ASSIGNED', {
+          assignedAdminId: assignedAdmin.id,
+          assignedAdminName: assignedAdmin.staff
+            ? `${assignedAdmin.staff.firstName} ${assignedAdmin.staff.lastName}`.trim()
+            : assignedAdmin.email,
+        });
+      }
+
+      return supportCase;
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        hotelId: dto.hotelId,
+        actorUserId,
+        action: 'platform.support.case.create',
+        targetType: 'SUPPORT_CASE',
+        targetId: created.id,
+        metadata: {
+          hotelName: hotel.name,
+          subject: created.subject,
+          category: created.category,
+          priority: created.priority,
+        },
+      },
+    });
+
+    return this.getSupportCaseDetail(created.id);
+  }
+
+  async updateSupportCase(actorUserId: string, caseId: string, dto: UpdateSupportCaseDto) {
+    const supportCase = await (this.prisma as any).supportCase.findUnique({
+      where: { id: caseId },
+      include: {
+        hotel: { select: { id: true, name: true } },
+        assignedAdmin: {
+          select: {
+            id: true,
+            email: true,
+            staff: { select: { firstName: true, lastName: true } },
+          },
+        },
+      },
+    });
+    if (!supportCase) {
+      throw new NotFoundException('Support case not found.');
+    }
+
+    const status = normalizeEnumValue(dto.status, SUPPORT_CASE_STATUSES, 'status');
+    const priority = normalizeEnumValue(dto.priority, SUPPORT_CASE_PRIORITIES, 'priority');
+    const assignedAdmin =
+      dto.assignedAdminId !== undefined
+        ? await this.assertSupportAssignee(dto.assignedAdminId ? dto.assignedAdminId : null)
+        : undefined;
+
+    const data = {
+      ...(dto.category !== undefined ? { category: dto.category.trim() } : {}),
+      ...(priority !== null ? { priority } : {}),
+      ...(status !== null ? { status } : {}),
+      ...(dto.subject !== undefined ? { subject: dto.subject.trim() } : {}),
+      ...(dto.description !== undefined ? { description: dto.description.trim() } : {}),
+      ...(dto.assignedAdminId !== undefined ? { assignedAdminId: assignedAdmin?.id ?? null } : {}),
+    };
+
+    if (Object.keys(data).length === 0) {
+      throw new BadRequestException('Provide at least one support case field to update.');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await (tx as any).supportCase.update({
+        where: { id: caseId },
+        data,
+      });
+
+      if (status !== null && status !== supportCase.status) {
+        await this.createSupportEvent(tx, caseId, actorUserId, 'STATUS_CHANGED', {
+          from: supportCase.status,
+          to: status,
+        });
+      }
+
+      if (priority !== null && priority !== supportCase.priority) {
+        await this.createSupportEvent(tx, caseId, actorUserId, 'PRIORITY_CHANGED', {
+          from: supportCase.priority,
+          to: priority,
+        });
+      }
+
+      if (dto.assignedAdminId !== undefined) {
+        await this.createSupportEvent(tx, caseId, actorUserId, assignedAdmin ? 'ASSIGNED' : 'UNASSIGNED', {
+          from: supportCase.assignedAdminId,
+          to: assignedAdmin?.id ?? null,
+        });
+      }
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        hotelId: supportCase.hotelId,
+        actorUserId,
+        action: 'platform.support.case.update',
+        targetType: 'SUPPORT_CASE',
+        targetId: caseId,
+        metadata: {
+          hotelName: supportCase.hotel.name,
+          changedFields: Object.keys(data),
+          status: status ?? undefined,
+          priority: priority ?? undefined,
+          assignedAdminId: dto.assignedAdminId !== undefined ? assignedAdmin?.id ?? null : undefined,
+        },
+      },
+    });
+
+    return this.getSupportCaseDetail(caseId);
+  }
+
+  async addSupportCaseComment(actorUserId: string, caseId: string, dto: CreateSupportCommentDto) {
+    const supportCase = await (this.prisma as any).supportCase.findUnique({
+      where: { id: caseId },
+      select: {
+        id: true,
+        hotelId: true,
+        hotel: { select: { name: true } },
+      },
+    });
+    if (!supportCase) {
+      throw new NotFoundException('Support case not found.');
+    }
+
+    const visibility =
+      normalizeEnumValue(dto.visibility ?? 'INTERNAL', SUPPORT_COMMENT_VISIBILITIES, 'visibility') ?? 'INTERNAL';
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.supportCaseComment.create({
+        data: {
+          caseId,
+          authorUserId: actorUserId,
+          visibility,
+          body: dto.body.trim(),
+        },
+      });
+
+      await this.createSupportEvent(tx, caseId, actorUserId, 'COMMENT_ADDED', {
+        visibility,
+      });
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        hotelId: supportCase.hotelId,
+        actorUserId,
+        action: 'platform.support.case.comment',
+        targetType: 'SUPPORT_CASE',
+        targetId: caseId,
+        metadata: {
+          hotelName: supportCase.hotel.name,
+          visibility,
+        },
+      },
+    });
+
+    return this.getSupportCaseDetail(caseId);
+  }
+
+  async getSupportCases(params: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    priority?: string;
+    category?: string;
+    hotelId?: string;
+    search?: string;
+  }) {
+    const page = Math.max(1, params.page ?? 1);
+    const limit = Math.min(Math.max(params.limit ?? 20, 1), 100);
+    const skip = (page - 1) * limit;
+
+    const where = {
+      ...(params.status ? { status: params.status } : {}),
+      ...(params.priority ? { priority: params.priority } : {}),
+      ...(params.category ? { category: { contains: params.category, mode: 'insensitive' as const } } : {}),
+      ...(params.hotelId ? { hotelId: params.hotelId } : {}),
+      ...(params.search
+        ? {
+            OR: [
+              { subject: { contains: params.search, mode: 'insensitive' as const } },
+              { description: { contains: params.search, mode: 'insensitive' as const } },
+              { hotel: { name: { contains: params.search, mode: 'insensitive' as const } } },
+            ],
+          }
+        : {}),
+    };
+
+    const [rows, total, groupedCounts] = await Promise.all([
+      (this.prisma as any).supportCase.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: [{ updatedAt: 'desc' }],
+        include: {
+          hotel: { select: { id: true, name: true } },
+          assignedAdmin: {
+            select: {
+              id: true,
+              email: true,
+              staff: { select: { firstName: true, lastName: true } },
+            },
+          },
+        },
+      }),
+      (this.prisma as any).supportCase.count({ where }),
+      (this.prisma as any).supportCase.groupBy({
+        by: ['status'],
+        where,
+        _count: {
+          _all: true,
+        },
+      }),
+    ]);
+
+    const counts = groupedCounts.reduce((acc: Record<string, number>, row: any) => {
+      acc[row.status] = row._count?._all ?? 0;
+      return acc;
+    }, {});
+
+    return {
+      cases: rows.map((row: any) => ({
+        id: row.id,
+        hotelId: row.hotelId,
+        hotelName: row.hotel.name,
+        subject: row.subject,
+        category: row.category,
+        priority: row.priority,
+        status: row.status,
+        source: row.source,
+        assignedAdminId: row.assignedAdminId ?? null,
+        assignedAdminName: row.assignedAdmin
+          ? row.assignedAdmin.staff
+            ? `${row.assignedAdmin.staff.firstName} ${row.assignedAdmin.staff.lastName}`.trim()
+            : row.assignedAdmin.email
+          : null,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+      })),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+      statusCounts: counts,
+    };
+  }
+
+  async getSupportCaseDetail(id: string) {
+    const supportCase = await (this.prisma as any).supportCase.findUnique({
+      where: { id },
+      include: {
+        hotel: {
+          select: {
+            id: true,
+            name: true,
+            city: true,
+            country: true,
+          },
+        },
+        assignedAdmin: {
+          select: {
+            id: true,
+            email: true,
+            staff: { select: { firstName: true, lastName: true } },
+          },
+        },
+        createdByUser: {
+          select: {
+            id: true,
+            email: true,
+            staff: { select: { firstName: true, lastName: true } },
+          },
+        },
+        events: {
+          orderBy: [{ createdAt: 'asc' }],
+          include: {
+            actorUser: {
+              select: {
+                id: true,
+                email: true,
+                staff: { select: { firstName: true, lastName: true } },
+              },
+            },
+          },
+        },
+        comments: {
+          orderBy: [{ createdAt: 'asc' }],
+          include: {
+            authorUser: {
+              select: {
+                id: true,
+                email: true,
+                staff: { select: { firstName: true, lastName: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!supportCase) {
+      throw new NotFoundException('Support case not found.');
+    }
+
+    const [entitlements, hotelDetail] = await Promise.all([
+      this.resolveHotelEntitlementsInternal(supportCase.hotelId),
+      this.getHotelDetail(supportCase.hotelId),
+    ]);
+
+    return {
+      id: supportCase.id,
+      hotelId: supportCase.hotelId,
+      hotel: supportCase.hotel,
+      subject: supportCase.subject,
+      description: supportCase.description,
+      category: supportCase.category,
+      priority: supportCase.priority,
+      status: supportCase.status,
+      source: supportCase.source,
+      requestType: supportCase.requestType ?? null,
+      requestPayload: supportCase.requestPayload ?? null,
+      assignedAdmin: supportCase.assignedAdmin
+        ? {
+            id: supportCase.assignedAdmin.id,
+            name: supportCase.assignedAdmin.staff
+              ? `${supportCase.assignedAdmin.staff.firstName} ${supportCase.assignedAdmin.staff.lastName}`.trim()
+              : supportCase.assignedAdmin.email,
+            email: supportCase.assignedAdmin.email,
+          }
+        : null,
+      createdBy: supportCase.createdByUser
+        ? {
+            id: supportCase.createdByUser.id,
+            name: supportCase.createdByUser.staff
+              ? `${supportCase.createdByUser.staff.firstName} ${supportCase.createdByUser.staff.lastName}`.trim()
+              : supportCase.createdByUser.email,
+            email: supportCase.createdByUser.email,
+          }
+        : null,
+      createdAt: supportCase.createdAt,
+      updatedAt: supportCase.updatedAt,
+      subscriptionSnapshot: supportCase.subscriptionSnapshot ?? null,
+      entitlementSnapshot: supportCase.entitlementSnapshot ?? null,
+      liveEntitlements: entitlements,
+      hotelHealth: hotelDetail.health,
+      hotelLifecycle: {
+        onboardingStatus: hotelDetail.onboardingStatus,
+        suspendedAt: hotelDetail.suspendedAt,
+        suspensionReason: hotelDetail.suspensionReason,
+        deletedAt: hotelDetail.deletedAt,
+        purgeAfterAt: hotelDetail.purgeAfterAt,
+      },
+      hotelSubscription: hotelDetail.subscription,
+      keycards: hotelDetail.keycards,
+      events: supportCase.events.map((event: any) => ({
+        id: event.id,
+        type: event.type,
+        payload: event.payload ?? null,
+        createdAt: event.createdAt,
+        actor: event.actorUser
+          ? {
+              id: event.actorUser.id,
+              name: event.actorUser.staff
+                ? `${event.actorUser.staff.firstName} ${event.actorUser.staff.lastName}`.trim()
+                : event.actorUser.email,
+              email: event.actorUser.email,
+            }
+          : null,
+      })),
+      comments: supportCase.comments.map((comment: any) => ({
+        id: comment.id,
+        visibility: comment.visibility,
+        body: comment.body,
+        createdAt: comment.createdAt,
+        author: comment.authorUser
+          ? {
+              id: comment.authorUser.id,
+              name: comment.authorUser.staff
+                ? `${comment.authorUser.staff.firstName} ${comment.authorUser.staff.lastName}`.trim()
+                : comment.authorUser.email,
+              email: comment.authorUser.email,
+            }
+          : null,
+      })),
+    };
+  }
+
+  async getHotelEntitlements(hotelId: string) {
+    const [snapshot, recentChanges] = await Promise.all([
+      this.resolveHotelEntitlementsInternal(hotelId),
+      (this.prisma.auditLog as any).findMany({
+        where: {
+          hotelId,
+          action: 'platform.hotel.feature_override.update',
+        },
+        orderBy: [{ createdAt: 'desc' }],
+        take: 12,
+        include: {
+          actor: {
+            select: {
+              id: true,
+              email: true,
+              staff: { select: { firstName: true, lastName: true } },
+            },
+          },
+        },
+      }),
+    ]);
+
+    return {
+      ...snapshot,
+      recentChanges: recentChanges.map((entry: any) => ({
+        id: entry.id,
+        action: entry.action,
+        createdAt: entry.createdAt,
+        actorName: entry.actor?.staff
+          ? `${entry.actor.staff.firstName} ${entry.actor.staff.lastName}`.trim()
+          : entry.actor?.email ?? 'Unknown actor',
+        metadata: entry.metadata ?? null,
+      })),
     };
   }
 
@@ -1102,7 +2105,7 @@ export class PlatformService {
 
     const onboardingStatus = this.hotelLifecycleService.deriveOnboardingStatus(hotel._count.rooms, hotel._count.staff);
 
-    const [admins, recentReservations, recentStaffLogins, latestReservation, overdueInvoices, rooms, keycardEventGroups, recentKeycardEvents] = await Promise.all([
+    const [admins, recentReservations, recentStaffLogins, latestReservation, overdueInvoices, rooms, keycardEventGroups, recentKeycardEvents, subscription] = await Promise.all([
       this.prisma.user.findMany({
         where: {
           role: { in: ['SUPER_ADMIN', 'ADMIN'] },
@@ -1190,6 +2193,13 @@ export class PlatformService {
           },
         },
       }),
+      (this.prisma as any).hotelSubscription.findFirst({
+        where: { hotelId },
+        orderBy: [{ updatedAt: 'desc' }],
+        include: {
+          plan: true,
+        },
+      }),
     ]);
 
     const latestStaffLoginAt = recentStaffLogins[0]?.user.lastLoginAt ?? null;
@@ -1266,6 +2276,22 @@ export class PlatformService {
         lastStaffLoginAt: health.lastStaffLoginAt,
         lastReservationCreatedAt: health.lastReservationCreatedAt,
       },
+      subscription: subscription
+        ? {
+            id: subscription.id,
+            planId: subscription.planId ?? null,
+            planCode: subscription.plan?.code ?? null,
+            planName: subscription.plan?.name ?? null,
+            status: subscription.status,
+            startsAt: subscription.startsAt ?? null,
+            endsAt: subscription.endsAt ?? null,
+            trialEndsAt: subscription.trialEndsAt ?? null,
+            graceEndsAt: subscription.graceEndsAt ?? null,
+            billingEmail: subscription.billingEmail ?? null,
+            billingContactName: subscription.billingContactName ?? null,
+            notes: subscription.notes ?? null,
+          }
+        : null,
       keycards: {
         enabled: hotel.keycardAuthEnabled,
         hotelLockVendor: this.normalizeLockVendor(hotel.lockVendor),
@@ -1307,6 +2333,220 @@ export class PlatformService {
         },
       },
     };
+  }
+
+  async updateHotelSubscription(actorUserId: string, hotelId: string, dto: UpdateHotelSubscriptionDto) {
+    const hotel = await this.prisma.hotel.findUnique({
+      where: { id: hotelId },
+      select: { id: true, name: true, email: true },
+    });
+    if (!hotel) {
+      throw new NotFoundException('Hotel not found.');
+    }
+
+    let nextPlan: { id: string; code: string; name: string } | null = null;
+    if (dto.planId) {
+      const plan = await (this.prisma as any).subscriptionPlan.findUnique({
+        where: { id: dto.planId },
+        select: { id: true, code: true, name: true },
+      });
+      if (!plan) {
+        throw new NotFoundException('Subscription plan not found.');
+      }
+      nextPlan = plan;
+    }
+
+    const existing = await (this.prisma as any).hotelSubscription.findFirst({
+      where: { hotelId },
+      orderBy: [{ updatedAt: 'desc' }],
+      include: { plan: true },
+    });
+
+    const data = {
+      ...(dto.planId !== undefined ? { planId: dto.planId || null } : {}),
+      ...(dto.status !== undefined ? { status: dto.status.trim().toUpperCase() } : {}),
+      ...(dto.startsAt !== undefined ? { startsAt: parseOptionalDate(dto.startsAt) } : {}),
+      ...(dto.endsAt !== undefined ? { endsAt: parseOptionalDate(dto.endsAt) } : {}),
+      ...(dto.trialEndsAt !== undefined ? { trialEndsAt: parseOptionalDate(dto.trialEndsAt) } : {}),
+      ...(dto.graceEndsAt !== undefined ? { graceEndsAt: parseOptionalDate(dto.graceEndsAt) } : {}),
+      ...(dto.billingEmail !== undefined ? { billingEmail: normalizeOptional(dto.billingEmail)?.toLowerCase() } : {}),
+      ...(dto.billingContactName !== undefined
+        ? { billingContactName: normalizeOptional(dto.billingContactName) }
+        : {}),
+      ...(dto.notes !== undefined ? { notes: normalizeOptional(dto.notes) } : {}),
+    };
+
+    if (Object.keys(data).length === 0) {
+      throw new BadRequestException('Provide at least one subscription field to update.');
+    }
+
+    if (existing) {
+      await (this.prisma as any).hotelSubscription.update({
+        where: { id: existing.id },
+        data,
+      });
+    } else {
+      await (this.prisma as any).hotelSubscription.create({
+        data: {
+          hotelId,
+          status: 'TRIAL',
+          ...data,
+        },
+      });
+    }
+
+    await this.prisma.auditLog.create({
+      data: {
+        hotelId,
+        actorUserId,
+        action: 'platform.hotel.subscription.update',
+        targetType: 'HOTEL_SUBSCRIPTION',
+        targetId: existing?.id ?? hotelId,
+        metadata: {
+          hotelName: hotel.name,
+          changedFields: Object.keys(data),
+          previousStatus: existing?.status ?? null,
+          previousPlanId: existing?.planId ?? null,
+        },
+      },
+    });
+
+    const effectivePlan = nextPlan ?? (existing?.plan
+      ? {
+          id: existing.plan.id,
+          code: existing.plan.code,
+          name: existing.plan.name,
+        }
+      : null);
+
+    const notifyEmail = normalizeOptional(dto.billingEmail)?.toLowerCase() || existing?.billingEmail || hotel.email;
+    if (notifyEmail) {
+      await this.email.sendEmail({
+        to: notifyEmail,
+        hotelId,
+        event: 'platform.hotel.subscription.updated',
+        subject: `${hotel.name} subscription updated`,
+        text: `Hello,\n\nThe subscription for ${hotel.name} was updated.\n\nPlan: ${effectivePlan?.name ?? 'Unassigned'}\nStatus: ${data.status ?? existing?.status ?? 'UNCHANGED'}\n\nIf you did not expect this change, contact support from your HotelOS workspace.`,
+        html: `
+          <p>Hello,</p>
+          <p>The subscription for <strong>${hotel.name}</strong> was updated.</p>
+          <p><strong>Plan:</strong> ${effectivePlan?.name ?? 'Unassigned'}</p>
+          <p><strong>Status:</strong> ${data.status ?? existing?.status ?? 'UNCHANGED'}</p>
+          <p>If you did not expect this change, contact support from your HotelOS workspace.</p>
+        `,
+      });
+    }
+
+    await this.invalidateDashboardFeatureFlagsForHotel(hotelId);
+
+    return this.getHotelDetail(hotelId);
+  }
+
+  async updateHotelFeatureFlag(
+    actorUserId: string,
+    hotelId: string,
+    flagKey: string,
+    dto: UpdateHotelFeatureFlagDto,
+  ) {
+    const [hotel, flag, existing] = await Promise.all([
+      this.prisma.hotel.findUnique({
+        where: { id: hotelId },
+        select: { id: true, name: true },
+      }),
+      (this.prisma as any).featureFlag.findUnique({
+        where: { key: flagKey },
+        select: { key: true, name: true },
+      }),
+      (this.prisma as any).hotelFeatureOverride.findUnique({
+        where: {
+          hotelId_flagKey: {
+            hotelId,
+            flagKey,
+          },
+        },
+      }),
+    ]);
+
+    if (!hotel) {
+      throw new NotFoundException('Hotel not found.');
+    }
+    if (!flag) {
+      throw new NotFoundException('Feature flag not found.');
+    }
+
+    const mode = dto.mode;
+    if (mode === 'override' && dto.enabled === undefined) {
+      throw new BadRequestException('Provide an enabled value when setting an override.');
+    }
+
+    if (mode === 'inherit') {
+      if (existing) {
+        await (this.prisma as any).hotelFeatureOverride.delete({
+          where: {
+            hotelId_flagKey: {
+              hotelId,
+              flagKey,
+            },
+          },
+        });
+      }
+    } else {
+      await (this.prisma as any).hotelFeatureOverride.upsert({
+        where: {
+          hotelId_flagKey: {
+            hotelId,
+            flagKey,
+          },
+        },
+        update: {
+          enabled: dto.enabled,
+          limitValue: normalizeOptional(dto.limitValue),
+          reason: normalizeOptional(dto.reason),
+        },
+        create: {
+          hotelId,
+          flagKey,
+          enabled: dto.enabled ?? false,
+          limitValue: normalizeOptional(dto.limitValue),
+          reason: normalizeOptional(dto.reason),
+        },
+      });
+    }
+
+    await this.prisma.auditLog.create({
+      data: {
+        hotelId,
+        actorUserId,
+        action: 'platform.hotel.feature_override.update',
+        targetType: 'HOTEL_FEATURE_OVERRIDE',
+        targetId: `${hotelId}:${flagKey}`,
+        metadata: {
+          hotelName: hotel.name,
+          flagKey,
+          flagName: flag.name ?? flagKey,
+          mode,
+          before: existing
+            ? {
+                enabled: existing.enabled,
+                limitValue: existing.limitValue ?? null,
+                reason: existing.reason ?? null,
+              }
+            : null,
+          after:
+            mode === 'inherit'
+              ? null
+              : {
+                  enabled: dto.enabled ?? false,
+                  limitValue: normalizeOptional(dto.limitValue),
+                  reason: normalizeOptional(dto.reason),
+                },
+        },
+      },
+    });
+
+    await this.invalidateDashboardFeatureFlagsForHotel(hotelId);
+
+    return this.getHotelEntitlements(hotelId);
   }
 
   async updateHotel(actorUserId: string, hotelId: string, dto: UpdatePlatformHotelDto) {
@@ -1411,6 +2651,10 @@ export class PlatformService {
           },
         },
       });
+
+      if (changedFields.includes('keycardAuthEnabled')) {
+        await this.invalidateDashboardFeatureFlagsForHotel(hotelId);
+      }
     }
 
     return this.getHotelDetail(hotelId);

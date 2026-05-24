@@ -25,6 +25,12 @@ export class HotelsController {
     return this.hotelsService.getFeatureAccess(req.user.hotelId);
   }
 
+  @Get('me/entitlements')
+  @Permissions('view:settings')
+  getEntitlements(@Request() req: any) {
+    return this.hotelsService.getEntitlements(req.user.hotelId);
+  }
+
   @Patch('me')
   @Permissions('manage:settings')
   updateProfile(@Request() req: any, @Body() dto: UpdateHotelDto) {

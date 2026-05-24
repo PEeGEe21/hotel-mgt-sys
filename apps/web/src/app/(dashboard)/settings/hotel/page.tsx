@@ -24,21 +24,12 @@ import {
   useUpdateHotelProfile,
 } from '@/hooks/hotel/useHotelProfile';
 import { useHotelFeatureAccess } from '@/hooks/hotel/useHotelFeatureAccess';
+import { FeatureGate } from '@/components/hotel/FeatureGate';
 import { useRealtimeSettings, useUpdateRealtimeSettings } from '@/hooks/useRealtimeSettings';
 import { validateImageFile } from '@/utils/image-file';
+import { COUNTRY_OPTIONS, getCountryOption } from '@/lib/country-metadata';
 
 const GeofenceMap = dynamic(() => import('@/components/GeofenceMap'), { ssr: false });
-
-const currencies = ['USD', 'NGN', 'GBP', 'EUR', 'GHS', 'KES', 'ZAR'];
-const timezones = [
-  'Africa/Lagos',
-  'Africa/Accra',
-  'Africa/Nairobi',
-  'Africa/Johannesburg',
-  'Europe/London',
-  'America/New_York',
-  'Asia/Dubai',
-];
 
 type SettingsTab = 'profile' | 'attendance' | 'reservation' | 'operations';
 
@@ -587,7 +578,20 @@ export default function HotelProfilePage() {
   }, [realtimeSettings]);
 
   const schedulerTimezone = form.timezone || 'Africa/Lagos';
-  const keycardGlobalEnabled = featureAccess?.sources.keycard_auth.globalEnabled === true;
+  const selectedCountry = getCountryOption(form.country || 'Nigeria');
+  const availableCurrencies = Array.from(
+    new Set([
+      ...COUNTRY_OPTIONS.map((country) => country.currency),
+      form.currency || selectedCountry.currency,
+    ].filter(Boolean)),
+  );
+  const availableTimezones = Array.from(
+    new Set([
+      ...COUNTRY_OPTIONS.map((country) => country.timezone),
+      form.timezone || selectedCountry.timezone,
+    ].filter(Boolean)),
+  );
+  const keycardGlobalEnabled = featureAccess?.keycardAuth?.globalEnabled === true;
 
   const attendanceHealth = getSchedulerHealth({
     enabled: form.attendanceAbsenceScanEnabled,
@@ -821,6 +825,22 @@ export default function HotelProfilePage() {
 
   const handleLogoClick = () => {
     logoInputRef.current?.click();
+  };
+
+  const handleCountryChange = (countryName: string) => {
+    const nextCountry = getCountryOption(countryName);
+    setForm((current) => ({
+      ...current,
+      country: nextCountry.name,
+      state: nextCountry.states.includes(current.state) ? current.state : nextCountry.states[0] ?? '',
+      currency: current.currency && current.currency !== selectedCountry.currency
+        ? current.currency
+        : nextCountry.currency,
+      timezone: current.timezone && current.timezone !== selectedCountry.timezone
+        ? current.timezone
+        : nextCountry.timezone,
+    }));
+    setSavedSection(null);
   };
 
   const handleLogoChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -1117,8 +1137,6 @@ export default function HotelProfilePage() {
                     { label: 'Website', key: 'website' },
                     { label: 'Address', key: 'address' },
                     { label: 'City', key: 'city' },
-                    { label: 'State', key: 'state' },
-                    { label: 'Country', key: 'country' },
                   ].map(({ label, key }) => (
                     <div key={key} className={key === 'address' ? 'md:col-span-2' : ''}>
                       <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
@@ -1134,6 +1152,41 @@ export default function HotelProfilePage() {
 
                   <div>
                     <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
+                      Country
+                    </label>
+                    <select
+                      value={form.country}
+                      onChange={(e) => handleCountryChange(e.target.value)}
+                      className="w-full rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-2.5 text-sm text-slate-200 outline-none transition-colors focus:border-blue-500"
+                    >
+                      {COUNTRY_OPTIONS.map((country) => (
+                        <option key={country.code} value={country.name}>
+                          {country.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
+                      State
+                    </label>
+                    <select
+                      value={form.state}
+                      onChange={(e) => set('state', e.target.value)}
+                      className="w-full rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-2.5 text-sm text-slate-200 outline-none transition-colors focus:border-blue-500"
+                    >
+                      <option value="">Select state or province</option>
+                      {selectedCountry.states.map((state) => (
+                        <option key={state} value={state}>
+                          {state}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
                       Currency
                     </label>
                     <select
@@ -1141,7 +1194,7 @@ export default function HotelProfilePage() {
                       onChange={(e) => set('currency', e.target.value)}
                       className="w-full rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-2.5 text-sm text-slate-200 outline-none transition-colors focus:border-blue-500"
                     >
-                      {currencies.map((currency) => (
+                      {availableCurrencies.map((currency) => (
                         <option key={currency} value={currency}>
                           {currency}
                         </option>
@@ -1158,7 +1211,7 @@ export default function HotelProfilePage() {
                       onChange={(e) => set('timezone', e.target.value)}
                       className="w-full rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-2.5 text-sm text-slate-200 outline-none transition-colors focus:border-blue-500"
                     >
-                      {timezones.map((timezone) => (
+                      {availableTimezones.map((timezone) => (
                         <option key={timezone} value={timezone}>
                           {timezone}
                         </option>
@@ -1179,7 +1232,11 @@ export default function HotelProfilePage() {
                   </div>
                 </div>
 
-                {keycardGlobalEnabled && (
+                <FeatureGate
+                  flagKey="keycard_auth"
+                  title="Lock Configuration"
+                  description="Set the hotel-wide default vendor and credentials. Room-level lock mappings stay on each room record."
+                >
                   <div className="mt-5 border-t border-[#1e2536] pt-5 space-y-4">
                     <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
                       <div>
@@ -1254,7 +1311,7 @@ export default function HotelProfilePage() {
                       </div>
                     </div>
                   </div>
-                )}
+                </FeatureGate>
               </div>
             </>
           )}

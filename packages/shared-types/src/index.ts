@@ -58,6 +58,104 @@ export type MaintenanceStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'ON_HO
 export type RequisitionStatus = 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED' | 'FULFILLED';
 
 export type InspectionStatus = 'SCHEDULED' | 'PASSED' | 'FAILED' | 'PENDING';
+export type SubscriptionStatus =
+  | 'TRIAL'
+  | 'ACTIVE'
+  | 'GRACE'
+  | 'SUSPENDED'
+  | 'EXPIRED'
+  | 'CANCELLED';
+export type FeatureScopeType = 'MODULE' | 'SUB_FEATURE' | 'LIMIT';
+export type FeatureRolloutStage = 'INTERNAL' | 'BETA' | 'GA' | 'DEPRECATED';
+export type SupportCaseSource = 'HOTEL' | 'PLATFORM' | 'SYSTEM';
+export type SupportCasePriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+export type SupportCaseStatus =
+  | 'OPEN'
+  | 'TRIAGED'
+  | 'IN_PROGRESS'
+  | 'WAITING_ON_HOTEL'
+  | 'RESOLVED'
+  | 'CLOSED';
+export type SupportCommentVisibility = 'INTERNAL' | 'HOTEL_VISIBLE';
+
+export interface HotelEntitlementSnapshot {
+  hotelId: string;
+  plan: {
+    id: string | null;
+    code: string | null;
+    name: string | null;
+  } | null;
+  subscriptionStatus: SubscriptionStatus | 'NONE';
+  features: Record<string, boolean>;
+  limits: Record<string, number | string | null>;
+  warnings: string[];
+}
+
+export interface PlatformSubscriptionPlanSummary {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  priceMonthly: number | null;
+  priceYearly: number | null;
+  billingIntervalOptions: string[];
+  isActive: boolean;
+  isPublic: boolean;
+  sortOrder: number;
+  hotelCount: number;
+  activeHotelCount: number;
+}
+
+export interface PlatformHotelSubscriptionSummary {
+  id: string;
+  hotelId: string;
+  hotelName: string;
+  planId: string | null;
+  planCode: string | null;
+  planName: string | null;
+  status: SubscriptionStatus | 'NONE';
+  startsAt: string | null;
+  endsAt: string | null;
+  trialEndsAt: string | null;
+  graceEndsAt: string | null;
+  billingEmail: string | null;
+  billingContactName: string | null;
+}
+
+export interface PlatformFeatureCatalogItem {
+  key: string;
+  name: string | null;
+  description: string | null;
+  category: string | null;
+  defaultEnabled: boolean;
+  globalEnabled: boolean;
+  scopeType: FeatureScopeType;
+  rolloutStage: FeatureRolloutStage;
+  planRequired: string | null;
+  planAssignments: Array<{
+    planId: string;
+    planCode: string;
+    planName: string;
+    enabled: boolean;
+    limitValue: string | null;
+  }>;
+  overrideCount: number;
+}
+
+export interface PlatformSupportCaseSummary {
+  id: string;
+  hotelId: string;
+  hotelName: string;
+  subject: string;
+  category: string;
+  priority: SupportCasePriority;
+  status: SupportCaseStatus;
+  source: SupportCaseSource;
+  assignedAdminId: string | null;
+  assignedAdminName: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
 
 // ─── Core Interfaces ──────────────────────────────────────────────────────────
 

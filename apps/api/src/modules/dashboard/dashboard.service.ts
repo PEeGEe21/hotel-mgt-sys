@@ -18,6 +18,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { DEFAULT_ROLE_PERMISSIONS } from '../../common/constants/role-permissions';
 import { UpdateDashboardLayoutDto } from './dtos/update-dashboard-layout.dto';
 import { RedisCacheService } from '../../common/redis/redis-cache.service';
+import { EntitlementsService } from '../entitlements/entitlements.service';
 
 type DashboardContext = {
   userId: string;
@@ -49,6 +50,7 @@ export class DashboardService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cache: RedisCacheService,
+    private readonly entitlementsService: EntitlementsService,
   ) {}
 
   async getConfig(userId: string) {
@@ -281,23 +283,8 @@ export class DashboardService {
       this.dashboardFeatureFlagsCacheKey(hotelId),
       DASHBOARD_FEATURE_FLAGS_TTL_SECONDS,
       async () => {
-        const [flags, hotel] = await Promise.all([
-          this.prisma.featureFlag.findMany(),
-          (this.prisma.hotel as any).findUnique({
-            where: { id: hotelId },
-            select: { keycardAuthEnabled: true },
-          }),
-        ]);
-
-        const resolved = flags.reduce<Record<string, boolean>>((acc, flag) => {
-          acc[flag.key] = flag.enabled !== false;
-          return acc;
-        }, {});
-
-        resolved.keycard_auth =
-          resolved.keycard_auth !== false && hotel?.keycardAuthEnabled === true;
-
-        return resolved;
+        const resolved = await this.entitlementsService.resolveHotelEntitlements(hotelId);
+        return resolved.features;
       },
     );
   }

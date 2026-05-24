@@ -10,17 +10,34 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { JwtAuthGuard, Permissions, PermissionsGuard, Roles, RolesGuard } from '../auth/guards';
+import {
+  FeatureFlagsGuard,
+  JwtAuthGuard,
+  Permissions,
+  PermissionsGuard,
+  RequireFeatureFlags,
+  Roles,
+  RolesGuard,
+} from '../auth/guards';
 import { PlatformService } from './platform.service';
 import { CreatePlatformHotelOnboardingDto } from './dtos/create-platform-hotel-onboarding.dto';
 import { CreatePlatformSuperAdminDto } from './dtos/create-platform-super-admin.dto';
 import { UpdatePlatformHotelLifecycleDto } from './dtos/update-platform-hotel-lifecycle.dto';
 import { UpdatePlatformHotelDto } from './dtos/update-platform-hotel.dto';
 import { QueryPlatformAuditLogsDto } from './dtos/query-platform-audit-logs.dto';
+import { QueryPlatformSupportCasesDto } from './dtos/query-platform-support-cases.dto';
+import { CreateSubscriptionPlanDto } from './dtos/create-subscription-plan.dto';
+import { UpdateSubscriptionPlanDto } from './dtos/update-subscription-plan.dto';
+import { UpdateHotelSubscriptionDto } from './dtos/update-hotel-subscription.dto';
+import { UpdatePlanEntitlementsDto } from './dtos/update-plan-entitlements.dto';
+import { UpdateHotelFeatureFlagDto } from './dtos/update-hotel-feature-flag.dto';
+import { CreateSupportCaseDto } from './dtos/create-support-case.dto';
+import { UpdateSupportCaseDto } from './dtos/update-support-case.dto';
+import { CreateSupportCommentDto } from './dtos/create-support-comment.dto';
 
 @ApiTags('Platform')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard, FeatureFlagsGuard)
 @Roles('SUPER_ADMIN')
 @Controller('platform')
 export class PlatformController {
@@ -62,6 +79,13 @@ export class PlatformController {
   @ApiOperation({ summary: 'Get platform-level hotel details' })
   getHotelDetail(@Param('id') id: string) {
     return this.platformService.getHotelDetail(id);
+  }
+
+  @Get('hotels/:id/entitlements')
+  @Permissions('platform:view-hotels')
+  @ApiOperation({ summary: 'Get resolved hotel entitlements for platform review' })
+  getHotelEntitlements(@Param('id') id: string) {
+    return this.platformService.getHotelEntitlements(id);
   }
 
   @Get('users')
@@ -126,6 +150,87 @@ export class PlatformController {
     });
   }
 
+  @Get('subscriptions')
+  @Permissions('platform:view-hotels')
+  @ApiOperation({ summary: 'Get subscription plans and hotel assignment summaries' })
+  getSubscriptions() {
+    return this.platformService.getSubscriptionsOverview();
+  }
+
+  @Post('subscriptions/plans')
+  @Permissions('platform:manage-hotels')
+  @ApiOperation({ summary: 'Create a subscription plan' })
+  createSubscriptionPlan(@Request() req: any, @Body() dto: CreateSubscriptionPlanDto) {
+    return this.platformService.createSubscriptionPlan(req.user.sub, dto);
+  }
+
+  @Patch('subscriptions/plans/:id')
+  @Permissions('platform:manage-hotels')
+  @ApiOperation({ summary: 'Update a subscription plan' })
+  updateSubscriptionPlan(@Request() req: any, @Param('id') id: string, @Body() dto: UpdateSubscriptionPlanDto) {
+    return this.platformService.updateSubscriptionPlan(req.user.sub, id, dto);
+  }
+
+  @Patch('subscriptions/plans/:id/entitlements')
+  @Permissions('platform:manage-hotels')
+  @ApiOperation({ summary: 'Replace the feature entitlement mapping for a subscription plan' })
+  updatePlanEntitlements(@Request() req: any, @Param('id') id: string, @Body() dto: UpdatePlanEntitlementsDto) {
+    return this.platformService.updatePlanEntitlements(req.user.sub, id, dto);
+  }
+
+  @Get('feature-flags')
+  @Permissions('platform:view-hotels')
+  @ApiOperation({ summary: 'Get platform feature catalog with plan and hotel override summaries' })
+  getFeatureFlags() {
+    return this.platformService.getFeatureCatalogOverview();
+  }
+
+  @Get('support')
+  @Permissions('platform:view-hotels')
+  @ApiOperation({ summary: 'Get platform support inbox' })
+  getSupportCases(@Query() filters?: QueryPlatformSupportCasesDto) {
+    return this.platformService.getSupportCases({
+      page: filters?.page,
+      limit: filters?.limit,
+      status: filters?.status,
+      priority: filters?.priority,
+      category: filters?.category,
+      hotelId: filters?.hotelId,
+      search: filters?.search,
+    });
+  }
+
+  @Get('support/:id')
+  @Permissions('platform:view-hotels')
+  @ApiOperation({ summary: 'Get a platform support case with hotel context' })
+  getSupportCaseDetail(@Param('id') id: string) {
+    return this.platformService.getSupportCaseDetail(id);
+  }
+
+  @Post('support')
+  @Permissions('platform:view-hotels')
+  @RequireFeatureFlags('platform_support_ops')
+  @ApiOperation({ summary: 'Create a platform support case' })
+  createSupportCase(@Request() req: any, @Body() dto: CreateSupportCaseDto) {
+    return this.platformService.createSupportCase(req.user.sub, dto);
+  }
+
+  @Patch('support/:id')
+  @Permissions('platform:view-hotels')
+  @RequireFeatureFlags('platform_support_ops')
+  @ApiOperation({ summary: 'Update support case assignment, status, and core fields' })
+  updateSupportCase(@Request() req: any, @Param('id') id: string, @Body() dto: UpdateSupportCaseDto) {
+    return this.platformService.updateSupportCase(req.user.sub, id, dto);
+  }
+
+  @Post('support/:id/comments')
+  @Permissions('platform:view-hotels')
+  @RequireFeatureFlags('platform_support_ops')
+  @ApiOperation({ summary: 'Add a support case comment or internal note' })
+  addSupportCaseComment(@Request() req: any, @Param('id') id: string, @Body() dto: CreateSupportCommentDto) {
+    return this.platformService.addSupportCaseComment(req.user.sub, id, dto);
+  }
+
   @Post('onboarding/hotel')
   @Permissions('platform:manage-hotels')
   @ApiOperation({ summary: 'Create a hotel tenant and provision the initial admin account' })
@@ -138,6 +243,29 @@ export class PlatformController {
   @ApiOperation({ summary: 'Update platform-level hotel profile fields' })
   updateHotel(@Request() req: any, @Param('id') id: string, @Body() dto: UpdatePlatformHotelDto) {
     return this.platformService.updateHotel(req.user.sub, id, dto);
+  }
+
+  @Patch('hotels/:id/subscription')
+  @Permissions('platform:manage-hotels')
+  @ApiOperation({ summary: 'Assign or update a hotel subscription' })
+  updateHotelSubscription(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Body() dto: UpdateHotelSubscriptionDto,
+  ) {
+    return this.platformService.updateHotelSubscription(req.user.sub, id, dto);
+  }
+
+  @Patch('hotels/:id/feature-flags/:flagKey')
+  @Permissions('platform:manage-hotels')
+  @ApiOperation({ summary: 'Set or clear a hotel-level feature override' })
+  updateHotelFeatureFlag(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Param('flagKey') flagKey: string,
+    @Body() dto: UpdateHotelFeatureFlagDto,
+  ) {
+    return this.platformService.updateHotelFeatureFlag(req.user.sub, id, flagKey, dto);
   }
 
   @Post('hotels/:id/suspend')

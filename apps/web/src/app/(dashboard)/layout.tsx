@@ -8,6 +8,7 @@ import { useHydration } from '@/hooks/useHydration';
 import { useAppStore } from '@/store/app.store';
 import { Hotel, ShieldAlert } from 'lucide-react';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useHotelFeatureAccess } from '@/hooks/hotel/useHotelFeatureAccess';
 import { usePathname, useRouter } from 'next/navigation';
 import { stopImpersonationAction } from '@/actions/auth.actions';
 import { useState } from 'react';
@@ -15,6 +16,7 @@ import openToast from '@/components/ToastComponent';
 import { useQueryClient } from '@tanstack/react-query';
 import { usePosOrdersRealtime } from '@/hooks/pos/usePosOrdersRealtime';
 import { useDashboardPosRealtime } from '@/hooks/dashboard/useDashboardPosRealtime';
+import { isFeatureEnabledForPath, resolveFeatureForPath } from '@/lib/feature-access';
 
 function AuthOverlay({ label }: { label: string }) {
   const hotel = useAppStore((s) => s.hotel);
@@ -48,6 +50,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter();
   const queryClient = useQueryClient();
   const { canPath, ready } = usePermissions();
+  const { data: featureAccess } = useHotelFeatureAccess();
   usePosOrdersRealtime();
   useDashboardPosRealtime();
 
@@ -93,6 +96,41 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             >
               Go to Dashboard
             </button>
+          </div>
+        </div>
+      </AuthProvider>
+    );
+  }
+
+  const blockedFeatureKey = resolveFeatureForPath(pathname);
+  if (ready && !isFeatureEnabledForPath(featureAccess?.flags, pathname)) {
+    return (
+      <AuthProvider>
+        <div className="flex h-screen bg-[#0f1117] items-center justify-center">
+          <div className="text-center max-w-md px-6">
+            <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mx-auto mb-4">
+              <ShieldAlert size={24} className="text-amber-300" />
+            </div>
+            <h1 className="text-white font-semibold text-xl">Feature unavailable</h1>
+            <p className="text-slate-500 text-sm mt-2">
+              {blockedFeatureKey
+                ? `This module is currently unavailable for your hotel because ${blockedFeatureKey.replaceAll('_', ' ')} is not enabled.`
+                : 'This module is currently unavailable for your hotel.'}
+            </p>
+            <div className="mt-5 flex items-center justify-center gap-3">
+              <button
+                onClick={() => router.push('/dashboard')}
+                className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold"
+              >
+                Go to Dashboard
+              </button>
+              <button
+                onClick={() => router.push('/settings/support')}
+                className="px-4 py-2 rounded-lg border border-[#1e2536] bg-[#161b27] text-slate-200 text-sm font-semibold"
+              >
+                Contact Support
+              </button>
+            </div>
           </div>
         </div>
       </AuthProvider>

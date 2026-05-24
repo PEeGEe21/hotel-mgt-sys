@@ -775,6 +775,29 @@ export class AttendanceService {
     };
   }
 
+  private async autoCloseStaleSession(staffId: string, hotelId: string) {
+    const todayStart = dayjs().startOf('day');
+    const lastRecord = await this.prisma.attendance.findFirst({
+      where: { staffId },
+      orderBy: { timestamp: 'desc' },
+    });
+
+    if (!lastRecord) return null;
+    if (lastRecord.type !== AttendanceType.CLOCK_IN) return null;
+    if (!dayjs(lastRecord.timestamp).isBefore(todayStart)) return null;
+
+    return this.prisma.attendance.create({
+      data: {
+        staffId,
+        hotelId,
+        type: AttendanceType.CLOCK_OUT,
+        timestamp: todayStart.toDate(),
+        method: 'AUTO_CLOCK_OUT',
+        note: `Automatically clocked out at start of day after a previous-day open attendance session from ${dayjs(lastRecord.timestamp).format('YYYY-MM-DD HH:mm')}.`,
+      },
+    });
+  }
+
   async kioskStatus(employeeCode: string) {
     const staff = await this.prisma.staff.findFirst({
       where: { employeeCode: { equals: employeeCode.trim(), mode: 'insensitive' } },
@@ -808,6 +831,7 @@ export class AttendanceService {
 
     await this.requirePin(staff, staff.hotel, dto.pin);
     this.ensureGeofence(staff.hotel, dto.latitude, dto.longitude);
+    await this.autoCloseStaleSession(staff.id, staff.hotelId);
 
     const today = dayjs().startOf('day').toDate();
     const lastRecord = await this.prisma.attendance.findFirst({
@@ -909,6 +933,7 @@ export class AttendanceService {
 
   async clockIn(staffId: string, actorUserId?: string, method = 'PIN', note?: string) {
     const hotelId = await this.getStaffHotelId(staffId);
+    await this.autoCloseStaleSession(staffId, hotelId);
     const today = dayjs().startOf('day').toDate();
     const lastRecord = await this.prisma.attendance.findFirst({
       where: { staffId, timestamp: { gte: today } },

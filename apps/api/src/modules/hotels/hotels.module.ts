@@ -4,9 +4,10 @@ import { HotelsService } from './services/hotels.service';
 import { ReservationsModule } from '../reservations/reservations.module';
 import { AttendanceModule } from '../attendance/attendance.module';
 import { FacilitiesModule } from '../facilities/facilities.module';
+import { EntitlementsModule } from '../entitlements/entitlements.module';
 
 @Module({
-  imports: [ReservationsModule, AttendanceModule, FacilitiesModule],
+  imports: [ReservationsModule, AttendanceModule, FacilitiesModule, EntitlementsModule],
   controllers: [HotelsController],
   providers: [HotelsService],
 })

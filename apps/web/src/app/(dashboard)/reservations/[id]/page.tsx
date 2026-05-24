@@ -48,6 +48,7 @@ import {
 } from '@/hooks/useKeycards';
 import { useReservationFolioItems } from '@/hooks/useFolioItems';
 import { useHotelFeatureAccess } from '@/hooks/hotel/useHotelFeatureAccess';
+import { FeatureGate } from '@/components/hotel/FeatureGate';
 import TableScroll from '@/components/ui/table-scroll';
 import {
   loadReservationReceiptIntoWindow,
@@ -1036,7 +1037,11 @@ export default function ReservationDetailPage() {
               )}
             </div>
 
-            {keycardEnabled && (
+            <FeatureGate
+              flagKey="keycard_auth"
+              title="Keycards"
+              description={`Room ${res.room?.number} access for this stay.`}
+            >
               <div className="bg-[#161b27] border border-[#1e2536] rounded-xl p-5">
                 <div className="flex items-start justify-between gap-3 mb-4">
                   <div>
@@ -1139,7 +1144,7 @@ export default function ReservationDetailPage() {
                   </div>
                 )}
               </div>
-            )}
+            </FeatureGate>
 
             {/* Quick actions */}
             <div className="bg-[#161b27] border border-[#1e2536] rounded-xl p-5">

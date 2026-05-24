@@ -241,6 +241,66 @@ const DASHBOARD_FEATURE_FLAGS = [
     planRequired: null,
     description: 'Reserved for future advanced report widgets. Non-blocking pre-SaaS.',
   },
+  {
+    key: 'module_inventory',
+    enabled: true,
+    planRequired: null,
+    description: 'Controls tenant access to the inventory module and related navigation.',
+  },
+  {
+    key: 'module_housekeeping',
+    enabled: true,
+    planRequired: null,
+    description: 'Controls tenant access to the housekeeping module and task workflows.',
+  },
+  {
+    key: 'module_facilities',
+    enabled: true,
+    planRequired: null,
+    description: 'Controls tenant access to facilities, complaints, maintenance, and related menus.',
+  },
+  {
+    key: 'module_mailing',
+    enabled: true,
+    planRequired: null,
+    description: 'Controls tenant access to mailing history and delivery diagnostics.',
+  },
+  {
+    key: 'platform_support_ops',
+    enabled: true,
+    planRequired: null,
+    description: 'Global control for platform support mutation workflows and internal support operations.',
+  },
+] as const;
+
+const SUBSCRIPTION_PLANS = [
+  {
+    code: 'STARTER',
+    name: 'Starter',
+    description: 'Baseline access for smaller hotel operations.',
+    priceMonthly: new Prisma.Decimal(0),
+    priceYearly: new Prisma.Decimal(0),
+    billingIntervalOptions: ['MONTHLY', 'YEARLY'],
+    sortOrder: 0,
+  },
+  {
+    code: 'GROWTH',
+    name: 'Growth',
+    description: 'Recommended default plan for actively operating hotels.',
+    priceMonthly: new Prisma.Decimal(25000),
+    priceYearly: new Prisma.Decimal(250000),
+    billingIntervalOptions: ['MONTHLY', 'YEARLY'],
+    sortOrder: 1,
+  },
+  {
+    code: 'ENTERPRISE',
+    name: 'Enterprise',
+    description: 'Expanded commercial plan for larger multi-team properties.',
+    priceMonthly: new Prisma.Decimal(75000),
+    priceYearly: new Prisma.Decimal(750000),
+    billingIntervalOptions: ['MONTHLY', 'YEARLY'],
+    sortOrder: 2,
+  },
 ] as const;
 
 type SeedLogger = Pick<Console, 'log'>;
@@ -1045,6 +1105,199 @@ export async function runSeedData(prisma: PrismaClient, logger: SeedLogger = con
     });
   }
   console.log(`✅ ${DASHBOARD_FEATURE_FLAGS.length} dashboard feature flags seeded`);
+
+  const seededPlans: Record<string, { id: string; code: string }> = {};
+  for (const plan of SUBSCRIPTION_PLANS) {
+    const row = await (prisma as any).subscriptionPlan.upsert({
+      where: { code: plan.code },
+      update: {
+        name: plan.name,
+        description: plan.description,
+        priceMonthly: plan.priceMonthly,
+        priceYearly: plan.priceYearly,
+        billingIntervalOptions: [...plan.billingIntervalOptions],
+        isActive: true,
+        isPublic: false,
+        sortOrder: plan.sortOrder,
+      },
+      create: {
+        code: plan.code,
+        name: plan.name,
+        description: plan.description,
+        priceMonthly: plan.priceMonthly,
+        priceYearly: plan.priceYearly,
+        billingIntervalOptions: [...plan.billingIntervalOptions],
+        isActive: true,
+        isPublic: false,
+        sortOrder: plan.sortOrder,
+      },
+      select: { id: true, code: true },
+    });
+    seededPlans[plan.code] = row;
+  }
+  console.log(`✅ ${SUBSCRIPTION_PLANS.length} subscription plans seeded`);
+
+  const allHotels = await prisma.hotel.findMany({
+    select: { id: true, name: true, createdAt: true },
+    orderBy: [{ createdAt: 'asc' }],
+  });
+
+  for (const [index, currentHotel] of allHotels.entries()) {
+    const existingSubscription = await (prisma as any).hotelSubscription.findFirst({
+      where: { hotelId: currentHotel.id },
+      orderBy: [{ updatedAt: 'desc' }],
+      select: { id: true },
+    });
+    if (existingSubscription) continue;
+
+    const planId =
+      index === 0
+        ? seededPlans.GROWTH.id
+        : index % 3 === 1
+          ? seededPlans.STARTER.id
+          : seededPlans.ENTERPRISE.id;
+
+    await (prisma as any).hotelSubscription.create({
+      data: {
+        hotelId: currentHotel.id,
+        planId,
+        status: currentHotel.id === hotel.id ? 'ACTIVE' : 'TRIAL',
+        startsAt: new Date(),
+        trialEndsAt: currentHotel.id === hotel.id ? null : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+        billingEmail: `billing@${(currentHotel.name || 'hotel').toLowerCase().replace(/[^a-z0-9]+/g, '')}.local`,
+        billingContactName: `${currentHotel.name} Billing`,
+        notes: 'Seeded commercial subscription baseline for platform support and entitlement workflows.',
+      },
+    });
+  }
+  console.log(`✅ Subscription assignments backfilled for current hotels`);
+
+  const platformSupportAdmin =
+    (await prisma.user.findFirst({
+      where: { role: Role.SUPER_ADMIN, isActive: true },
+      select: { id: true, email: true },
+      orderBy: { createdAt: 'asc' },
+    })) ??
+    null;
+
+  for (const [index, currentHotel] of allHotels.entries()) {
+    const existingCases = await (prisma as any).supportCase.count({
+      where: { hotelId: currentHotel.id },
+    });
+    if (existingCases > 0) continue;
+
+    const hotelOperator = await prisma.user.findFirst({
+      where: {
+        staff: {
+          hotelId: currentHotel.id,
+        },
+      },
+      select: { id: true, email: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const subscription = await (prisma as any).hotelSubscription.findFirst({
+      where: { hotelId: currentHotel.id },
+      orderBy: [{ updatedAt: 'desc' }],
+      include: { plan: true },
+    });
+
+    const starterCases = [
+      {
+        source: 'HOTEL',
+        category: 'BILLING',
+        priority: 'MEDIUM',
+        status: 'OPEN',
+        subject: `${currentHotel.name}: billing contact verification`,
+        description:
+          'Seeded support case to verify billing contact ownership, plan assignment, and trial/grace posture for this hotel.',
+        assignedAdminId: platformSupportAdmin?.id ?? null,
+        comment:
+          'Initial triage note: confirm the billing contact, active plan, and whether the hotel needs follow-up on subscription posture.',
+      },
+      {
+        source: 'SYSTEM',
+        category: index % 2 === 0 ? 'KEYCARDS' : 'ONBOARDING',
+        priority: index % 2 === 0 ? 'HIGH' : 'LOW',
+        status: index % 2 === 0 ? 'WAITING_ON_HOTEL' : 'RESOLVED',
+        subject:
+          index % 2 === 0
+            ? `${currentHotel.name}: rollout follow-up`
+            : `${currentHotel.name}: onboarding review completed`,
+        description:
+          index % 2 === 0
+            ? 'Seeded support case representing a pending rollout/configuration follow-up that still needs hotel feedback.'
+            : 'Seeded support case representing a completed onboarding/support review for historical queue context.',
+        assignedAdminId: platformSupportAdmin?.id ?? null,
+        comment:
+          index % 2 === 0
+            ? 'Internal note: waiting on the hotel to confirm rollout/configuration details before closing.'
+            : 'Internal note: onboarding review completed and no further action is currently required.',
+      },
+    ] as const;
+
+    for (const starterCase of starterCases) {
+      const created = await (prisma as any).supportCase.create({
+        data: {
+          hotelId: currentHotel.id,
+          createdByUserId: hotelOperator?.id ?? platformSupportAdmin?.id ?? null,
+          source: starterCase.source,
+          category: starterCase.category,
+          priority: starterCase.priority,
+          status: starterCase.status,
+          subject: starterCase.subject,
+          description: starterCase.description,
+          assignedAdminId: starterCase.assignedAdminId,
+          subscriptionSnapshot: subscription
+            ? {
+                status: subscription.status,
+                planId: subscription.planId ?? null,
+                planCode: subscription.plan?.code ?? null,
+                planName: subscription.plan?.name ?? null,
+              }
+            : null,
+          entitlementSnapshot: null,
+        },
+      });
+
+      await (prisma as any).supportCaseEvent.create({
+        data: {
+          caseId: created.id,
+          actorUserId: hotelOperator?.id ?? platformSupportAdmin?.id ?? null,
+          type: 'CASE_CREATED',
+          payload: {
+            seeded: true,
+            status: starterCase.status,
+            priority: starterCase.priority,
+          } as Prisma.InputJsonValue,
+        },
+      });
+
+      if (starterCase.assignedAdminId) {
+        await (prisma as any).supportCaseEvent.create({
+          data: {
+            caseId: created.id,
+            actorUserId: platformSupportAdmin?.id ?? null,
+            type: 'ASSIGNED',
+            payload: {
+              seeded: true,
+              assignedAdminId: starterCase.assignedAdminId,
+            } as Prisma.InputJsonValue,
+          },
+        });
+      }
+
+      await (prisma as any).supportCaseComment.create({
+        data: {
+          caseId: created.id,
+          authorUserId: platformSupportAdmin?.id ?? hotelOperator?.id ?? null,
+          visibility: 'INTERNAL',
+          body: starterCase.comment,
+        },
+      });
+    }
+  }
+  console.log(`✅ Support case seed data backfilled for current hotels`);
 
   await prisma.roleDashboardConfig.deleteMany({
     where: { hotelId: hotel.id },

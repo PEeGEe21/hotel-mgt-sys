@@ -34,7 +34,8 @@ export async function setAdminAuthCookies(
     secure: IS_PROD,
     sameSite: 'lax',
     path: '/',
-    maxAge: 60 * 15,
+    // maxAge: 60 * 15, // 15 mins
+    maxAge: 60 * 60 * 24 * 7, // 7 days
   });
 
   cookieStore.set({

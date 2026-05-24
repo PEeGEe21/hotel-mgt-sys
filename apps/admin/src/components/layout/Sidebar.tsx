@@ -3,13 +3,16 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
-import { LayoutDashboard, Building2, Users, Shield, ScrollText, X } from 'lucide-react';
+import { LayoutDashboard, Building2, Users, Shield, ScrollText, LifeBuoy, SlidersHorizontal, CreditCard, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const nav = [
   { label: 'Dashboard', href: '/', icon: LayoutDashboard },
   { label: 'Hotels', href: '/hotels', icon: Building2 },
   { label: 'Users', href: '/users', icon: Users },
+  { label: 'Subscriptions', href: '/subscriptions', icon: CreditCard },
+  { label: 'Feature Controls', href: '/feature-controls', icon: SlidersHorizontal },
+  { label: 'Support', href: '/support', icon: LifeBuoy },
   { label: 'Super Admins', href: '/admins', icon: Shield },
   { label: 'Audit Logs', href: '/audit-logs', icon: ScrollText },
 ];

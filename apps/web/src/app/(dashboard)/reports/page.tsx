@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { FeatureGate } from '@/components/hotel/FeatureGate';
 import { Tabs } from '@/components/ui/tabs';
 import {
   useCogsReport,
@@ -52,7 +53,13 @@ export default function ReportsPage() {
   const revenueTotal = revenueReport.data?.summary.invoiceTotal ?? overview?.summary.revenueTotal ?? 0;
 
   return (
-    <ReportsExportProvider range={reportRange}>
+    <FeatureGate
+      flagKey="advanced_reports"
+      permission="view:reports"
+      title="Reports"
+      description="Revenue, occupancy, inventory, guest, and staff reporting for the hotel."
+    >
+      <ReportsExportProvider range={reportRange}>
       <Tabs
         value={activeTab}
         onValueChange={(value) => setActiveTab(value as Tab)}
@@ -152,6 +159,7 @@ export default function ReportsPage() {
         inventoryAlertRows={inventory?.inventoryAlertRows ?? []}
       />
       </Tabs>
-    </ReportsExportProvider>
+      </ReportsExportProvider>
+    </FeatureGate>
   );
 }

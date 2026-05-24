@@ -220,6 +220,10 @@ Suggested support block:
 
 ## Phase 0: Tenant Entitlement Foundation
 
+Status:
+
+- DONE
+
 Goal:
 
 - make `apps/web` aware of resolved subscription and feature state
@@ -237,6 +241,10 @@ Needed in app:
 - settings summary cards
 
 ## Phase 1: Read-Only Tenant Visibility
+
+Status:
+
+- DONE
 
 Goal:
 
@@ -264,6 +272,10 @@ Needed in current app:
 
 ## Phase 2: Feature Gating UX
 
+Status:
+
+- DONE
+
 Goal:
 
 - make locked or unavailable features understandable at the point of use
@@ -286,6 +298,10 @@ Recommended rule:
 - direct-route access should still show a server-backed denial state
 
 ## Phase 3: Tenant Support Request Flow
+
+Status:
+
+- DONE
 
 Goal:
 
@@ -312,6 +328,10 @@ Build in `apps/api`:
 
 ## Phase 4: Hotel Admin Billing / Plan Contact Flow
 
+Status:
+
+- DONE
+
 Goal:
 
 - give hotel admins a controlled escalation/commercial path without exposing platform controls
@@ -332,6 +352,10 @@ It should not:
 
 ## Phase 5: Contextual Limits And Usage Messaging
 
+Status:
+
+- IN PROGRESS
+
 Goal:
 
 - move beyond binary on/off flags into user-friendly plan awareness
@@ -344,6 +368,37 @@ Examples:
 - mailing or realtime diagnostics availability
 
 This phase should only begin after the backend supports real limit values in entitlement resolution.
+
+## Phase 6: Dynamic Commercial Requests, Full Module Gating, And Subscription Notifications
+
+Status:
+
+- IN PROGRESS
+
+Goal:
+
+- remove hardcoded tenant plan options
+- block full modules and submenu trees by resolved feature access
+- notify hotels when subscription state changes from platform/admin operations
+
+Build:
+
+- backend-provided requestable plans in tenant entitlements
+- centralized module feature map for `inventory`, `housekeeping`, `facilities`, `mailing`, and future full-module flags
+- sidebar and direct-route gating using resolved feature access
+- hotel notification on subscription updates such as plan upgrades or status changes
+
+This phase should:
+
+- keep plan selection source-of-truth on the backend/platform side
+- hide blocked modules from navigation
+- deny direct route access with a tenant-friendly support path
+- reflect subscription changes back to the hotel without requiring manual follow-up
+
+This phase should not:
+
+- let tenant users directly mutate plan assignments
+- rely on hardcoded tenant plan catalogs once backend requestable plans exist
 
 ## Recommended Route Additions In `apps/web`
 

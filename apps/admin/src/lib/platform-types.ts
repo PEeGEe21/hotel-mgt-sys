@@ -238,6 +238,20 @@ export type PlatformHotelDetailResponse = {
     overdueInvoices: number;
     signals: string[];
   };
+  subscription: {
+    id: string;
+    planId: string | null;
+    planCode: string | null;
+    planName: string | null;
+    status: 'TRIAL' | 'ACTIVE' | 'GRACE' | 'SUSPENDED' | 'EXPIRED' | 'CANCELLED';
+    startsAt: string | null;
+    endsAt: string | null;
+    trialEndsAt: string | null;
+    graceEndsAt: string | null;
+    billingEmail: string | null;
+    billingContactName: string | null;
+    notes: string | null;
+  } | null;
   keycards: {
     enabled: boolean;
     hotelLockVendor: string | null;
@@ -358,4 +372,238 @@ export type PlatformAuditLogsResponse = {
   page: number;
   limit: number;
   totalPages: number;
+};
+
+export type PlatformSubscriptionsOverviewResponse = {
+  plans: Array<{
+    id: string;
+    code: string;
+    name: string;
+    description: string | null;
+    priceMonthly: number | null;
+    priceYearly: number | null;
+    billingIntervalOptions: string[];
+    isActive: boolean;
+    isPublic: boolean;
+    sortOrder: number;
+    hotelCount: number;
+    activeHotelCount: number;
+  }>;
+  assignments: Array<{
+    id: string;
+    hotelId: string;
+    hotelName: string;
+    planId: string | null;
+    planCode: string | null;
+    planName: string | null;
+    status: 'TRIAL' | 'ACTIVE' | 'GRACE' | 'SUSPENDED' | 'EXPIRED' | 'CANCELLED' | 'NONE';
+    startsAt: string | null;
+    endsAt: string | null;
+    trialEndsAt: string | null;
+    graceEndsAt: string | null;
+    billingEmail: string | null;
+    billingContactName: string | null;
+  }>;
+  statusCounts: Record<string, number>;
+};
+
+export type PlatformFeatureCatalogOverviewResponse = {
+  features: Array<{
+    key: string;
+    name: string | null;
+    description: string | null;
+    category: string | null;
+    defaultEnabled: boolean;
+    globalEnabled: boolean;
+    scopeType: 'MODULE' | 'SUB_FEATURE' | 'LIMIT';
+    rolloutStage: 'INTERNAL' | 'BETA' | 'GA' | 'DEPRECATED';
+    planRequired: string | null;
+    planAssignments: Array<{
+      planId: string;
+      planCode: string;
+      planName: string;
+      enabled: boolean;
+      limitValue: string | null;
+    }>;
+    overrideCount: number;
+  }>;
+  plans: Array<{
+    id: string;
+    code: string;
+    name: string;
+  }>;
+  recentChanges: Array<{
+    id: string;
+    action: string;
+    createdAt: string;
+    hotel: {
+      id: string;
+      name: string;
+    } | null;
+    actorName: string;
+    summary: string;
+    metadata: unknown;
+  }>;
+  totals: {
+    features: number;
+    hotelOverrides: number;
+  };
+};
+
+export type PlatformSupportCasesResponse = {
+  cases: Array<{
+    id: string;
+    hotelId: string;
+    hotelName: string;
+    subject: string;
+    category: string;
+    requestType: 'PLAN_UPGRADE' | 'BILLING_CONTACT_CHANGE' | 'FEATURE_ACTIVATION' | null;
+    priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+    status: 'OPEN' | 'TRIAGED' | 'IN_PROGRESS' | 'WAITING_ON_HOTEL' | 'RESOLVED' | 'CLOSED';
+    source: 'HOTEL' | 'PLATFORM' | 'SYSTEM';
+    assignedAdminId: string | null;
+    assignedAdminName: string | null;
+    createdAt: string;
+    updatedAt: string;
+  }>;
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+  statusCounts: Record<string, number>;
+};
+
+export type PlatformSupportCaseDetailResponse = {
+  id: string;
+  hotelId: string;
+  hotel: {
+    id: string;
+    name: string;
+    city: string;
+    country: string;
+  };
+  subject: string;
+  description: string;
+  category: string;
+  requestType: 'PLAN_UPGRADE' | 'BILLING_CONTACT_CHANGE' | 'FEATURE_ACTIVATION' | null;
+  requestPayload: Record<string, unknown> | null;
+  priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+  status: 'OPEN' | 'TRIAGED' | 'IN_PROGRESS' | 'WAITING_ON_HOTEL' | 'RESOLVED' | 'CLOSED';
+  source: 'HOTEL' | 'PLATFORM' | 'SYSTEM';
+  assignedAdmin: {
+    id: string;
+    name: string;
+    email: string;
+  } | null;
+  createdBy: {
+    id: string;
+    name: string;
+    email: string;
+  } | null;
+  createdAt: string;
+  updatedAt: string;
+  subscriptionSnapshot: unknown;
+  entitlementSnapshot: unknown;
+  liveEntitlements: {
+    hotelId: string;
+    plan: {
+      id: string | null;
+      code: string | null;
+      name: string | null;
+    } | null;
+    subscriptionStatus: string;
+    features: Record<string, boolean>;
+    limits: Record<string, string | number | null>;
+    warnings: string[];
+    items: Array<{
+      key: string;
+      name: string | null;
+      description: string | null;
+      category: string | null;
+      scopeType: 'MODULE' | 'SUB_FEATURE' | 'LIMIT';
+      rolloutStage: 'INTERNAL' | 'BETA' | 'GA' | 'DEPRECATED';
+      planRequired: string | null;
+      globalEnabled: boolean;
+      defaultEnabled: boolean;
+      planEnabled: boolean | null;
+      planLimitValue: string | null;
+      overrideEnabled: boolean | null;
+      overrideLimitValue: string | null;
+      overrideReason: string | null;
+      hotelRolloutEnabled: boolean | null;
+      effectiveEnabled: boolean;
+      effectiveLimitValue: string | null;
+    }>;
+  };
+  hotelHealth: PlatformHotelDetailResponse['health'];
+  hotelLifecycle: {
+    onboardingStatus: PlatformHotelDetailResponse['onboardingStatus'];
+    suspendedAt: string | null;
+    suspensionReason: string | null;
+    deletedAt: string | null;
+    purgeAfterAt: string | null;
+  };
+  hotelSubscription: PlatformHotelDetailResponse['subscription'];
+  keycards: PlatformHotelDetailResponse['keycards'];
+  events: Array<{
+    id: string;
+    type: string;
+    payload: unknown;
+    createdAt: string;
+    actor: {
+      id: string;
+      name: string;
+      email: string;
+    } | null;
+  }>;
+  comments: Array<{
+    id: string;
+    visibility: 'INTERNAL' | 'HOTEL_VISIBLE';
+    body: string;
+    createdAt: string;
+    author: {
+      id: string;
+      name: string;
+      email: string;
+    } | null;
+  }>;
+};
+
+export type PlatformHotelEntitlementsResponse = {
+  hotelId: string;
+  plan: {
+    id: string | null;
+    code: string | null;
+    name: string | null;
+  } | null;
+  subscriptionStatus: string;
+  features: Record<string, boolean>;
+  limits: Record<string, string | number | null>;
+  warnings: string[];
+  items: Array<{
+    key: string;
+    name: string | null;
+    description: string | null;
+    category: string | null;
+    scopeType: 'MODULE' | 'SUB_FEATURE' | 'LIMIT';
+    rolloutStage: 'INTERNAL' | 'BETA' | 'GA' | 'DEPRECATED';
+    planRequired: string | null;
+    globalEnabled: boolean;
+    defaultEnabled: boolean;
+    planEnabled: boolean | null;
+    planLimitValue: string | null;
+    overrideEnabled: boolean | null;
+    overrideLimitValue: string | null;
+    overrideReason: string | null;
+    hotelRolloutEnabled: boolean | null;
+    effectiveEnabled: boolean;
+    effectiveLimitValue: string | null;
+  }>;
+  recentChanges: Array<{
+    id: string;
+    action: string;
+    createdAt: string;
+    actorName: string;
+    metadata: unknown;
+  }>;
 };

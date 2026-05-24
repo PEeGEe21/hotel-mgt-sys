@@ -365,7 +365,7 @@ export default function ComplaintDrawer({
                   <div>
                     <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
                       Estimated Cost (₦)
-                    </label>p-5
+                    </label>
                     <input
                       type="number"
                       min="0"

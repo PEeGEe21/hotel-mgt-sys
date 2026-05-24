@@ -10,7 +10,13 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { JwtAuthGuard, Permissions, PermissionsGuard } from 'src/modules/auth/guards';
+import {
+  FeatureFlagsGuard,
+  JwtAuthGuard,
+  Permissions,
+  PermissionsGuard,
+  RequireFeatureFlags,
+} from 'src/modules/auth/guards';
 import { KeycardsService } from '../services/keycards.service';
 import { IssueKeycardDto } from '../dtos/issue-keycard.dto';
 import { RevokeKeycardDto } from '../dtos/revoke-keycard.dto';
@@ -18,7 +24,8 @@ import { IngestKeycardAccessEventDto } from '../dtos/ingest-keycard-access-event
 
 @ApiTags('Keycards')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, PermissionsGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard, FeatureFlagsGuard)
+@RequireFeatureFlags('keycard_auth')
 @Controller('keycards')
 export class KeycardsController {
   constructor(private readonly svc: KeycardsService) {}

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft,
@@ -24,12 +25,17 @@ import {
   Users,
   Shield,
   ChevronRight,
+  Check,
+  X,
 } from 'lucide-react';
 import { useGuest, useToggleVip } from '@/hooks/useGuests';
 import { useReservationFolioItems, type FolioItem } from '@/hooks/useFolioItems';
+import { useAddFolioItem, useCheckOut } from '@/hooks/useReservations';
 import openToast from '@/components/ToastComponent';
 import EditGuestModal from '../_components/EditGuestModal';
 import DeleteConfirm from '../_components/DeleteConfirm';
+import NewReservationModal from '../../reservations/_components/NewReservationModal';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Reservation = {
@@ -85,6 +91,192 @@ const FOLIO_TYPE_STYLE: Record<string, string> = {
   MISC: 'bg-amber-500/15 text-amber-400',
 };
 
+const FOLIO_CATEGORIES = ['ROOM', 'FOOD', 'LAUNDRY', 'SPA', 'MISC'];
+
+function AddFolioChargeModal({
+  reservationId,
+  onClose,
+}: {
+  reservationId: string;
+  onClose: () => void;
+}) {
+  const addItem = useAddFolioItem(reservationId);
+  const [form, setForm] = useState({
+    description: '',
+    amount: '',
+    category: 'MISC',
+    quantity: 1,
+  });
+  const [error, setError] = useState('');
+
+  const inputCls =
+    'w-full bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 outline-none focus:border-blue-500 transition-colors';
+
+  const handleSave = async () => {
+    if (!form.description.trim()) return setError('Description is required.');
+    if (!form.amount || Number(form.amount) <= 0) return setError('Amount is required.');
+    setError('');
+    try {
+      await addItem.mutateAsync({
+        description: form.description.trim(),
+        amount: Number(form.amount),
+        category: form.category,
+        quantity: form.quantity,
+      });
+      onClose();
+    } catch (e: any) {
+      setError(e?.response?.data?.message ?? 'Failed to add charge.');
+    }
+  };
+
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-sm overflow-hidden rounded-2xl border border-[#1e2536] bg-[#161b27] shadow-2xl">
+        <div className="flex items-center justify-between border-b border-[#1e2536] px-5 pb-4 pt-5">
+          <h2 className="text-base font-bold text-white">Add Folio Charge</h2>
+          <button onClick={onClose} className="text-slate-500 hover:text-slate-300">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="space-y-4 px-5 py-4">
+          <div>
+            <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
+              Description
+            </label>
+            <input
+              value={form.description}
+              onChange={(e) => setForm((current) => ({ ...current, description: e.target.value }))}
+              placeholder="e.g. Room service charge"
+              className={inputCls}
+              autoFocus
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
+                Amount (NGN)
+              </label>
+              <input
+                type="number"
+                min={0}
+                value={form.amount}
+                onChange={(e) => setForm((current) => ({ ...current, amount: e.target.value }))}
+                placeholder="5000"
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
+                Qty
+              </label>
+              <input
+                type="number"
+                min={1}
+                value={form.quantity}
+                onChange={(e) =>
+                  setForm((current) => ({
+                    ...current,
+                    quantity: Math.max(1, Number(e.target.value) || 1),
+                  }))
+                }
+                className={inputCls}
+              />
+            </div>
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
+              Category
+            </label>
+            <select
+              value={form.category}
+              onChange={(e) => setForm((current) => ({ ...current, category: e.target.value }))}
+              className={inputCls}
+            >
+              {FOLIO_CATEGORIES.map((category) => (
+                <option key={category} value={category}>
+                  {category}
+                </option>
+              ))}
+            </select>
+          </div>
+          {error ? (
+            <p className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-400">
+              {error}
+            </p>
+          ) : null}
+        </div>
+        <div className="flex gap-3 px-5 pb-5">
+          <button
+            onClick={onClose}
+            className="flex-1 rounded-lg border border-[#1e2536] px-4 py-2.5 text-sm text-slate-400 transition-colors hover:text-white"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={addItem.isPending}
+            className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:opacity-50"
+          >
+            {addItem.isPending ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+            Add Charge
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+function ConfirmCheckOutModal({
+  guestName,
+  isPending,
+  onClose,
+  onConfirm,
+}: {
+  guestName: string;
+  isPending: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        showCloseButton={false}
+        className="bg-[#161b27] border border-[#1e2536] rounded-2xl w-full max-w-md shadow-2xl overflow-hidden p-0"
+      >
+        <DialogHeader className="flex flex-row items-center justify-between border-b border-[#1e2536] px-5 pb-4 pt-5">
+          <DialogTitle className="text-base font-bold text-white">Check Out Guest</DialogTitle>
+          <button onClick={onClose} className="text-slate-500 hover:text-slate-300">
+            <X size={18} />
+          </button>
+        </DialogHeader>
+        <div className="px-5 py-4">
+          <p className="text-sm leading-6 text-slate-400">
+            This will check out {guestName} from the active reservation and close the current stay.
+          </p>
+        </div>
+        <div className="flex gap-3 px-5 pb-5">
+          <button
+            onClick={onClose}
+            className="flex-1 rounded-lg border border-[#1e2536] px-4 py-2.5 text-sm text-slate-400 transition-colors hover:text-white"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={isPending}
+            className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-amber-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-amber-500 disabled:opacity-50"
+          >
+            {isPending ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+            Check Out
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function GuestDetailPage() {
   const { id } = useParams();
@@ -95,8 +287,13 @@ export default function GuestDetailPage() {
   const toggleVip = useToggleVip(guestId);
   const [showEdit, setShowEdit] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
+  const [showNewReservation, setShowNewReservation] = useState(false);
+  const [showAddCharge, setShowAddCharge] = useState(false);
+  const [showCheckOutConfirm, setShowCheckOutConfirm] = useState(false);
 
   const reservations = (guest?.reservations ?? []) as Reservation[];
+  const checkedInRes = reservations.find((r) => r.status === 'CHECKED_IN');
+  const checkOut = useCheckOut(checkedInRes?.id ?? '');
   const activeRes = reservations.find((r) => r.status === 'CHECKED_IN' || r.status === 'CONFIRMED');
   const totalStays = guest?._count?.reservations ?? reservations.length;
   const lifetimeValue = (guest as any)?.lifetimeValue ?? 0;
@@ -143,20 +340,20 @@ export default function GuestDetailPage() {
   return (
     <div className="space-y-6 max-w-full">
       {/* Back + Header */}
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <div className="flex items-start gap-4">
           <button
             onClick={() => router.back()}
             className="w-9 h-9 rounded-lg bg-[#161b27] border border-[#1e2536] flex items-center justify-center text-slate-400 hover:text-slate-200 transition-colors shrink-0"
           >
             <ArrowLeft size={16} />
           </button>
-          <div className="flex items-center gap-4">
+          <div className="flex min-w-0 items-start gap-4">
             <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500/40 to-violet-500/40 border border-white/10 flex items-center justify-center text-xl font-bold text-white shrink-0">
               {guest.firstName[0]}
               {guest.lastName[0]}
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-2xl font-bold text-white">
                   {guest.firstName} {guest.lastName}
@@ -187,7 +384,7 @@ export default function GuestDetailPage() {
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end shrink-0">
           <button
             onClick={() => {
               toggleVip.mutate(undefined, {
@@ -519,30 +716,50 @@ export default function GuestDetailPage() {
           </div>
 
           {/* Quick Actions */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             {[
               {
                 label: 'New Reservation',
                 icon: BedDouble,
                 color: 'text-blue-400',
                 bg: 'bg-blue-500/10    border-blue-500/20    hover:bg-blue-500/15',
+                action: () => setShowNewReservation(true),
+                disabled: false,
               },
               {
                 label: 'Add Folio Charge',
                 icon: DollarSign,
                 color: 'text-emerald-400',
                 bg: 'bg-emerald-500/10 border-emerald-500/20 hover:bg-emerald-500/15',
+                action: () => {
+                  if (!activeRes) {
+                    openToast('error', 'This guest does not have an active reservation.');
+                    return;
+                  }
+                  setShowAddCharge(true);
+                },
+                disabled: !activeRes,
               },
               {
                 label: 'Check Out',
                 icon: Clock,
                 color: 'text-amber-400',
                 bg: 'bg-amber-500/10  border-amber-500/20  hover:bg-amber-500/15',
+                action: async () => {
+                  if (!checkedInRes) {
+                    openToast('error', 'This guest is not currently checked in.');
+                    return;
+                  }
+                  setShowCheckOutConfirm(true);
+                },
+                disabled: !checkedInRes || checkOut.isPending,
               },
-            ].map(({ label, icon: Icon, color, bg }) => (
+            ].map(({ label, icon: Icon, color, bg, action, disabled }) => (
               <button
                 key={label}
-                className={`${bg} border rounded-xl p-4 flex flex-col items-center gap-2 transition-colors`}
+                onClick={action}
+                disabled={disabled}
+                className={`${bg} border rounded-xl p-4 flex flex-col items-center gap-2 transition-colors disabled:cursor-not-allowed disabled:opacity-50`}
               >
                 <Icon size={20} className={color} />
                 <span className="text-xs text-slate-300 font-medium text-center">{label}</span>
@@ -554,6 +771,32 @@ export default function GuestDetailPage() {
 
       <EditGuestModal isOpen={showEdit} guest={guest} onClose={() => setShowEdit(false)} />
       <DeleteConfirm isOpen={showDelete} guest={guest} onClose={() => setShowDelete(false)} />
+      <NewReservationModal
+        isOpen={showNewReservation}
+        onClose={() => setShowNewReservation(false)}
+        prefillGuest={{
+          id: guest.id,
+          firstName: guest.firstName,
+          lastName: guest.lastName,
+        }}
+      />
+      {activeRes && showAddCharge ? (
+        <AddFolioChargeModal
+          reservationId={activeRes.id}
+          onClose={() => setShowAddCharge(false)}
+        />
+      ) : null}
+      {showCheckOutConfirm && checkedInRes ? (
+        <ConfirmCheckOutModal
+          guestName={`${guest.firstName} ${guest.lastName}`}
+          isPending={checkOut.isPending}
+          onClose={() => setShowCheckOutConfirm(false)}
+          onConfirm={async () => {
+            await checkOut.mutateAsync();
+            setShowCheckOutConfirm(false);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

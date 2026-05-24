@@ -5,9 +5,14 @@ import { platformClientFetch } from '@/lib/platform-client';
 import type {
   PlatformActivityFeedResponse,
   PlatformAuditLogsResponse,
+  PlatformFeatureCatalogOverviewResponse,
+  PlatformHotelEntitlementsResponse,
   PlatformHotelsResponse,
   PlatformSearchResponse,
   PlatformStatsResponse,
+  PlatformSubscriptionsOverviewResponse,
+  PlatformSupportCaseDetailResponse,
+  PlatformSupportCasesResponse,
   PlatformSuperAdminsResponse,
   PlatformUsersResponse,
 } from '@/lib/platform-types';
@@ -85,6 +90,14 @@ export function usePlatformHotelDetail(id: string) {
   });
 }
 
+export function usePlatformHotelEntitlements(id: string) {
+  return useQuery<PlatformHotelEntitlementsResponse>({
+    queryKey: ['platform', 'hotel', id, 'entitlements'],
+    queryFn: () => platformClientFetch(`/hotels/${id}/entitlements`),
+    enabled: !!id,
+  });
+}
+
 export function usePlatformUserDetail(id: string) {
   return useQuery({
     queryKey: ['platform', 'user', id],
@@ -111,5 +124,48 @@ export function usePlatformAuditLogs(
   return useQuery<PlatformAuditLogsResponse>({
     queryKey: ['platform', 'audit-logs', page, limit, filters],
     queryFn: () => platformClientFetch(`/audit-logs?${params.toString()}`),
+  });
+}
+
+export function usePlatformSubscriptionsOverview() {
+  return useQuery<PlatformSubscriptionsOverviewResponse>({
+    queryKey: ['platform', 'subscriptions'],
+    queryFn: () => platformClientFetch('/subscriptions'),
+  });
+}
+
+export function usePlatformFeatureCatalogOverview() {
+  return useQuery<PlatformFeatureCatalogOverviewResponse>({
+    queryKey: ['platform', 'feature-flags'],
+    queryFn: () => platformClientFetch('/feature-flags'),
+  });
+}
+
+export function usePlatformSupportCases(
+  page = 1,
+  limit = 20,
+  filters?: { status?: string; priority?: string; category?: string; hotelId?: string; search?: string },
+) {
+  const params = new URLSearchParams({
+    page: String(page),
+    limit: String(limit),
+  });
+
+  for (const [key, value] of Object.entries(filters ?? {})) {
+    const trimmed = value?.trim();
+    if (trimmed) params.set(key, trimmed);
+  }
+
+  return useQuery<PlatformSupportCasesResponse>({
+    queryKey: ['platform', 'support', page, limit, filters],
+    queryFn: () => platformClientFetch(`/support?${params.toString()}`),
+  });
+}
+
+export function usePlatformSupportCaseDetail(id: string) {
+  return useQuery<PlatformSupportCaseDetailResponse>({
+    queryKey: ['platform', 'support', id],
+    queryFn: () => platformClientFetch(`/support/${id}`),
+    enabled: !!id,
   });
 }

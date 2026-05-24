@@ -18,6 +18,7 @@ import {
   useDashboardAdminLayouts,
   useUpdateDashboardAdminLayouts,
 } from '@/hooks/dashboard/useDashboardAdminLayouts';
+import { useDashboardFeatureFlags } from '@/hooks/dashboard/useDashboardFeatureFlags';
 import { TENANT_ROLES } from '@/lib/permissions';
 
 const roleLabels: Record<Role, string> = {
@@ -45,6 +46,7 @@ function reindexRows(rows: DashboardAdminLayoutRow[]) {
 export default function DashboardSettingsPage() {
   const router = useRouter();
   const { data, isLoading } = useDashboardAdminLayouts();
+  const { data: featureFlags, isLoading: flagsLoading } = useDashboardFeatureFlags();
   const updateLayouts = useUpdateDashboardAdminLayouts();
   const [selectedRole, setSelectedRole] = useState<Role>('MANAGER');
   const [rowsByRole, setRowsByRole] = useState<Record<string, DashboardAdminLayoutRow[]>>({});
@@ -235,8 +237,29 @@ export default function DashboardSettingsPage() {
                         <p className="text-sm font-medium text-slate-200">{row.title}</p>
                         <p className="text-xs text-slate-500 mt-0.5">
                           {row.permissionKey}
-                          {row.featureFlag ? ` • ${row.featureFlag}` : ''}
                         </p>
+                        {row.featureFlag ? (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <span className="rounded-full border border-[#1e2536] bg-[#0f1117] px-2.5 py-1 text-[11px] uppercase tracking-wide text-slate-400">
+                              {row.featureFlag}
+                            </span>
+                            <span
+                              className={`rounded-full px-2.5 py-1 text-[11px] uppercase tracking-wide ${
+                                flagsLoading
+                                  ? 'bg-slate-800 text-slate-400'
+                                  : featureFlags?.flags[row.featureFlag] === false
+                                    ? 'bg-rose-500/15 text-rose-300'
+                                    : 'bg-emerald-500/15 text-emerald-300'
+                              }`}
+                            >
+                              {flagsLoading
+                                ? 'Checking'
+                                : featureFlags?.flags[row.featureFlag] === false
+                                  ? 'Feature off'
+                                  : 'Feature on'}
+                            </span>
+                          </div>
+                        ) : null}
                       </td>
                       <td className="px-4 py-3">
                         <select

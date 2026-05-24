@@ -39,12 +39,14 @@ import {
 } from 'lucide-react';
 import { useAppStore } from '@/store/app.store';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useHotelFeatureAccess } from '@/hooks/hotel/useHotelFeatureAccess';
 import { useHydration } from '@/hooks/useHydration';
 import { Lock } from '@solar-icons/react';
 import { chevronVariants, dropdownVariants, itemVariants } from '@/utils/animations';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import SignOutButton from '@/components/auth/SignOutButton';
+import { FEATURE_NAV_TARGETS } from '@/lib/feature-access';
 
 type NavItem = { label: string; href: string; icon: any; disabled?: boolean; badge?: string };
 type NavGroup = { label: string; href: string; icon: any; permission: string; children: NavItem[] };
@@ -131,6 +133,7 @@ function SidebarContent({
   ready,
   canNav,
   can,
+  featureFlags,
   openGroups,
   toggleGroup,
   isActive,
@@ -143,11 +146,21 @@ function SidebarContent({
   ready: boolean;
   canNav: ReturnType<typeof usePermissions>['canNav'];
   can: ReturnType<typeof usePermissions>['can'];
+  featureFlags?: Record<string, boolean>;
   openGroups: Record<string, boolean>;
   toggleGroup: (href: string) => void;
   isActive: (href: string) => boolean;
   onNavigate?: () => void;
 }) {
+  const isNavFeatureEnabled = (href: string) => {
+    const featureKey = Object.entries(FEATURE_NAV_TARGETS).find(([, targets]) =>
+      targets.some((target) => href === target || href.startsWith(`${target}/`)),
+    )?.[0];
+
+    if (!featureKey) return true;
+    return featureFlags?.[featureKey] !== false;
+  };
+
   return (
     <aside
       className={cn(
@@ -197,7 +210,7 @@ function SidebarContent({
         {ready &&
           nav.map((item) => {
             if (isGroup(item)) {
-              if (!canNav(item.href)) return null;
+              if (!canNav(item.href) || !isNavFeatureEnabled(item.children[0]?.href ?? item.href)) return null;
               const open = !!openGroups[item.href];
               const groupActive = item.children.some((c) => isActive(c.href));
               const Icon = item.icon;
@@ -242,6 +255,7 @@ function SidebarContent({
                         className="mt-0.5 ml-3 space-y-0.5 overflow-hidden border-l border-[#1e2536] pl-3"
                       >
                         {item.children.map((child, index) => {
+                          if (!isNavFeatureEnabled(child.href)) return null;
                           const CIcon = child.icon;
                           const active = isActive(child.href);
                           return (
@@ -293,7 +307,7 @@ function SidebarContent({
               );
             }
 
-            if (!canNav(item.href)) return null;
+            if (!canNav(item.href) || !isNavFeatureEnabled(item.href)) return null;
             const active = isActive(item.href);
             const Icon = item.icon;
             return (
@@ -343,6 +357,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
   const hotel = useAppStore((s) => s.hotel);
   const hydrated = useHydration();
   const { canNav, can, ready } = usePermissions();
+  const { data: featureAccess } = useHotelFeatureAccess();
 
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
     const init: Record<string, boolean> = {};
@@ -370,6 +385,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
         ready={ready}
         canNav={canNav}
         can={can}
+        featureFlags={featureAccess?.flags}
         openGroups={openGroups}
         toggleGroup={toggleGroup}
         isActive={isActive}
@@ -403,6 +419,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
                   ready={ready}
                   canNav={canNav}
                   can={can}
+                  featureFlags={featureAccess?.flags}
                   openGroups={openGroups}
                   toggleGroup={toggleGroup}
                   isActive={isActive}

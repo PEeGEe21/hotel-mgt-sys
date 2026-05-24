@@ -7,6 +7,7 @@ import { RunnableHotelCronJob, RunHotelCronJobDto } from '../dtos/run-hotel-cron
 import { ReservationsService } from '../../reservations/services/reservations.service';
 import { AttendanceService } from '../../attendance/services/attendance.service';
 import { FacilitiesService } from '../../facilities/services/facilities.service';
+import { EntitlementsService } from '../../entitlements/entitlements.service';
 
 const HOUSEKEEPING_FOLLOW_UP_SCAN_JOB_TYPE =
   'HOUSEKEEPING_FOLLOW_UP_SCAN' as HotelCronJobType;
@@ -24,6 +25,7 @@ export class HotelsService {
     private reservationsService: ReservationsService,
     private attendanceService: AttendanceService,
     private facilitiesService: FacilitiesService,
+    private entitlementsService: EntitlementsService,
   ) {}
 
   private buildDefaultCronSettings() {
@@ -529,23 +531,65 @@ export class HotelsService {
   }
 
   async getFeatureAccess(hotelId: string) {
-    const [hotel, flags] = await Promise.all([
+    const resolved = await this.entitlementsService.resolveHotelEntitlements(hotelId);
+    const itemByKey = new Map(resolved.items.map((item) => [item.key, item]));
+
+    return {
+      flags: resolved.features,
+      limits: resolved.limits,
+      warnings: resolved.warnings,
+      sources: Object.fromEntries(
+        resolved.items.map((item) => [
+          item.key,
+          {
+            globalEnabled: item.globalEnabled,
+            defaultEnabled: item.defaultEnabled,
+            planEnabled: item.planEnabled,
+            overrideEnabled: item.overrideEnabled,
+            hotelEnabled: item.hotelRolloutEnabled,
+            effectiveEnabled: item.effectiveEnabled,
+          },
+        ]),
+      ),
+      plan: resolved.plan,
+      subscriptionStatus: resolved.subscriptionStatus,
+      keycardAuth:
+        itemByKey.get('keycard_auth') !== undefined
+          ? {
+              globalEnabled: itemByKey.get('keycard_auth')?.globalEnabled === true,
+              hotelEnabled: itemByKey.get('keycard_auth')?.hotelRolloutEnabled === true,
+            }
+          : null,
+    };
+  }
+
+  async getEntitlements(hotelId: string) {
+    const [hotel, resolved, openCasesCount, plans] = await Promise.all([
       (this.prisma.hotel as any).findUnique({
         where: { id: hotelId },
         select: {
           id: true,
-          keycardAuthEnabled: true,
+          name: true,
+          email: true,
         },
       }),
-      this.prisma.featureFlag.findMany({
+      this.entitlementsService.resolveHotelEntitlements(hotelId),
+      (this.prisma as any).supportCase.count({
         where: {
-          key: {
-            in: ['keycard_auth'],
+          hotelId,
+          status: {
+            in: ['OPEN', 'TRIAGED', 'IN_PROGRESS', 'WAITING_ON_HOTEL'],
           },
         },
+      }),
+      (this.prisma as any).subscriptionPlan.findMany({
+        where: { isActive: true },
+        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
         select: {
-          key: true,
-          enabled: true,
+          id: true,
+          code: true,
+          name: true,
+          description: true,
         },
       }),
     ]);
@@ -554,24 +598,34 @@ export class HotelsService {
       throw new NotFoundException('Hotel not found.');
     }
 
-    const globalFlags = flags.reduce<Record<string, boolean>>((acc, flag) => {
-      acc[flag.key] = flag.enabled !== false;
-      return acc;
-    }, {});
-
-    const globalEnabled = globalFlags.keycard_auth !== false;
-    const hotelEnabled = hotel.keycardAuthEnabled === true;
-
     return {
-      flags: {
-        keycard_auth: globalEnabled && hotelEnabled,
+      hotel: {
+        id: hotel.id,
+        name: hotel.name,
+        email: hotel.email,
       },
-      sources: {
-        keycard_auth: {
-          globalEnabled,
-          hotelEnabled,
-        },
+      subscription: {
+        plan: resolved.plan,
+        status: resolved.subscriptionStatus,
       },
+      features: resolved.features,
+      limits: resolved.limits,
+      warnings: resolved.warnings,
+      items: resolved.items,
+      support: {
+        supportAvailable: true,
+        supportTier: resolved.plan?.code ?? 'STANDARD',
+        openCasesCount,
+        contactMode: 'IN_APP_CASES',
+      },
+      requestablePlans: plans
+        .filter((plan: any) => plan.code !== resolved.plan?.code)
+        .map((plan: any) => ({
+          id: plan.id,
+          code: plan.code,
+          name: plan.name,
+          description: plan.description ?? null,
+        })),
     };
   }
 
