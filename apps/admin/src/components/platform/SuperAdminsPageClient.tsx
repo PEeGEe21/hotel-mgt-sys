@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { usePlatformSuperAdmins } from '@/hooks/usePlatform';
 import { platformClientFetch, PlatformClientError } from '@/lib/platform-client';
 import { AuthNotice } from '@/components/platform/AuthNotice';
+import openToast from '@/components/ToastComponent';
 
 export function SuperAdminsPageClient() {
   const [name, setName] = useState('');
@@ -32,11 +33,15 @@ export function SuperAdminsPageClient() {
       });
 
       setSuccess(`Super admin invite sent to ${email.trim().toLowerCase()}.`);
+      openToast('success', `Super admin invite sent to ${email.trim().toLowerCase()}.`);
       setName('');
       setEmail('');
       await adminsQuery.refetch();
     } catch (error) {
-      setFormError(error instanceof PlatformClientError ? error.message : 'Could not create super admin.');
+      const message =
+        error instanceof PlatformClientError ? error.message : 'Could not create super admin.';
+      setFormError(message);
+      openToast('error', message);
     } finally {
       setIsSubmitting(false);
     }

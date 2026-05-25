@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { AuthNotice } from '@/components/platform/AuthNotice';
+import openToast from '@/components/ToastComponent';
 import { PaginationControls } from '@/components/platform/PaginationControls';
 import {
   usePlatformHotels,
@@ -50,9 +51,15 @@ export function SupportPageClient() {
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState('');
   const [priority, setPriority] = useState('');
+  const [hotel, setHotel] = useState('');
   const [search, setSearch] = useState('');
 
-  const supportQuery = usePlatformSupportCases(page, 20, { status, priority, search });
+  const supportQuery = usePlatformSupportCases(page, 20, {
+    status,
+    priority,
+    search,
+    hotelId: hotel || undefined,
+  });
   const hotelsQuery = usePlatformHotels(1, 200, { all: true });
   const adminsQuery = usePlatformSuperAdmins();
   const data = supportQuery.data;
@@ -96,9 +103,12 @@ export function SupportPageClient() {
         assignedAdminId: '',
       });
       setCreateSuccess('Support case created.');
+      openToast('success', 'Support case created.');
       await supportQuery.refetch();
     } catch (error) {
-      setCreateError(error instanceof Error ? error.message : 'Could not create the support case.');
+      const message = error instanceof Error ? error.message : 'Could not create the support case.';
+      setCreateError(message);
+      openToast('error', message);
     } finally {
       setIsCreating(false);
     }
@@ -150,9 +160,9 @@ export function SupportPageClient() {
         </section>
 
         <section className="grid gap-6 xl:grid-cols-[1.4fr_0.6fr]">
-          <div className='space-y-6'>
+          <div className="space-y-6">
             <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="grid gap-4 md:grid-cols-4">
+              <div className="grid gap-4 md:grid-cols-5">
                 <label className="text-sm text-slate-700">
                   <span className="mb-1.5 block font-medium">Status</span>
                   <select
@@ -183,6 +193,25 @@ export function SupportPageClient() {
                     {priorityOptions().map((value) => (
                       <option key={value || 'all'} value={value}>
                         {value || 'All priorities'}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="text-sm text-slate-700">
+                  <span className="mb-1.5 block font-medium">Hotel</span>
+                  <select
+                    value={hotel}
+                    onChange={(e) => {
+                      setPage(1);
+                      setHotel(e.target.value);
+                    }}
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 outline-none focus:border-teal-700"
+                  >
+                    <option value="">Select hotel</option>
+                    {hotelsQuery.data?.hotels.map((hotel) => (
+                      <option key={hotel.id} value={hotel.id}>
+                        {hotel.name}
                       </option>
                     ))}
                   </select>
@@ -240,7 +269,9 @@ export function SupportPageClient() {
                             </Link>
                             <p className="mt-1 text-xs uppercase tracking-wide text-slate-500">
                               {supportCase.category}
-                              {supportCase.requestType ? ` · ${formatRequestType(supportCase.requestType)}` : ''}
+                              {supportCase.requestType
+                                ? ` · ${formatRequestType(supportCase.requestType)}`
+                                : ''}
                             </p>
                           </td>
                           <td className="py-4 pr-4 text-slate-600">{supportCase.hotelName}</td>

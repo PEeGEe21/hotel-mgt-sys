@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { AuthNotice } from '@/components/platform/AuthNotice';
+import openToast from '@/components/ToastComponent';
 import { OnboardingStatusBadge } from '@/components/platform/OnboardingStatusBadge';
 import {
   usePlatformHotelDetail,
@@ -217,8 +218,12 @@ export function HotelDetailClient({ id, fallbackName }: { id: string; fallbackNa
       setLifecycleReason('');
       setConfirmationName('');
       await detailQuery.refetch();
+      openToast('success', `Hotel ${action.replaceAll('-', ' ')} action completed.`);
     } catch (error) {
-      setActionError(error instanceof Error ? error.message : 'Could not update hotel lifecycle state.');
+      const message =
+        error instanceof Error ? error.message : 'Could not update hotel lifecycle state.';
+      setActionError(message);
+      openToast('error', message);
     } finally {
       setIsUpdating(false);
     }
@@ -260,8 +265,11 @@ export function HotelDetailClient({ id, fallbackName }: { id: string; fallbackNa
       });
       await detailQuery.refetch();
       setEditSuccess('Hotel profile updated successfully.');
+      openToast('success', 'Hotel profile updated successfully.');
     } catch (error) {
-      setEditError(error instanceof Error ? error.message : 'Could not save hotel profile.');
+      const message = error instanceof Error ? error.message : 'Could not save hotel profile.';
+      setEditError(message);
+      openToast('error', message);
     } finally {
       setIsSavingProfile(false);
     }
@@ -290,8 +298,12 @@ export function HotelDetailClient({ id, fallbackName }: { id: string; fallbackNa
       });
       await Promise.all([detailQuery.refetch(), entitlementsQuery.refetch(), subscriptionsOverviewQuery.refetch()]);
       setSubscriptionSuccess('Hotel subscription updated successfully.');
+      openToast('success', 'Hotel subscription updated successfully.');
     } catch (error) {
-      setSubscriptionError(error instanceof Error ? error.message : 'Could not update hotel subscription.');
+      const message =
+        error instanceof Error ? error.message : 'Could not update hotel subscription.';
+      setSubscriptionError(message);
+      openToast('error', message);
     } finally {
       setIsSavingSubscription(false);
     }
@@ -316,8 +328,12 @@ export function HotelDetailClient({ id, fallbackName }: { id: string; fallbackNa
       });
       await Promise.all([entitlementsQuery.refetch(), detailQuery.refetch()]);
       setOverrideSuccess(`Feature override saved for ${featureKey}.`);
+      openToast('success', `Feature override saved for ${featureKey}.`);
     } catch (error) {
-      setOverrideError(error instanceof Error ? error.message : 'Could not save the feature override.');
+      const message =
+        error instanceof Error ? error.message : 'Could not save the feature override.';
+      setOverrideError(message);
+      openToast('error', message);
     } finally {
       setSavingOverrideKey(null);
     }

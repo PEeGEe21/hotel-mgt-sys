@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { adminChangePasswordAction, updateAdminProfileAction } from '@/actions/admin-auth.actions';
 import { AuthNotice } from '@/components/platform/AuthNotice';
+import openToast from '@/components/ToastComponent';
 import { useAdminAuthStore } from '@/store/admin-auth.store';
 
 export function ProfilePageClient() {
@@ -32,12 +33,14 @@ export function ProfilePageClient() {
     const result = await updateAdminProfileAction({ name, email });
     if (!result.success) {
       setError(result.message);
+      openToast('error', result.message);
       setIsSavingProfile(false);
       return;
     }
 
     setUser(result.user);
     setProfileMessage('Your super admin profile has been updated.');
+    openToast('success', 'Your super admin profile has been updated.');
     setIsSavingProfile(false);
   };
 
@@ -50,11 +53,13 @@ export function ProfilePageClient() {
     const result = await adminChangePasswordAction({ currentPassword, newPassword });
     if (!result.success) {
       setError(result.message);
+      openToast('error', result.message);
       setIsChangingPassword(false);
       return;
     }
 
     setPasswordMessage(result.message);
+    openToast('success', result.message);
     setCurrentPassword('');
     setNewPassword('');
     setIsChangingPassword(false);

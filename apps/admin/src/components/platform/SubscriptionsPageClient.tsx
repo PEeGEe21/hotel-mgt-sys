@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { AuthNotice } from '@/components/platform/AuthNotice';
+import openToast from '@/components/ToastComponent';
 import { usePlatformSubscriptionsOverview } from '@/hooks/usePlatform';
 import { PlatformClientError, platformClientFetch } from '@/lib/platform-client';
 import type { PlatformSubscriptionsOverviewResponse } from '@/lib/platform-types';
@@ -112,9 +113,13 @@ export function SubscriptionsPageClient() {
       });
       setCreateForm(emptyPlanForm);
       setFormSuccess('Subscription plan created.');
+      openToast('success', 'Subscription plan created.');
       await overviewQuery.refetch();
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : 'Could not create subscription plan.');
+      const message =
+        error instanceof Error ? error.message : 'Could not create subscription plan.';
+      setFormError(message);
+      openToast('error', message);
     } finally {
       setIsSaving(false);
     }
@@ -133,9 +138,13 @@ export function SubscriptionsPageClient() {
       });
       setEditingPlanId(null);
       setFormSuccess('Subscription plan updated.');
+      openToast('success', 'Subscription plan updated.');
       await overviewQuery.refetch();
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : 'Could not update subscription plan.');
+      const message =
+        error instanceof Error ? error.message : 'Could not update subscription plan.';
+      setFormError(message);
+      openToast('error', message);
     } finally {
       setIsSaving(false);
     }

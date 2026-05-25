@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { AuthNotice } from '@/components/platform/AuthNotice';
+import openToast from '@/components/ToastComponent';
 import { usePlatformFeatureCatalogOverview } from '@/hooks/usePlatform';
 import { PlatformClientError, platformClientFetch } from '@/lib/platform-client';
 
@@ -127,8 +128,11 @@ function FeatureCatalogCreateForm({
       });
       await onCreated();
       close();
+      openToast('success', 'Feature entitlement created.');
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : 'Could not create feature.');
+      const message = nextError instanceof Error ? nextError.message : 'Could not create feature.';
+      setError(message);
+      openToast('error', message);
     } finally {
       setIsSaving(false);
     }
@@ -355,8 +359,12 @@ export function FeatureControlsPageClient() {
       });
       await overviewQuery.refetch();
       setSaveSuccess('Plan entitlements updated.');
+      openToast('success', 'Plan entitlements updated.');
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : 'Could not update plan entitlements.');
+      const message =
+        error instanceof Error ? error.message : 'Could not update plan entitlements.';
+      setSaveError(message);
+      openToast('error', message);
     } finally {
       setIsSaving(false);
     }
@@ -375,8 +383,8 @@ export function FeatureControlsPageClient() {
         </div>
 
         {authMessage ? <AuthNotice message={authMessage} /> : null}
-        {saveError ? <AuthNotice title="Feature update failed" message={saveError} /> : null}
-        {saveSuccess ? <AuthNotice title="Feature controls saved" message={saveSuccess} /> : null}
+        {/* {saveError ? <AuthNotice title="Feature update failed" message={saveError} /> : null}
+        {saveSuccess ? <AuthNotice title="Feature controls saved" message={saveSuccess} /> : null} */}
 
         <section className="grid gap-4 md:grid-cols-3">
           <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">

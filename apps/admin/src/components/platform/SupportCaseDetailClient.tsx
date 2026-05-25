@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { AuthNotice } from '@/components/platform/AuthNotice';
+import openToast from '@/components/ToastComponent';
 import { usePlatformSupportCaseDetail, usePlatformSuperAdmins } from '@/hooks/usePlatform';
 import { PlatformClientError, platformClientFetch } from '@/lib/platform-client';
 
@@ -45,8 +46,11 @@ export function SupportCaseDetailClient({ id }: { id: string }) {
       });
       await detailQuery.refetch();
       setCaseSuccess('Support case updated.');
+      openToast('success', 'Support case updated.');
     } catch (error) {
-      setCaseError(error instanceof Error ? error.message : 'Could not update the support case.');
+      const message = error instanceof Error ? error.message : 'Could not update the support case.';
+      setCaseError(message);
+      openToast('error', message);
     } finally {
       setIsSavingCase(false);
     }
@@ -69,8 +73,11 @@ export function SupportCaseDetailClient({ id }: { id: string }) {
       setCommentVisibility('INTERNAL');
       await detailQuery.refetch();
       setCaseSuccess('Support note added.');
+      openToast('success', 'Support note added.');
     } catch (error) {
-      setCaseError(error instanceof Error ? error.message : 'Could not add the support note.');
+      const message = error instanceof Error ? error.message : 'Could not add the support note.';
+      setCaseError(message);
+      openToast('error', message);
     } finally {
       setIsSavingComment(false);
     }
