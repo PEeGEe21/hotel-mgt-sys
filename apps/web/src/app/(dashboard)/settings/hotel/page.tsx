@@ -450,6 +450,9 @@ export default function HotelProfilePage() {
     attendancePinRequired: false,
     attendanceKioskEnabled: true,
     attendancePersonalEnabled: true,
+    attendanceAutoClockOutEnabled: true,
+    attendanceAutoClockOutHour: '0',
+    attendanceAutoClockOutMinute: '0',
     attendanceAbsenceScanEnabled: true,
     attendanceAbsenceScanHour: '9',
     attendanceAbsenceScanMinute: '15',
@@ -521,6 +524,9 @@ export default function HotelProfilePage() {
       attendancePinRequired: Boolean(data.attendancePinRequired),
       attendanceKioskEnabled: Boolean(data.attendanceKioskEnabled ?? true),
       attendancePersonalEnabled: Boolean(data.attendancePersonalEnabled ?? true),
+      attendanceAutoClockOutEnabled: Boolean(data.attendanceAutoClockOutEnabled ?? true),
+      attendanceAutoClockOutHour: String(data.attendanceAutoClockOutHour ?? 0),
+      attendanceAutoClockOutMinute: String(data.attendanceAutoClockOutMinute ?? 0),
       attendanceAbsenceScanEnabled: Boolean(data.cronSettings?.attendanceAbsenceScanEnabled ?? true),
       attendanceAbsenceScanHour: String(data.cronSettings?.attendanceAbsenceScanHour ?? 9),
       attendanceAbsenceScanMinute: String(data.cronSettings?.attendanceAbsenceScanMinute ?? 15),
@@ -919,6 +925,9 @@ export default function HotelProfilePage() {
         attendancePinRequired: form.attendancePinRequired,
         attendanceKioskEnabled: form.attendanceKioskEnabled,
         attendancePersonalEnabled: form.attendancePersonalEnabled,
+        attendanceAutoClockOutEnabled: form.attendanceAutoClockOutEnabled,
+        attendanceAutoClockOutHour: Number(form.attendanceAutoClockOutHour || 0),
+        attendanceAutoClockOutMinute: Number(form.attendanceAutoClockOutMinute || 0),
         cronSettings: {
           attendanceAbsenceScanEnabled: form.attendanceAbsenceScanEnabled,
           attendanceAbsenceScanHour: Number(form.attendanceAbsenceScanHour || 9),
@@ -1363,8 +1372,39 @@ export default function HotelProfilePage() {
                         set('attendanceAbsenceScanEnabled', !form.attendanceAbsenceScanEnabled)
                       }
                     />
+                    <ToggleRow
+                      title="Auto-close stale previous-day sessions"
+                      description="If staff forgot to clock out yesterday, close that open session automatically before the next clock-in."
+                      enabled={form.attendanceAutoClockOutEnabled}
+                      onToggle={() =>
+                        set(
+                          'attendanceAutoClockOutEnabled',
+                          !form.attendanceAutoClockOutEnabled,
+                        )
+                      }
+                    />
                   </div>
 
+                  <div>
+                    <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
+                      Auto Clock-out Hour
+                    </label>
+                    <input
+                      value={form.attendanceAutoClockOutHour}
+                      onChange={(e) => set('attendanceAutoClockOutHour', e.target.value)}
+                      className="w-full rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-2.5 text-sm text-slate-200 outline-none transition-colors focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
+                      Auto Clock-out Minute
+                    </label>
+                    <input
+                      value={form.attendanceAutoClockOutMinute}
+                      onChange={(e) => set('attendanceAutoClockOutMinute', e.target.value)}
+                      className="w-full rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-2.5 text-sm text-slate-200 outline-none transition-colors focus:border-blue-500"
+                    />
+                  </div>
                   <div>
                     <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
                       Absence Check Hour
@@ -1385,6 +1425,15 @@ export default function HotelProfilePage() {
                       className="w-full rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-2.5 text-sm text-slate-200 outline-none transition-colors focus:border-blue-500"
                     />
                   </div>
+                </div>
+
+                <div className="rounded-xl border border-[#1e2536] bg-[#0f1117] px-4 py-3 text-sm text-slate-400">
+                  Stale-session policy:
+                  <span className="ml-2 text-slate-200">
+                    {form.attendanceAutoClockOutEnabled
+                      ? `Auto close open sessions at ${String(form.attendanceAutoClockOutHour || '0').padStart(2, '0')}:${String(form.attendanceAutoClockOutMinute || '0').padStart(2, '0')} hotel time before the next clock-in.`
+                      : 'Managers must resolve previous-day open sessions manually.'}
+                  </span>
                 </div>
 
                 <SchedulerStatusCard

@@ -7,6 +7,7 @@ import { OnboardingStatusBadge } from '@/components/platform/OnboardingStatusBad
 import {
   usePlatformHotelDetail,
   usePlatformHotelEntitlements,
+  usePlatformHotelObservability,
   usePlatformSupportCases,
   usePlatformSubscriptionsOverview,
 } from '@/hooks/usePlatform';
@@ -82,10 +83,22 @@ function incidentClasses(diagnosis: 'configuration' | 'lifecycle' | 'unknown') {
   }
 }
 
+function observabilityClasses(status: 'alerting' | 'stale' | 'healthy') {
+  switch (status) {
+    case 'alerting':
+      return 'bg-rose-100 text-rose-900';
+    case 'stale':
+      return 'bg-amber-100 text-amber-900';
+    case 'healthy':
+      return 'bg-emerald-100 text-emerald-800';
+  }
+}
+
 export function HotelDetailClient({ id, fallbackName }: { id: string; fallbackName?: string }) {
   const detailQuery = usePlatformHotelDetail(id);
   const hotel = detailQuery.data as PlatformHotelDetailResponse | undefined;
   const entitlementsQuery = usePlatformHotelEntitlements(id);
+  const observabilityQuery = usePlatformHotelObservability(id);
   const supportQuery = usePlatformSupportCases(1, 5, { hotelId: id });
   const subscriptionsOverviewQuery = usePlatformSubscriptionsOverview();
   const authMessage = detailQuery.error instanceof PlatformClientError ? detailQuery.error.message : null;
@@ -855,6 +868,122 @@ export function HotelDetailClient({ id, fallbackName }: { id: string; fallbackNa
                   </div>
                 </div>
               </article>
+            </section>
+
+            <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-semibold uppercase tracking-[0.22em] text-teal-800">Observability</p>
+                  <h2 className="mt-2 text-2xl font-semibold tracking-tight">Runtime issues and failed jobs</h2>
+                </div>
+                <Link href="/support" className="text-sm font-semibold text-teal-900">
+                  Correlate with support
+                </Link>
+              </div>
+              {observabilityQuery.isLoading ? (
+                <p className="mt-5 text-sm text-slate-600">Loading observability summary...</p>
+              ) : observabilityQuery.data ? (
+                <>
+                  <div className="mt-5 grid gap-4 md:grid-cols-4">
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <p className="text-sm font-medium text-slate-500">Failed jobs</p>
+                      <p className="mt-2 text-2xl font-semibold tracking-tight">{observabilityQuery.data.summary.openFailedJobs}</p>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <p className="text-sm font-medium text-slate-500">Module alerts</p>
+                      <p className="mt-2 text-2xl font-semibold tracking-tight">{observabilityQuery.data.summary.activeModuleAlerts}</p>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <p className="text-sm font-medium text-slate-500">Degraded events 24h</p>
+                      <p className="mt-2 text-2xl font-semibold tracking-tight">{observabilityQuery.data.summary.degradedEvents24h}</p>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <p className="text-sm font-medium text-slate-500">Open support cases</p>
+                      <p className="mt-2 text-2xl font-semibold tracking-tight">{observabilityQuery.data.summary.openSupportCases}</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-6 grid gap-6 xl:grid-cols-2">
+                    <div>
+                      <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Failed jobs</h3>
+                      <div className="mt-3 space-y-3">
+                        {observabilityQuery.data.failedJobs.length === 0 ? (
+                          <p className="rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+                            No failed hotel automation jobs are currently recorded.
+                          </p>
+                        ) : (
+                          observabilityQuery.data.failedJobs.map((job) => (
+                            <div key={`${job.jobType}:${job.lastFailedAt ?? 'never'}`} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="font-semibold text-slate-900">{job.label}</p>
+                                <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-amber-900">
+                                  {job.enabled ? 'Needs review' : 'Disabled'}
+                                </span>
+                              </div>
+                              <p className="mt-2">Failed: {formatDate(job.lastFailedAt)}</p>
+                              <p className="mt-1">Last success: {formatDate(job.lastSucceededAt)}</p>
+                              <p className="mt-1">Error: {job.lastError ?? 'No error body recorded.'}</p>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+
+                    <div>
+                      <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Module health</h3>
+                      <div className="mt-3 space-y-3">
+                        {observabilityQuery.data.moduleAlerts.length === 0 ? (
+                          <p className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                            No realtime module telemetry has been recorded for this hotel yet.
+                          </p>
+                        ) : (
+                          observabilityQuery.data.moduleAlerts.map((module) => (
+                            <div key={module.moduleKey} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="font-semibold text-slate-900">{module.label}</p>
+                                <span className={`rounded-full px-2.5 py-1 text-xs font-semibold uppercase tracking-wide ${observabilityClasses(module.status)}`}>
+                                  {module.status}
+                                </span>
+                              </div>
+                              <p className="mt-2">Last event: {formatDate(module.lastEventAt)}</p>
+                              <p className="mt-1">Type: {module.lastEventType ?? 'No signal yet'}</p>
+                              <p className="mt-1">Summary: {module.lastSummary ?? 'No summary recorded.'}</p>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-6">
+                    <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Recent incidents</h3>
+                    <div className="mt-3 space-y-3">
+                      {observabilityQuery.data.recentIncidents.length === 0 ? (
+                        <p className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                          No recent incidents are recorded for this hotel.
+                        </p>
+                      ) : (
+                        observabilityQuery.data.recentIncidents.map((incident) => (
+                          <div key={incident.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="font-semibold text-slate-900">{incident.title}</p>
+                              <span className={`rounded-full px-2.5 py-1 text-xs font-semibold uppercase tracking-wide ${
+                                incident.severity === 'warning' ? 'bg-amber-100 text-amber-900' : 'bg-sky-100 text-sky-900'
+                              }`}>
+                                {incident.source}
+                              </span>
+                            </div>
+                            <p className="mt-2">{formatDate(incident.createdAt)}</p>
+                            <p className="mt-1">{incident.summary}</p>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <p className="mt-5 text-sm text-slate-600">No observability data is available for this hotel yet.</p>
+              )}
             </section>
 
             <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">

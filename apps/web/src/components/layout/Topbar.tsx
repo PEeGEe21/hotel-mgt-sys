@@ -1,8 +1,9 @@
 'use client';
 import Link from 'next/link';
-import { Search, User, ChevronDown, Menu } from 'lucide-react';
+import { Search, User, ChevronDown, Menu, LifeBuoy } from 'lucide-react';
 import { useAuthStore } from '@/store/auth.store';
 import { useHydration } from '@/hooks/useHydration';
+import { usePermissions } from '@/hooks/usePermissions';
 import NotificationInboxBell from '@/components/layout/NotificationInboxBell';
 import SignOutButton from '@/components/auth/SignOutButton';
 import {
@@ -16,6 +17,8 @@ import {
 export default function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
   const user = useAuthStore((s) => s.user);
   const hydrated = useHydration();
+  const { role, ready } = usePermissions();
+  const showSupportShortcut = ready && role === 'ADMIN';
 
   const initials = user?.name
     ? user.name
@@ -46,6 +49,16 @@ export default function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
         </div>
       </div>
       <div className="ml-3 flex items-center gap-2 sm:gap-4">
+        {showSupportShortcut ? (
+          <Link
+            href="/settings/support"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[#1e2536] bg-[#0f1117] text-slate-300 transition-colors hover:text-white hover:bg-white/5"
+            aria-label="Open support"
+            title="Support"
+          >
+            <LifeBuoy size={16} />
+          </Link>
+        ) : null}
         <NotificationInboxBell />
         {/* User avatar + info */}
         {!hydrated ? (

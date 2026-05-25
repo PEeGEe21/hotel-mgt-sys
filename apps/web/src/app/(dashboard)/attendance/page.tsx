@@ -164,6 +164,12 @@ export default function AttendancePage() {
             </p>
           </div>
           <div className="flex gap-2">
+            <Link
+              href="/attendance/shifts"
+              className="flex items-center gap-2 bg-[#161b27] border border-[#1e2536] hover:border-slate-500 text-slate-300 px-3 py-2 rounded-lg text-sm font-medium transition-all"
+            >
+              <CalendarIcon size={13} /> Shift Schedule
+            </Link>
             <button
               onClick={() => setModal({ open: true, type: 'manual' })}
               className="flex items-center gap-2 bg-[#161b27] border border-[#1e2536] hover:border-slate-500 text-slate-300 px-3 py-2 rounded-lg text-sm font-medium transition-all"

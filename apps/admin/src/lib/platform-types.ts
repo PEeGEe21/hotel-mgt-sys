@@ -450,6 +450,49 @@ export type PlatformFeatureCatalogOverviewResponse = {
   };
 };
 
+export type PlatformHotelObservabilityResponse = {
+  hotelId: string;
+  hotelName: string;
+  summary: {
+    openFailedJobs: number;
+    activeModuleAlerts: number;
+    degradedEvents24h: number;
+    openSupportCases: number;
+    suspended: boolean;
+    deleted: boolean;
+  };
+  failedJobs: Array<{
+    jobType: string;
+    label: string;
+    enabled: boolean;
+    lastTriggeredAt: string | null;
+    lastSucceededAt: string | null;
+    lastFailedAt: string | null;
+    lastError: string | null;
+    severity: 'info' | 'warning';
+  }>;
+  moduleAlerts: Array<{
+    moduleKey: string;
+    label: string;
+    eventName: string;
+    eventCount: number;
+    lastEventAt: string | null;
+    lastEventType: string | null;
+    lastSummary: string | null;
+    status: 'alerting' | 'stale' | 'healthy';
+  }>;
+  recentIncidents: Array<{
+    id: string;
+    source: 'realtime' | 'cron';
+    severity: 'info' | 'warning';
+    title: string;
+    summary: string;
+    createdAt: string;
+    moduleKey: string | null;
+    jobType: string | null;
+  }>;
+};
+
 export type PlatformSupportCasesResponse = {
   cases: Array<{
     id: string;

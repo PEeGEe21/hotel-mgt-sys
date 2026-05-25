@@ -44,6 +44,11 @@ const DASHBOARD_CONFIG_TTL_SECONDS = 5 * 60;
 const DASHBOARD_FEATURE_FLAGS_TTL_SECONDS = 2 * 60;
 const DASHBOARD_ADMIN_LAYOUTS_TTL_SECONDS = 5 * 60;
 const DASHBOARD_WIDGET_DEFAULT_TTL_SECONDS = 30;
+const DASHBOARD_WIDGET_FEATURE_FALLBACKS: Record<string, string> = {
+  housekeeping_queue: 'module_housekeeping',
+  my_tasks_today: 'module_housekeeping',
+  low_stock_alerts: 'module_inventory',
+};
 
 @Injectable()
 export class DashboardService {
@@ -52,6 +57,10 @@ export class DashboardService {
     private readonly cache: RedisCacheService,
     private readonly entitlementsService: EntitlementsService,
   ) {}
+
+  private resolveWidgetFeatureFlag(widget: { id: string; featureFlag: string | null }) {
+    return widget.featureFlag ?? DASHBOARD_WIDGET_FEATURE_FALLBACKS[widget.id] ?? null;
+  }
 
   async getConfig(userId: string) {
     const ctx = await this.getDashboardContext(userId);
@@ -82,7 +91,7 @@ export class DashboardService {
             id: entry.widget.id,
             title: entry.widget.title,
             permissionKey: entry.widget.permissionKey,
-            featureFlag: entry.widget.featureFlag,
+            featureFlag: this.resolveWidgetFeatureFlag(entry.widget),
             defaultEnabled: entry.widget.defaultEnabled,
             defaultSize: entry.widget.defaultSize,
             allowedSizes: entry.widget.allowedSizes,
@@ -126,7 +135,7 @@ export class DashboardService {
           widgetId: row.widgetId,
           title: row.widget.title,
           permissionKey: row.widget.permissionKey,
-          featureFlag: row.widget.featureFlag,
+          featureFlag: this.resolveWidgetFeatureFlag(row.widget),
           defaultSize: row.widget.defaultSize,
           allowedSizes: row.widget.allowedSizes,
           position: row.position,

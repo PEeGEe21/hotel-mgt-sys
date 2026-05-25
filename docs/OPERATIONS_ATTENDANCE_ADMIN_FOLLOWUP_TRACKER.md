@@ -104,7 +104,7 @@ Acceptance criteria:
 
 ## Phase 4: Attendance Stale Clock-out Policy
 
-Status: IN PROGRESS
+Status: DONE
 
 Goal:
 
@@ -135,22 +135,25 @@ Acceptance criteria:
 
 ## Phase 5: Shift-To-Staff Assignment
 
-Status: TODO
+Status: DONE
 
 Goal:
 
 - make shifts the expectation layer for attendance instead of standalone templates
+- add a dedicated override scheduling layer so operations do not need to edit staff records for every temporary shift change
 
 Build in `apps/api`:
 
 - staff default shift assignment
 - optional date-specific override structure
 - shift-aware attendance evaluation
+- override CRUD endpoints for attendance operations
 
 Build in `apps/web`:
 
 - assign default shift on staff detail or staff management
 - show active shift context on clock and attendance views
+- dedicated `Attendance > Shift Schedule` page for override management
 
 Primary files:
 
@@ -162,12 +165,13 @@ Primary files:
 Acceptance criteria:
 
 - staff can be assigned a default shift
+- temporary overrides can be created without editing the staff profile
 - attendance can reference assigned shift windows
 - groundwork exists for late, early-out, and off-shift evaluation
 
 ## Phase 6: Super Admin Hotel Error Observability
 
-Status: TODO
+Status: DONE
 
 Goal:
 

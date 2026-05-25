@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/api';
 
 export type HotelEntitlementsResponse = {
@@ -37,6 +37,14 @@ export type HotelEntitlementsResponse = {
     openCasesCount: number;
     contactMode: string;
   };
+  dashboardBanner: {
+    key: string;
+    severity: 'warning' | 'critical';
+    allowDismiss: boolean;
+    contextHash: string;
+    autoDismissHours: number;
+    dismissed: boolean;
+  };
   requestablePlans: Array<{
     id: string;
     code: string;
@@ -53,5 +61,19 @@ export function useHotelEntitlements() {
       return data;
     },
     staleTime: 60_000,
+  });
+}
+
+export function useDismissHotelBanner() {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (key: string) => {
+      const { data } = await api.patch(`/hotels/me/banner-dismissals/${key}`, {});
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['hotel', 'entitlements'] });
+    },
   });
 }

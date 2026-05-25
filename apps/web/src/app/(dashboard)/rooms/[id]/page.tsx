@@ -40,12 +40,14 @@ import { useAddFolioItem, useCheckOut } from '@/hooks/useReservations';
 import { useCreateTask, useAssignTask, useHKStaff } from '@/hooks/useHousekeeping';
 import { useCreateFacilityMaintenance } from '@/hooks/facility/useFacilityMaintenance';
 import { FeatureGate } from '@/components/hotel/FeatureGate';
+import { useHotelFeatureAccess } from '@/hooks/hotel/useHotelFeatureAccess';
 import { useHotelProfile } from '@/hooks/hotel/useHotelProfile';
 import TableScroll from '@/components/ui/table-scroll';
 import { useAppStore } from '@/store/app.store';
 import openToast from '@/components/ToastComponent';
 import NewReservationModal from '../../reservations/_components/NewReservationModal';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { usePermissions } from '@/hooks/usePermissions';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 type FolioItem = {
@@ -742,7 +744,9 @@ export default function RoomDetailPage() {
   const hotel = useAppStore((state) => state.hotel);
   const currency = hotel?.currency || 'NGN';
   const { data: room, isLoading, isError } = useRoom(id);
+  const { data: featureAccess } = useHotelFeatureAccess();
   const { data: hotelProfile } = useHotelProfile();
+  const { can, ready: permissionsReady } = usePermissions();
   const [resPage, setResPage] = useState(1);
   const resLimit = 6;
   const { data: resPageData, isLoading: resLoading } = useRoomReservations(id, {
@@ -787,6 +791,10 @@ export default function RoomDetailPage() {
   const openHousekeepingTask = cleaning.find(
     (task) => task.status !== 'DONE' && task.status !== 'SKIPPED',
   );
+  const housekeepingEnabled = featureAccess?.flags?.module_housekeeping !== false;
+  const facilitiesEnabled = featureAccess?.flags?.module_facilities !== false;
+  const canManageHousekeeping = !permissionsReady || can('manage:housekeeping');
+  const canCreateFacilities = !permissionsReady || can('create:facilities');
 
   // ── Loading / error ──
   if (isLoading)
@@ -811,6 +819,14 @@ export default function RoomDetailPage() {
   };
 
   const handleRequestCleaning = async () => {
+    if (!housekeepingEnabled) {
+      openToast('info', 'Housekeeping is not enabled for this hotel plan.');
+      return;
+    }
+    if (!canManageHousekeeping) {
+      openToast('error', 'You do not have permission to manage housekeeping.');
+      return;
+    }
     try {
       await createTask.mutateAsync({
         roomId: room.id,
@@ -820,6 +836,32 @@ export default function RoomDetailPage() {
       });
       setActiveTab('housekeeping');
     } catch {}
+  };
+
+  const handleLogIssue = () => {
+    if (!facilitiesEnabled) {
+      openToast('info', 'Facilities is not enabled for this hotel plan.');
+      return;
+    }
+    if (!canCreateFacilities) {
+      openToast('error', 'You do not have permission to log maintenance issues.');
+      return;
+    }
+    setActiveTab('maintenance');
+    setShowLogIssue(true);
+  };
+
+  const handleAssignHousekeeper = () => {
+    if (!housekeepingEnabled) {
+      openToast('info', 'Housekeeping is not enabled for this hotel plan.');
+      return;
+    }
+    if (!canManageHousekeeping) {
+      openToast('error', 'You do not have permission to manage housekeeping.');
+      return;
+    }
+    setActiveTab('housekeeping');
+    setShowAssignHousekeeper(true);
   };
 
   const handleCheckOut = async () => {
@@ -951,18 +993,22 @@ export default function RoomDetailPage() {
                 icon={DollarSign}
                 onClick={() => setActiveTab('folio')}
               />
-              <Tab
-                label="Housekeeping"
-                active={activeTab === 'housekeeping'}
-                icon={Sparkles}
-                onClick={() => setActiveTab('housekeeping')}
-              />
-              <Tab
-                label="Maintenance"
-                active={activeTab === 'maintenance'}
-                icon={Wrench}
-                onClick={() => setActiveTab('maintenance')}
-              />
+              {housekeepingEnabled ? (
+                <Tab
+                  label="Housekeeping"
+                  active={activeTab === 'housekeeping'}
+                  icon={Sparkles}
+                  onClick={() => setActiveTab('housekeeping')}
+                />
+              ) : null}
+              {facilitiesEnabled ? (
+                <Tab
+                  label="Maintenance"
+                  active={activeTab === 'maintenance'}
+                  icon={Wrench}
+                  onClick={() => setActiveTab('maintenance')}
+                />
+              ) : null}
             </div>
           </div>
 
@@ -1268,24 +1314,21 @@ export default function RoomDetailPage() {
                         icon: Sparkles,
                         color: 'text-amber-400  hover:bg-amber-500/10',
                         onClick: handleRequestCleaning,
+                        hidden: !housekeepingEnabled || !canManageHousekeeping,
                       },
                       {
                         label: 'Log Maintenance Issue',
                         icon: Wrench,
                         color: 'text-orange-400 hover:bg-orange-500/10',
-                        onClick: () => {
-                          setActiveTab('maintenance');
-                          setShowLogIssue(true);
-                        },
+                        onClick: handleLogIssue,
+                        hidden: !facilitiesEnabled || !canCreateFacilities,
                       },
                       {
                         label: 'Assign Housekeeper',
                         icon: UserCheck,
                         color: 'text-blue-400   hover:bg-blue-500/10',
-                        onClick: () => {
-                          setActiveTab('housekeeping');
-                          setShowAssignHousekeeper(true);
-                        },
+                        onClick: handleAssignHousekeeper,
+                        hidden: !housekeepingEnabled || !canManageHousekeeping,
                       },
                       {
                         label: 'View Reservations',
@@ -1293,7 +1336,7 @@ export default function RoomDetailPage() {
                         color: 'text-violet-400 hover:bg-violet-500/10',
                         onClick: handleViewReservations,
                       },
-                    ].map(({ label, icon: Icon, color, onClick }) => (
+                    ].filter((item) => !item.hidden).map(({ label, icon: Icon, color, onClick }) => (
                       <button
                         key={label}
                         onClick={onClick}
@@ -1423,12 +1466,13 @@ export default function RoomDetailPage() {
           )}
 
           {/* ── Housekeeping ── */}
-          {activeTab === 'housekeeping' && (
+          {activeTab === 'housekeeping' && housekeepingEnabled && (
             <div className="space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <p className="text-sm font-semibold text-white">Housekeeping Log</p>
                 <button
                   onClick={handleRequestCleaning}
+                  disabled={!canManageHousekeeping}
                   className="w-full sm:w-auto text-xs bg-amber-500/15 text-amber-400 hover:bg-amber-500/25 px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center justify-center gap-1.5"
                 >
                   <Sparkles size={12} /> Request Cleaning
@@ -1512,12 +1556,13 @@ export default function RoomDetailPage() {
           )}
 
           {/* ── Maintenance ── */}
-          {activeTab === 'maintenance' && (
+          {activeTab === 'maintenance' && facilitiesEnabled && (
             <div className="space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <p className="text-sm font-semibold text-white">Maintenance History</p>
                 <button
-                  onClick={() => setShowLogIssue(true)}
+                  onClick={handleLogIssue}
+                  disabled={!canCreateFacilities}
                   className="w-full sm:w-auto text-xs bg-orange-500/15 text-orange-400 hover:bg-orange-500/25 px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center justify-center gap-1.5"
                 >
                   <Wrench size={12} /> Log Issue
@@ -1686,14 +1731,14 @@ export default function RoomDetailPage() {
           onClose={() => setShowAddCharge(false)}
         />
       ) : null}
-      {showLogIssue ? (
+      {showLogIssue && facilitiesEnabled && canCreateFacilities ? (
         <CreateMaintenanceIssueModal
           roomId={room.id}
           onClose={() => setShowLogIssue(false)}
           onCreated={() => setActiveTab('maintenance')}
         />
       ) : null}
-      {showAssignHousekeeper ? (
+      {showAssignHousekeeper && housekeepingEnabled && canManageHousekeeping ? (
         <AssignHousekeeperModal
           roomId={room.id}
           existingTask={openHousekeepingTask}

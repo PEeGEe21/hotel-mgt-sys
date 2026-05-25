@@ -37,6 +37,7 @@ import { useHrContracts } from '@/hooks/hr/useHrContracts';
 import { formatDate, formatFileSize, formatMoney, titleizeStatus } from '@/utils/hr/contracts-utils';
 import { openHrContractDownload } from '@/hooks/useProxyActions';
 import { ConfirmActionDialog } from '@/components/ui/action-dialogs';
+import { useShiftTemplates } from '@/hooks/useShifts';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmt(iso: string) {
@@ -86,6 +87,7 @@ const TASK_TYPE_STYLE: Record<string, string> = {
 // ─── Edit Staff Modal ─────────────────────────────────────────────────────────
 function EditStaffModal({ staff, onClose }: { staff: ApiStaff; onClose: () => void }) {
   const update = useUpdateStaff(staff.id);
+  const { data: shifts = [] } = useShiftTemplates();
   const ROLES: StaffRole[] = [
     'ADMIN',
     'MANAGER',
@@ -105,6 +107,7 @@ function EditStaffModal({ staff, onClose }: { staff: ApiStaff; onClose: () => vo
     phone: staff.phone ?? '',
     salary: Number(staff.salary),
     role: staff.user.role,
+    shiftTemplateId: staff.defaultShift?.id ?? '',
   });
   const [error, setError] = useState('');
   const set = (k: string, v: any) => setForm((f) => ({ ...f, [k]: v }));
@@ -207,6 +210,21 @@ function EditStaffModal({ staff, onClose }: { staff: ApiStaff; onClose: () => vo
                 onChange={(e) => set('salary', Number(e.target.value))}
                 className={inputCls}
               />
+            </div>
+            <div>
+              <Label>Default Shift</Label>
+              <select
+                value={(form as any).shiftTemplateId}
+                onChange={(e) => set('shiftTemplateId', e.target.value)}
+                className={inputCls}
+              >
+                <option value="">No default shift</option>
+                {shifts.map((shift) => (
+                  <option key={shift.id} value={shift.id}>
+                    {shift.name} · {shift.startTime} → {shift.endTime}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
           <div>
@@ -559,6 +577,12 @@ export default function StaffDetailPage() {
                   { label: 'Phone', value: staff.phone ?? '—' },
                   { label: 'Department', value: staff.department },
                   { label: 'Position', value: staff.position },
+                  {
+                    label: 'Default Shift',
+                    value: staff.defaultShift
+                      ? `${staff.defaultShift.name} · ${staff.defaultShift.startTime} → ${staff.defaultShift.endTime}`
+                      : 'Unassigned',
+                  },
                   { label: 'System Role', value: staff.user.role },
                   { label: 'Employee No', value: staff.employeeCode },
                   { label: 'Hire Date', value: fmt(staff.hireDate) },

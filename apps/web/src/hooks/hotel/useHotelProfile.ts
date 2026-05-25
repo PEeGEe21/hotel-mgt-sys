@@ -32,6 +32,9 @@ export type HotelProfile = {
   attendancePinRequired?: boolean;
   attendanceKioskEnabled?: boolean;
   attendancePersonalEnabled?: boolean;
+  attendanceAutoClockOutEnabled?: boolean;
+  attendanceAutoClockOutHour?: number;
+  attendanceAutoClockOutMinute?: number;
   defaultCheckoutHour?: number;
   defaultCheckoutMinute?: number;
   guestCheckoutReminderEnabled?: boolean;
@@ -190,6 +193,9 @@ export function useUpdateHotelProfile() {
         attendancePinRequired: data.attendancePinRequired,
         attendanceKioskEnabled: data.attendanceKioskEnabled,
         attendancePersonalEnabled: data.attendancePersonalEnabled,
+        attendanceAutoClockOutEnabled: data.attendanceAutoClockOutEnabled,
+        attendanceAutoClockOutHour: data.attendanceAutoClockOutHour,
+        attendanceAutoClockOutMinute: data.attendanceAutoClockOutMinute,
         defaultCheckoutHour: data.defaultCheckoutHour,
         defaultCheckoutMinute: data.defaultCheckoutMinute,
         guestCheckoutReminderEnabled: data.guestCheckoutReminderEnabled,

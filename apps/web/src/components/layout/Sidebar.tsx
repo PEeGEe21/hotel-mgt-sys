@@ -134,6 +134,7 @@ function SidebarContent({
   canNav,
   can,
   featureFlags,
+  featureFlagsReady,
   openGroups,
   toggleGroup,
   isActive,
@@ -147,6 +148,7 @@ function SidebarContent({
   canNav: ReturnType<typeof usePermissions>['canNav'];
   can: ReturnType<typeof usePermissions>['can'];
   featureFlags?: Record<string, boolean>;
+  featureFlagsReady: boolean;
   openGroups: Record<string, boolean>;
   toggleGroup: (href: string) => void;
   isActive: (href: string) => boolean;
@@ -158,6 +160,7 @@ function SidebarContent({
     )?.[0];
 
     if (!featureKey) return true;
+    if (!featureFlagsReady) return false;
     return featureFlags?.[featureKey] !== false;
   };
 
@@ -357,7 +360,8 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
   const hotel = useAppStore((s) => s.hotel);
   const hydrated = useHydration();
   const { canNav, can, ready } = usePermissions();
-  const { data: featureAccess } = useHotelFeatureAccess();
+  const { data: featureAccess, isLoading: featureAccessLoading } = useHotelFeatureAccess();
+  const featureFlagsReady = !featureAccessLoading;
 
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
     const init: Record<string, boolean> = {};
@@ -386,6 +390,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
         canNav={canNav}
         can={can}
         featureFlags={featureAccess?.flags}
+        featureFlagsReady={featureFlagsReady}
         openGroups={openGroups}
         toggleGroup={toggleGroup}
         isActive={isActive}
@@ -420,6 +425,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
                   canNav={canNav}
                   can={can}
                   featureFlags={featureAccess?.flags}
+                  featureFlagsReady={featureFlagsReady}
                   openGroups={openGroups}
                   toggleGroup={toggleGroup}
                   isActive={isActive}

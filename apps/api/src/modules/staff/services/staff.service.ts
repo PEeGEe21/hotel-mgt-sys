@@ -60,6 +60,16 @@ const STAFF_INCLUDE = {
       mustChangePassword: true,
     },
   },
+  defaultShift: {
+    select: {
+      id: true,
+      name: true,
+      startTime: true,
+      endTime: true,
+      days: true,
+      color: true,
+    },
+  },
 } as const;
 
 function genUsername(firstName: string, lastName: string, email: string) {
@@ -89,6 +99,23 @@ export class StaffService {
     });
     if (!jobTitle) throw new NotFoundException('Job title not found.');
     return jobTitle;
+  }
+
+  private async ensureShiftTemplate(hotelId: string, shiftTemplateId?: string | null) {
+    if (!shiftTemplateId) return null;
+    const shiftTemplate = await this.prisma.shiftTemplate.findFirst({
+      where: { id: shiftTemplateId, hotelId },
+      select: {
+        id: true,
+        name: true,
+        startTime: true,
+        endTime: true,
+        days: true,
+        color: true,
+      },
+    });
+    if (!shiftTemplate) throw new NotFoundException('Shift template not found.');
+    return shiftTemplate;
   }
 
   private async setPinWithClient(
@@ -310,6 +337,7 @@ export class StaffService {
     }
 
     const jobTitle = await this.ensureJobTitle(hotelId, dto.jobTitleId?.trim() || null);
+    const shiftTemplate = await this.ensureShiftTemplate(hotelId, dto.shiftTemplateId?.trim() || null);
     const position = jobTitle?.name || dto.position;
     const department = dto.department || jobTitle?.department?.name || '';
 
@@ -345,6 +373,7 @@ export class StaffService {
           department,
           position,
           jobTitleId: jobTitle?.id || null,
+          shiftTemplateId: shiftTemplate?.id || null,
           salary: dto.salary ?? 0,
           hireDate: new Date(dto.hireDate),
         },
@@ -369,6 +398,10 @@ export class StaffService {
       dto.jobTitleId !== undefined
         ? await this.ensureJobTitle(hotelId, dto.jobTitleId?.trim() || null)
         : undefined;
+    const shiftTemplate =
+      dto.shiftTemplateId !== undefined
+        ? await this.ensureShiftTemplate(hotelId, dto.shiftTemplateId?.trim() || null)
+        : undefined;
 
     // If email changed, update user too
     const staffUpdate = this.prisma.staff.update({
@@ -385,6 +418,8 @@ export class StaffService {
               : undefined,
         position: dto.position !== undefined ? dto.position : jobTitle?.name || undefined,
         jobTitleId: dto.jobTitleId !== undefined ? jobTitle?.id || null : undefined,
+        shiftTemplateId:
+          dto.shiftTemplateId !== undefined ? shiftTemplate?.id || null : undefined,
         salary: dto.salary,
       },
       include: STAFF_INCLUDE,

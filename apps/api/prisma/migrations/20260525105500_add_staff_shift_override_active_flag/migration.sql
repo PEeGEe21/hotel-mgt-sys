@@ -1,0 +1,2 @@
+ALTER TABLE "StaffShiftOverride"
+ADD COLUMN "isActive" BOOLEAN NOT NULL DEFAULT true;

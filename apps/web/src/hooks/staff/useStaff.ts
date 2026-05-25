@@ -29,6 +29,7 @@ export type ApiStaff = {
   salary: number;
   hireDate: string;
   avatar: string | null;
+  shiftTemplateId?: string | null;
   createdAt: string;
   updatedAt: string;
   clockStatus?: 'Clocked In' | 'Clocked Out' | 'On Leave' | 'Not Clocked In';
@@ -46,6 +47,14 @@ export type ApiStaff = {
   tasks?: any[];
   leaves?: any[];
   attendance?: any[];
+  defaultShift?: {
+    id: string;
+    name: string;
+    startTime: string;
+    endTime: string;
+    days: string[];
+    color: string;
+  } | null;
 };
 
 export type CreateStaffInput = {
@@ -55,6 +64,7 @@ export type CreateStaffInput = {
   department: string;
   position: string;
   jobTitleId?: string;
+  shiftTemplateId?: string;
   role: StaffRole;
   hireDate: string;
   phone?: string;

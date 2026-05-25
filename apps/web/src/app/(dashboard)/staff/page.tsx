@@ -32,6 +32,7 @@ import Pagination from '@/components/ui/pagination';
 import TableScroll from '@/components/ui/table-scroll';
 import { usePresenceRealtime } from '@/hooks/usePresenceRealtime';
 import { useJobTitles } from '@/hooks/useJobTitles';
+import { useShiftTemplates } from '@/hooks/useShifts';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const CLOCK_STATUS_STYLE: Record<string, string> = {
@@ -63,6 +64,7 @@ function AddStaffModal({
   const createStaff = useCreateStaff();
   const { data: roles = [] } = useRoles();
   const { data: jobTitles = [] } = useJobTitles();
+  const { data: shifts = [] } = useShiftTemplates();
   const [form, setForm] = useState<CreateStaffInput>({
     firstName: '',
     lastName: '',
@@ -70,6 +72,7 @@ function AddStaffModal({
     department: '',
     position: '',
     jobTitleId: '',
+    shiftTemplateId: '',
     role: 'STAFF',
     hireDate: new Date().toISOString().slice(0, 10),
     phone: '',
@@ -287,6 +290,21 @@ function AddStaffModal({
                 </div>
               </div>
               <div>
+                <Label>Default Shift</Label>
+                <select
+                  value={form.shiftTemplateId}
+                  onChange={(e) => set('shiftTemplateId', e.target.value)}
+                  className={inputCls}
+                >
+                  <option value="">No default shift</option>
+                  {shifts.map((shift) => (
+                    <option key={shift.id} value={shift.id}>
+                      {shift.name} · {shift.startTime} → {shift.endTime}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
                 <Label>Salary (₦/month)</Label>
                 <input
                   type="number"
@@ -489,7 +507,7 @@ export default function StaffPage() {
             <table className="w-full">
               <thead className="border-b border-[#1e2536] bg-[#0f1117]/50">
                 <tr>
-                  {['Staff Member', 'Contact', 'Department', 'Role', 'Status', 'Presence', 'Salary', ''].map(
+                  {['Staff Member', 'Contact', 'Department', 'Shift', 'Role', 'Status', 'Presence', 'Salary', ''].map(
                     (h) => (
                       <th
                         key={h}
@@ -555,6 +573,18 @@ export default function StaffPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3">
+                      {s.defaultShift ? (
+                        <div>
+                          <p className="text-xs text-slate-300">{s.defaultShift.name}</p>
+                          <p className="text-[11px] text-slate-600 mt-1">
+                            {s.defaultShift.startTime} → {s.defaultShift.endTime}
+                          </p>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-slate-600">Unassigned</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
                       <span
                         className={`text-xs font-medium ${ROLE_COLOR[s.user.role] ?? 'text-slate-400'}`}
                       >
@@ -594,7 +624,7 @@ export default function StaffPage() {
                 ))}
                 {staff.length === 0 && !isLoading && (
                   <tr>
-                    <td colSpan={8} className="py-16 text-center">
+                    <td colSpan={9} className="py-16 text-center">
                       <UserCheck size={32} className="text-slate-700 mx-auto mb-3" />
                       <p className="text-slate-500 text-sm">No staff found</p>
                     </td>

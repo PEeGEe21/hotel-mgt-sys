@@ -172,7 +172,12 @@ export default function ShiftsPage() {
                   </div>
                   <div>
                     <p className="text-sm font-semibold text-slate-200">{shift.name} Shift</p>
-                    <p className="text-xs text-slate-500 mt-0.5">{shift.startTime} → {shift.endTime} · {duration(shift)}h</p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {shift.startTime} → {shift.endTime} · {duration(shift)}h
+                      {typeof shift._count?.defaultStaff === 'number'
+                        ? ` · ${shift._count.defaultStaff} assigned`
+                        : ''}
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-4">

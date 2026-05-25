@@ -13,6 +13,8 @@ type AttendanceRecord = {
   id: string;
   type: 'CLOCK_IN' | 'CLOCK_OUT';
   timestamp: string;
+  method?: string;
+  note?: string | null;
 };
 
 type TodayStatus = {
@@ -21,6 +23,14 @@ type TodayStatus = {
   totalMinutes: number;
   lastClockInAt: string | null;
   lastClockOutAt: string | null;
+  assignedShift?: {
+    id: string;
+    name: string;
+    startTime: string;
+    endTime: string;
+    days: string[];
+    color: string;
+  } | null;
 };
 
 function formatTime(value?: string | null) {
@@ -51,6 +61,11 @@ export default function PersonalClockPage() {
     const minutes = status?.totalMinutes ?? 0;
     return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
   }, [status?.totalMinutes]);
+
+  const autoClockOutRecord = useMemo(
+    () => status?.records.find((record) => record.type === 'CLOCK_OUT' && record.method === 'AUTO_CLOCK_OUT') ?? null,
+    [status?.records],
+  );
 
   const loadStatus = async () => {
     setError('');
@@ -157,6 +172,12 @@ export default function PersonalClockPage() {
             </p>
           )}
 
+          {autoClockOutRecord ? (
+            <p className="text-amber-300 text-sm bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
+              A previous-day open session was auto-closed today. {autoClockOutRecord.note ?? ''}
+            </p>
+          ) : null}
+
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-2.5">
               <p className="text-xs text-slate-500">Last Clock In</p>
@@ -177,6 +198,22 @@ export default function PersonalClockPage() {
               <Timer size={14} /> Total today
             </div>
             <p className="text-sm font-semibold text-white">{totalLabel}</p>
+          </div>
+
+          <div className="flex items-center justify-between bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-2.5">
+            <div className="flex items-center gap-2 text-slate-400 text-sm">
+              <ShieldCheck size={14} /> Assigned shift
+            </div>
+            <div className="text-right">
+              <p className="text-sm font-semibold text-white">
+                {status?.assignedShift?.name ?? 'No default shift'}
+              </p>
+              {status?.assignedShift ? (
+                <p className="text-xs text-slate-500 mt-1">
+                  {status.assignedShift.startTime} → {status.assignedShift.endTime}
+                </p>
+              ) : null}
+            </div>
           </div>
 
           <div>
@@ -211,6 +248,7 @@ export default function PersonalClockPage() {
           </div>
           <ul className="text-sm text-slate-500 space-y-2">
             <li>Only one active session is allowed per day.</li>
+            <li>Previous-day open sessions can be auto-closed by hotel policy before a new clock-in.</li>
             <li>Use the kiosk if your account is disabled.</li>
             <li>Contact HR if your status looks incorrect.</li>
           </ul>

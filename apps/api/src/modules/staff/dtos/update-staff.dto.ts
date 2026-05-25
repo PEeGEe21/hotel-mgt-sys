@@ -10,6 +10,7 @@ export class UpdateStaffDto {
   @ApiPropertyOptional() @IsString()  @IsOptional() department?:  string;
   @ApiPropertyOptional() @IsString()  @IsOptional() position?:    string;
   @ApiPropertyOptional() @IsString()  @IsOptional() jobTitleId?:  string;
+  @ApiPropertyOptional() @IsString()  @IsOptional() shiftTemplateId?: string;
   @ApiPropertyOptional({ enum: Role }) @IsEnum(Role) @IsOptional() role?: Role;
   @ApiPropertyOptional() @IsString()  @IsOptional() phone?:       string;
   @ApiPropertyOptional() @IsNumber() @Min(0) @IsOptional() salary?: number;

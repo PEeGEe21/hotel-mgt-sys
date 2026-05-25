@@ -6,6 +6,7 @@ import type {
   PlatformActivityFeedResponse,
   PlatformAuditLogsResponse,
   PlatformFeatureCatalogOverviewResponse,
+  PlatformHotelObservabilityResponse,
   PlatformHotelEntitlementsResponse,
   PlatformHotelsResponse,
   PlatformSearchResponse,
@@ -94,6 +95,14 @@ export function usePlatformHotelEntitlements(id: string) {
   return useQuery<PlatformHotelEntitlementsResponse>({
     queryKey: ['platform', 'hotel', id, 'entitlements'],
     queryFn: () => platformClientFetch(`/hotels/${id}/entitlements`),
+    enabled: !!id,
+  });
+}
+
+export function usePlatformHotelObservability(id: string) {
+  return useQuery<PlatformHotelObservabilityResponse>({
+    queryKey: ['platform', 'hotel', id, 'observability'],
+    queryFn: () => platformClientFetch(`/hotels/${id}/observability`),
     enabled: !!id,
   });
 }

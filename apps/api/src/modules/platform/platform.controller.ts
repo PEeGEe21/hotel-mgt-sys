@@ -31,6 +31,7 @@ import { UpdateSubscriptionPlanDto } from './dtos/update-subscription-plan.dto';
 import { UpdateHotelSubscriptionDto } from './dtos/update-hotel-subscription.dto';
 import { UpdatePlanEntitlementsDto } from './dtos/update-plan-entitlements.dto';
 import { UpdateHotelFeatureFlagDto } from './dtos/update-hotel-feature-flag.dto';
+import { CreateFeatureFlagDto } from './dtos/create-feature-flag.dto';
 import { CreateSupportCaseDto } from './dtos/create-support-case.dto';
 import { UpdateSupportCaseDto } from './dtos/update-support-case.dto';
 import { CreateSupportCommentDto } from './dtos/create-support-comment.dto';
@@ -86,6 +87,13 @@ export class PlatformController {
   @ApiOperation({ summary: 'Get resolved hotel entitlements for platform review' })
   getHotelEntitlements(@Param('id') id: string) {
     return this.platformService.getHotelEntitlements(id);
+  }
+
+  @Get('hotels/:id/observability')
+  @Permissions('platform:view-hotels')
+  @ApiOperation({ summary: 'Get hotel-level observability summary for platform support and operations' })
+  getHotelObservability(@Param('id') id: string) {
+    return this.platformService.getHotelObservability(id);
   }
 
   @Get('users')
@@ -183,6 +191,13 @@ export class PlatformController {
   @ApiOperation({ summary: 'Get platform feature catalog with plan and hotel override summaries' })
   getFeatureFlags() {
     return this.platformService.getFeatureCatalogOverview();
+  }
+
+  @Post('feature-flags')
+  @Permissions('platform:manage-hotels')
+  @ApiOperation({ summary: 'Create a new feature catalog entry for plans and hotel overrides' })
+  createFeatureFlag(@Request() req: any, @Body() dto: CreateFeatureFlagDto) {
+    return this.platformService.createFeatureFlag(req.user.sub, dto);
   }
 
   @Get('support')

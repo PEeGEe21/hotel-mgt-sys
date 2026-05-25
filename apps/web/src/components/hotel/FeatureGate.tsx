@@ -162,7 +162,7 @@ export function FeatureGate({
   }
 
   if (isLoading) {
-    return <>{children}</>;
+    return null;
   }
 
   if (featureAccess?.flags?.[flagKey] !== false) {

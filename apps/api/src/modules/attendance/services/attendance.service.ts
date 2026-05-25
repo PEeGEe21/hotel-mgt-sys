@@ -760,9 +760,30 @@ export class AttendanceService {
   }
 
   private async getTodayStatusByStaffId(staffId: string) {
-    const today = dayjs().startOf('day').toDate();
+    const today = dayjs().startOf('day');
+    const staff = await this.prisma.staff.findFirst({
+      where: { id: staffId },
+      select: {
+        id: true,
+        shiftTemplateId: true,
+        defaultShift: {
+          select: {
+            id: true,
+            name: true,
+            startTime: true,
+            endTime: true,
+            days: true,
+            color: true,
+          },
+        },
+      },
+    });
+    const assignedShift = staff
+      ? await this.resolveAssignedShiftForDate(staff.id, today.toDate(), staff)
+      : null;
+    const todayDate = today.toDate();
     const records = await this.prisma.attendance.findMany({
-      where: { staffId, timestamp: { gte: today } },
+      where: { staffId, timestamp: { gte: todayDate } },
       orderBy: { timestamp: 'asc' },
     });
     const last = records[records.length - 1];
@@ -772,10 +793,124 @@ export class AttendanceService {
       totalMinutes: this.calcTotalMinutes(records),
       lastClockInAt: records.filter((r) => r.type === 'CLOCK_IN').at(-1)?.timestamp ?? null,
       lastClockOutAt: records.filter((r) => r.type === 'CLOCK_OUT').at(-1)?.timestamp ?? null,
+      assignedShift,
+    };
+  }
+
+  private async resolveAssignedShiftForDate(
+    staffId: string,
+    date: Date,
+    staffRecord?: {
+      id: string;
+      defaultShift?: {
+        id: string;
+        name: string;
+        startTime: string;
+        endTime: string;
+        days: string[];
+        color: string;
+      } | null;
+    } | null,
+  ) {
+    const dayStart = dayjs(date).startOf('day').toDate();
+    const dayEnd = dayjs(date).endOf('day').toDate();
+    const override = await (this.prisma as any).staffShiftOverride.findFirst({
+      where: {
+        staffId,
+        isActive: true,
+        dateFrom: { lte: dayEnd },
+        dateTo: { gte: dayStart },
+      },
+      orderBy: [{ dateFrom: 'desc' }, { createdAt: 'desc' }],
+      select: {
+        shiftTemplate: {
+          select: {
+            id: true,
+            name: true,
+            startTime: true,
+            endTime: true,
+            days: true,
+            color: true,
+          },
+        },
+      },
+    });
+
+    if (override?.shiftTemplate) return override.shiftTemplate;
+    return staffRecord?.defaultShift ?? null;
+  }
+
+  private resolveShiftAwareAutoClockOutTime(params: {
+    clockInAt: Date;
+    shift?: {
+      startTime: string;
+      endTime: string;
+      days: string[];
+    } | null;
+    fallbackHour: number;
+    fallbackMinute: number;
+  }) {
+    const { clockInAt, shift, fallbackHour, fallbackMinute } = params;
+    const sessionDay = dayjs(clockInAt);
+    const fallback = sessionDay
+      .add(1, 'day')
+      .startOf('day')
+      .add(fallbackHour, 'hour')
+      .add(fallbackMinute, 'minute');
+
+    if (!shift) return { effective: fallback, source: 'hotel_policy' as const };
+
+    const dayLabel = sessionDay.format('ddd');
+    if (Array.isArray(shift.days) && shift.days.length > 0 && !shift.days.includes(dayLabel)) {
+      return { effective: fallback, source: 'hotel_policy' as const };
+    }
+
+    const [startHour, startMinute] = shift.startTime.split(':').map(Number);
+    const [endHour, endMinute] = shift.endTime.split(':').map(Number);
+    if (
+      [startHour, startMinute, endHour, endMinute].some((value) => Number.isNaN(value))
+    ) {
+      return { effective: fallback, source: 'hotel_policy' as const };
+    }
+
+    const shiftStart = sessionDay.startOf('day').add(startHour, 'hour').add(startMinute, 'minute');
+    let shiftEnd = sessionDay.startOf('day').add(endHour, 'hour').add(endMinute, 'minute');
+    if (!shiftEnd.isAfter(shiftStart)) {
+      shiftEnd = shiftEnd.add(1, 'day');
+    }
+
+    return {
+      effective: shiftEnd,
+      source: 'assigned_shift' as const,
     };
   }
 
   private async autoCloseStaleSession(staffId: string, hotelId: string) {
+    const staff = await this.prisma.staff.findFirst({
+      where: { id: staffId, hotelId },
+      select: {
+        id: true,
+        hotel: {
+          select: {
+            attendanceAutoClockOutEnabled: true,
+            attendanceAutoClockOutHour: true,
+            attendanceAutoClockOutMinute: true,
+          },
+        },
+        defaultShift: {
+          select: {
+            id: true,
+            name: true,
+            startTime: true,
+            endTime: true,
+            days: true,
+            color: true,
+          },
+        },
+      },
+    });
+    if (!staff?.hotel?.attendanceAutoClockOutEnabled) return null;
+
     const todayStart = dayjs().startOf('day');
     const lastRecord = await this.prisma.attendance.findFirst({
       where: { staffId },
@@ -786,14 +921,26 @@ export class AttendanceService {
     if (lastRecord.type !== AttendanceType.CLOCK_IN) return null;
     if (!dayjs(lastRecord.timestamp).isBefore(todayStart)) return null;
 
+    const closeTime = this.resolveShiftAwareAutoClockOutTime({
+      clockInAt: lastRecord.timestamp,
+      shift: await this.resolveAssignedShiftForDate(staffId, lastRecord.timestamp, staff),
+      fallbackHour: staff.hotel.attendanceAutoClockOutHour ?? 0,
+      fallbackMinute: staff.hotel.attendanceAutoClockOutMinute ?? 0,
+    });
+    const effectiveCloseTime = closeTime.effective.isAfter(dayjs()) ? dayjs() : closeTime.effective;
+    const basisLabel =
+      closeTime.source === 'assigned_shift'
+        ? `${staff.defaultShift?.name ?? 'assigned shift'} end`
+        : 'hotel policy';
+
     return this.prisma.attendance.create({
       data: {
         staffId,
         hotelId,
         type: AttendanceType.CLOCK_OUT,
-        timestamp: todayStart.toDate(),
+        timestamp: effectiveCloseTime.toDate(),
         method: 'AUTO_CLOCK_OUT',
-        note: `Automatically clocked out at start of day after a previous-day open attendance session from ${dayjs(lastRecord.timestamp).format('YYYY-MM-DD HH:mm')}.`,
+        note: `Automatically clocked out after a previous-day open attendance session from ${dayjs(lastRecord.timestamp).format('YYYY-MM-DD HH:mm')}. Close basis: ${basisLabel}. Target close time ${closeTime.effective.format('YYYY-MM-DD HH:mm')}.`,
       },
     });
   }

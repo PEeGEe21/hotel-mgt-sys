@@ -269,6 +269,9 @@ model Hotel {
   attendancePinRequired               Boolean  @default(false)
   attendanceKioskEnabled              Boolean  @default(true)
   attendancePersonalEnabled           Boolean  @default(true)
+  attendanceAutoClockOutEnabled       Boolean  @default(true)
+  attendanceAutoClockOutHour          Int      @default(0)
+  attendanceAutoClockOutMinute        Int      @default(0)
   defaultCheckoutHour                 Int      @default(12)
   defaultCheckoutMinute               Int      @default(0)
   guestCheckoutReminderEnabled        Boolean  @default(false)
@@ -312,6 +315,7 @@ model Hotel {
   posProductCategories    PosProductCategory[]
   suppliers               Supplier[]
   shiftTemplates          ShiftTemplate[]
+  staffShiftOverrides     StaffShiftOverride[]
   roomTypeConfigs         RoomTypeConfig[]
   hrContracts             HrContract[]
   hrContractDocuments     HrContractDocument[]
@@ -340,6 +344,23 @@ model Hotel {
   subscriptions           HotelSubscription[]
   featureOverrides        HotelFeatureOverride[]
   supportCases            SupportCase[]
+  bannerDismissals        HotelBannerDismissal[]
+}
+
+model HotelBannerDismissal {
+  id                String   @id @default(uuid())
+  hotelId           String
+  key               String
+  contextHash       String
+  dismissedUntil    DateTime
+  dismissedByUserId String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  hotel Hotel @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+
+  @@unique([hotelId, key])
+  @@index([hotelId, dismissedUntil])
 }
 
 model DashboardWidget {
@@ -697,6 +718,7 @@ model Staff {
   userId            String    @unique
   hotelId           String
   jobTitleId        String?
+  shiftTemplateId   String?
   employeeCode      String    @unique
   firstName         String
   lastName          String
@@ -717,6 +739,7 @@ model Staff {
   user                          User                  @relation(fields: [userId], references: [id])
   hotel                         Hotel                 @relation(fields: [hotelId], references: [id])
   jobTitle                      JobTitle?             @relation(fields: [jobTitleId], references: [id])
+  defaultShift                  ShiftTemplate?        @relation(fields: [shiftTemplateId], references: [id])
   operatingTerminals            PosTerminal[]         @relation("CurrentTerminalStaff")
   attendance                    Attendance[]
   leaves                        Leave[]
@@ -735,8 +758,10 @@ model Staff {
   facilityInspectionsScheduled  FacilityInspection[]  @relation("FacilityInspectionScheduledBy")
   hrContracts                   HrContract[]
   compensationHistory           StaffCompensationHistory[]
+  shiftOverrides               StaffShiftOverride[]
 
   @@index([hotelId, jobTitleId])
+  @@index([hotelId, shiftTemplateId])
 }
 
 model Attendance {
@@ -1042,10 +1067,32 @@ model ShiftTemplate {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  hotel Hotel @relation(fields: [hotelId], references: [id])
+  hotel        Hotel   @relation(fields: [hotelId], references: [id])
+  defaultStaff Staff[]
+  overrides    StaffShiftOverride[]
 
   @@unique([hotelId, name])
   @@index([hotelId])
+}
+
+model StaffShiftOverride {
+  id              String   @id @default(uuid())
+  hotelId         String
+  staffId         String
+  shiftTemplateId String
+  isActive        Boolean  @default(true)
+  dateFrom        DateTime
+  dateTo          DateTime
+  reason          String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  hotel         Hotel         @relation(fields: [hotelId], references: [id])
+  staff         Staff         @relation(fields: [staffId], references: [id])
+  shiftTemplate ShiftTemplate @relation(fields: [shiftTemplateId], references: [id])
+
+  @@index([hotelId, staffId, dateFrom, dateTo])
+  @@index([hotelId, shiftTemplateId])
 }
 
 // ─── ROOM TYPE CONFIGS ──────────────────────────────────────────────────────

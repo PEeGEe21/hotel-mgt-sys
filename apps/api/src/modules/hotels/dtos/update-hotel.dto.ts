@@ -114,6 +114,9 @@ export class UpdateHotelDto {
   @ApiPropertyOptional() @IsBoolean() @IsOptional() attendancePinRequired?: boolean;
   @ApiPropertyOptional() @IsBoolean() @IsOptional() attendanceKioskEnabled?: boolean;
   @ApiPropertyOptional() @IsBoolean() @IsOptional() attendancePersonalEnabled?: boolean;
+  @ApiPropertyOptional() @IsBoolean() @IsOptional() attendanceAutoClockOutEnabled?: boolean;
+  @ApiPropertyOptional() @IsInt() @Min(0) @Max(23) @IsOptional() attendanceAutoClockOutHour?: number;
+  @ApiPropertyOptional() @IsInt() @Min(0) @Max(59) @IsOptional() attendanceAutoClockOutMinute?: number;
   @ApiPropertyOptional() @IsInt() @Min(0) @Max(23) @IsOptional() defaultCheckoutHour?: number;
   @ApiPropertyOptional() @IsInt() @Min(0) @Max(59) @IsOptional() defaultCheckoutMinute?: number;
   @ApiPropertyOptional() @IsBoolean() @IsOptional() guestCheckoutReminderEnabled?: boolean;

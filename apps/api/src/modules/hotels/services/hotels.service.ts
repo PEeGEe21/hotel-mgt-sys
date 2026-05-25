@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { HotelCronJobType } from '@prisma/client';
 import { Prisma } from '@prisma/client';
+import dayjs from 'dayjs';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { UpdateHotelDto } from '../dtos/update-hotel.dto';
 import { RunnableHotelCronJob, RunHotelCronJobDto } from '../dtos/run-hotel-cron-job.dto';
@@ -598,6 +599,29 @@ export class HotelsService {
       throw new NotFoundException('Hotel not found.');
     }
 
+    const dashboardBanner = this.buildDashboardBannerState({
+      subscriptionStatus: resolved.subscriptionStatus,
+      planName: resolved.plan?.name ?? null,
+      warnings: resolved.warnings,
+      openCasesCount,
+    });
+
+    const bannerDismissals = (this.prisma as any).hotelBannerDismissal;
+    const dismissal = bannerDismissals
+      ? await bannerDismissals.findUnique({
+          where: {
+            hotelId_key: {
+              hotelId,
+              key: dashboardBanner.key,
+            },
+          },
+          select: {
+            contextHash: true,
+            dismissedUntil: true,
+          },
+        })
+      : null;
+
     return {
       hotel: {
         id: hotel.id,
@@ -618,6 +642,14 @@ export class HotelsService {
         openCasesCount,
         contactMode: 'IN_APP_CASES',
       },
+      dashboardBanner: {
+        ...dashboardBanner,
+        dismissed:
+          dashboardBanner.allowDismiss &&
+          dismissal?.contextHash === dashboardBanner.contextHash &&
+          dismissal?.dismissedUntil &&
+          new Date(dismissal.dismissedUntil).getTime() > Date.now(),
+      },
       requestablePlans: plans
         .filter((plan: any) => plan.code !== resolved.plan?.code)
         .map((plan: any) => ({
@@ -627,6 +659,85 @@ export class HotelsService {
           description: plan.description ?? null,
         })),
     };
+  }
+
+  private buildDashboardBannerState(args: {
+    subscriptionStatus: string;
+    planName: string | null;
+    warnings: string[];
+    openCasesCount: number;
+  }) {
+    const criticalStatuses = new Set(['SUSPENDED', 'EXPIRED', 'CANCELLED']);
+    const severity = criticalStatuses.has(args.subscriptionStatus) ? 'critical' : 'warning';
+    const allowDismiss = severity !== 'critical';
+
+    return {
+      key: 'tenant_entitlement_compact',
+      severity,
+      allowDismiss,
+      contextHash: JSON.stringify({
+        subscriptionStatus: args.subscriptionStatus,
+        planName: args.planName,
+        warnings: args.warnings,
+        openCasesCount: args.openCasesCount,
+      }),
+      autoDismissHours: 24,
+    };
+  }
+
+  async dismissBanner(
+    hotelId: string,
+    actorUserId: string,
+    key: string,
+    dismissedUntilHours?: number,
+  ) {
+    const entitlements = await this.getEntitlements(hotelId);
+    const banner = entitlements.dashboardBanner;
+
+    if (!banner || banner.key !== key) {
+      throw new NotFoundException('Banner not found.');
+    }
+
+    if (!banner.allowDismiss) {
+      throw new BadRequestException('This banner cannot be dismissed right now.');
+    }
+
+    const hours =
+      typeof dismissedUntilHours === 'number' && dismissedUntilHours > 0
+        ? dismissedUntilHours
+        : banner.autoDismissHours;
+
+    const bannerDismissals = (this.prisma as any).hotelBannerDismissal;
+    if (!bannerDismissals) {
+      throw new BadRequestException(
+        'Banner dismissal storage is not available yet. Run the latest database migration first.',
+      );
+    }
+
+    const dismissedUntil = dayjs().add(hours, 'hour').toDate();
+
+    await bannerDismissals.upsert({
+      where: {
+        hotelId_key: {
+          hotelId,
+          key,
+        },
+      },
+      update: {
+        contextHash: banner.contextHash,
+        dismissedUntil,
+        dismissedByUserId: actorUserId,
+      },
+      create: {
+        hotelId,
+        key,
+        contextHash: banner.contextHash,
+        dismissedUntil,
+        dismissedByUserId: actorUserId,
+      },
+    });
+
+    return { success: true, key, dismissedUntil };
   }
 
   async updateProfile(hotelId: string, dto: UpdateHotelDto, actorUserId?: string) {

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Patch, Post, Request, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Request, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { Permissions, PermissionsGuard } from '../../auth/guards';
@@ -29,6 +29,21 @@ export class HotelsController {
   @Permissions('view:settings')
   getEntitlements(@Request() req: any) {
     return this.hotelsService.getEntitlements(req.user.hotelId);
+  }
+
+  @Patch('me/banner-dismissals/:key')
+  @Permissions('manage:settings')
+  dismissBanner(
+    @Request() req: any,
+    @Param('key') key: string,
+    @Body() body: { dismissedUntilHours?: number },
+  ) {
+    return this.hotelsService.dismissBanner(
+      req.user.hotelId,
+      req.user.sub,
+      key,
+      body?.dismissedUntilHours,
+    );
   }
 
   @Patch('me')

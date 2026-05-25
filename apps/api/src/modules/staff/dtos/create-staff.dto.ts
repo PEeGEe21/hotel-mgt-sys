@@ -11,6 +11,7 @@ export class CreateStaffDto {
   @ApiProperty() @IsString() department!: string;
   @ApiProperty() @IsString() position!: string;
   @ApiPropertyOptional() @IsString() @IsOptional() jobTitleId?: string;
+  @ApiPropertyOptional() @IsString() @IsOptional() shiftTemplateId?: string;
   @ApiProperty({ enum: Role })
   @IsEnum(Role)
   role!: Role;

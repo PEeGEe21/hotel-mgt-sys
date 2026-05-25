@@ -13,6 +13,7 @@ import { UpdateSubscriptionPlanDto } from './dtos/update-subscription-plan.dto';
 import { UpdateHotelSubscriptionDto } from './dtos/update-hotel-subscription.dto';
 import { UpdatePlanEntitlementsDto } from './dtos/update-plan-entitlements.dto';
 import { UpdateHotelFeatureFlagDto } from './dtos/update-hotel-feature-flag.dto';
+import { CreateFeatureFlagDto } from './dtos/create-feature-flag.dto';
 import { RedisCacheService } from '../../common/redis/redis-cache.service';
 import { EntitlementsService, HotelEntitlementSnapshot } from '../entitlements/entitlements.service';
 import { CreateSupportCaseDto } from './dtos/create-support-case.dto';
@@ -62,6 +63,13 @@ const SUPPORT_COMMENT_VISIBILITIES = ['INTERNAL', 'HOTEL_VISIBLE'] as const;
 function normalizeOptional(value?: string | null) {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
+}
+
+function humanizeMachineValue(value: string) {
+  return value
+    .replaceAll('_', ' ')
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function parseOptionalDate(value?: string | null) {
@@ -1126,6 +1134,54 @@ export class PlatformService {
     };
   }
 
+  async createFeatureFlag(actorUserId: string, dto: CreateFeatureFlagDto) {
+    const key = dto.key.trim().toLowerCase();
+    if (!key) {
+      throw new BadRequestException('Feature key is required.');
+    }
+
+    const existing = await (this.prisma as any).featureFlag.findUnique({
+      where: { key },
+      select: { key: true },
+    });
+    if (existing) {
+      throw new ConflictException('A feature with this key already exists.');
+    }
+
+    const created = await (this.prisma as any).featureFlag.create({
+      data: {
+        key,
+        name: normalizeOptional(dto.name),
+        description: normalizeOptional(dto.description),
+        category: normalizeOptional(dto.category),
+        enabled: dto.enabled ?? true,
+        defaultEnabled: dto.defaultEnabled ?? true,
+        planRequired: normalizeOptional(dto.planRequired),
+        scopeType: dto.scopeType ?? 'MODULE',
+        rolloutStage: dto.rolloutStage ?? 'GA',
+      },
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        hotelId: null,
+        actorUserId,
+        action: 'platform.feature_flag.create',
+        targetType: 'FEATURE_FLAG',
+        targetId: created.key,
+        metadata: {
+          key: created.key,
+          name: created.name ?? null,
+          category: created.category ?? null,
+          scopeType: created.scopeType,
+          rolloutStage: created.rolloutStage,
+        },
+      },
+    });
+
+    return this.getFeatureCatalogOverview();
+  }
+
   private async assertSupportAssignee(assignedAdminId: string | null | undefined) {
     if (!assignedAdminId) return null;
     const admin = await this.prisma.user.findUnique({
@@ -1636,6 +1692,126 @@ export class PlatformService {
           : entry.actor?.email ?? 'Unknown actor',
         metadata: entry.metadata ?? null,
       })),
+    };
+  }
+
+  async getHotelObservability(hotelId: string) {
+    const hotel = await this.prisma.hotel.findUnique({
+      where: { id: hotelId },
+      select: { id: true, name: true, suspendedAt: true, deletedAt: true },
+    });
+
+    if (!hotel) {
+      throw new NotFoundException('Hotel not found.');
+    }
+
+    const now = Date.now();
+    const last24Hours = new Date(now - 24 * 60 * 60 * 1000);
+
+    const [cronRows, moduleRows, recentEvents, supportOpenCount] = await Promise.all([
+      (this.prisma as any).hotelCronSetting.findMany({
+        where: {
+          hotelId,
+          OR: [{ lastFailedAt: { not: null } }, { lastError: { not: null } }],
+        },
+        orderBy: [{ lastFailedAt: 'desc' }, { updatedAt: 'desc' }],
+      }),
+      (this.prisma as any).realtimeModuleHealth.findMany({
+        where: { hotelId },
+        orderBy: [{ lastEventAt: 'desc' }],
+      }),
+      (this.prisma as any).realtimeEventLog.findMany({
+        where: { hotelId },
+        orderBy: { createdAt: 'desc' },
+        take: 12,
+      }),
+      (this.prisma as any).supportCase.count({
+        where: {
+          hotelId,
+          status: { in: ['OPEN', 'TRIAGED', 'IN_PROGRESS', 'WAITING_ON_HOTEL'] },
+        },
+      }),
+    ]);
+
+    const failedJobs = cronRows.map((row: any) => ({
+      jobType: row.jobType,
+      label: humanizeMachineValue(row.jobType),
+      enabled: row.enabled === true,
+      lastTriggeredAt: row.lastTriggeredAt ?? null,
+      lastSucceededAt: row.lastSucceededAt ?? null,
+      lastFailedAt: row.lastFailedAt ?? null,
+      lastError: row.lastError ?? null,
+      severity: row.enabled === false ? 'info' : 'warning',
+    }));
+
+    const moduleAlerts = moduleRows.map((row: any) => {
+      const ageMs = row.lastEventAt ? now - new Date(row.lastEventAt).getTime() : null;
+      const isStale = ageMs !== null && ageMs > 15 * 60 * 1000;
+      const status =
+        row.lastEventType === 'degraded' ? 'alerting' : isStale ? 'stale' : 'healthy';
+
+      return {
+        moduleKey: row.moduleKey,
+        label: humanizeMachineValue(row.moduleKey),
+        eventName: row.eventName,
+        eventCount: row.eventCount ?? 0,
+        lastEventAt: row.lastEventAt ?? null,
+        lastEventType: row.lastEventType ?? null,
+        lastSummary: row.lastSummary ?? null,
+        status,
+      };
+    });
+
+    const realtimeIncidents = recentEvents.map((row: any) => ({
+      id: row.id,
+      source: 'realtime',
+      severity:
+        row.eventType === 'degraded'
+          ? 'warning'
+          : row.eventType === 'recovered'
+            ? 'info'
+            : 'warning',
+      title: `${humanizeMachineValue(row.moduleKey)} realtime ${String(row.eventType ?? 'event')}`,
+      summary: row.summary,
+      createdAt: row.createdAt,
+      moduleKey: row.moduleKey,
+      jobType: null,
+    }));
+
+    const cronIncidents = failedJobs
+      .filter((job: (typeof failedJobs)[number]) => job.lastFailedAt)
+      .slice(0, 6)
+      .map((job: (typeof failedJobs)[number]) => ({
+        id: `cron:${job.jobType}:${job.lastFailedAt}`,
+        source: 'cron',
+        severity: 'warning',
+        title: `${job.label} failed`,
+        summary: job.lastError ?? 'Job recorded a failure.',
+        createdAt: job.lastFailedAt,
+        moduleKey: null,
+        jobType: job.jobType,
+      }));
+
+    const incidents = [...realtimeIncidents, ...cronIncidents]
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 12);
+
+    return {
+      hotelId: hotel.id,
+      hotelName: hotel.name,
+      summary: {
+        openFailedJobs: failedJobs.filter((job: (typeof failedJobs)[number]) => job.enabled && job.lastFailedAt).length,
+        activeModuleAlerts: moduleAlerts.filter((module: (typeof moduleAlerts)[number]) => module.status !== 'healthy').length,
+        degradedEvents24h: recentEvents.filter(
+          (row: any) => row.eventType === 'degraded' && new Date(row.createdAt) >= last24Hours,
+        ).length,
+        openSupportCases: supportOpenCount,
+        suspended: hotel.suspendedAt !== null,
+        deleted: hotel.deletedAt !== null,
+      },
+      failedJobs,
+      moduleAlerts,
+      recentIncidents: incidents,
     };
   }
 
@@ -2193,13 +2369,15 @@ export class PlatformService {
           },
         },
       }),
-      (this.prisma as any).hotelSubscription.findFirst({
-        where: { hotelId },
-        orderBy: [{ updatedAt: 'desc' }],
-        include: {
-          plan: true,
-        },
-      }),
+      (this.prisma as any).hotelSubscription?.findFirst
+        ? (this.prisma as any).hotelSubscription.findFirst({
+            where: { hotelId },
+            orderBy: [{ updatedAt: 'desc' }],
+            include: {
+              plan: true,
+            },
+          })
+        : Promise.resolve(null),
     ]);
 
     const latestStaffLoginAt = recentStaffLogins[0]?.user.lastLoginAt ?? null;

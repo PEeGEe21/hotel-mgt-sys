@@ -5,6 +5,8 @@ import { AuthNotice } from '@/components/platform/AuthNotice';
 import { usePlatformFeatureCatalogOverview } from '@/hooks/usePlatform';
 import { PlatformClientError, platformClientFetch } from '@/lib/platform-client';
 
+const FEATURE_PAGE_SIZE = 3;
+
 type PlanEntitlementFormEntry = {
   enabled: boolean;
   limitValue: string;
@@ -68,6 +70,227 @@ function buildPlanForm(
   ) as Record<string, PlanEntitlementFormEntry>;
 }
 
+function FeatureCatalogCreateForm({
+  onCreated,
+}: {
+  onCreated: () => Promise<void> | void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [form, setForm] = useState({
+    key: '',
+    name: '',
+    category: '',
+    description: '',
+    enabled: true,
+    defaultEnabled: true,
+    scopeType: 'MODULE' as 'MODULE' | 'SUB_FEATURE' | 'LIMIT',
+    rolloutStage: 'GA' as 'INTERNAL' | 'BETA' | 'GA' | 'DEPRECATED',
+    planRequired: '',
+  });
+
+  const reset = () => {
+    setForm({
+      key: '',
+      name: '',
+      category: '',
+      description: '',
+      enabled: true,
+      defaultEnabled: true,
+      scopeType: 'MODULE',
+      rolloutStage: 'GA',
+      planRequired: '',
+    });
+    setError(null);
+  };
+
+  const close = () => {
+    setIsOpen(false);
+    reset();
+  };
+
+  const save = async () => {
+    setIsSaving(true);
+    setError(null);
+    try {
+      await platformClientFetch('/feature-flags', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...form,
+          key: form.key.trim().toLowerCase(),
+          name: form.name.trim() || undefined,
+          category: form.category.trim() || undefined,
+          description: form.description.trim() || undefined,
+          planRequired: form.planRequired.trim() || undefined,
+        }),
+      });
+      await onCreated();
+      close();
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'Could not create feature.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setIsOpen(true)}
+        className="rounded-full border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-800"
+      >
+        New entitlement
+      </button>
+      {isOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4">
+          <div className="w-full max-w-2xl rounded-3xl bg-white p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-[0.22em] text-teal-800">Feature catalog</p>
+                <h3 className="mt-2 text-2xl font-semibold tracking-tight">Create entitlement</h3>
+                <p className="mt-2 text-sm text-slate-600">
+                  Add a new feature key once, then map it to plans and hotel overrides from this catalog.
+                </p>
+              </div>
+              <button type="button" onClick={close} className="text-sm font-medium text-slate-500">
+                Close
+              </button>
+            </div>
+
+            <div className="mt-6 grid gap-4 md:grid-cols-2">
+              <label className="space-y-2 text-sm text-slate-700">
+                <span className="font-medium">Feature key</span>
+                <input
+                  value={form.key}
+                  onChange={(event) => setForm((current) => ({ ...current, key: event.target.value }))}
+                  placeholder="module_housekeeping"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 outline-none focus:border-teal-700"
+                />
+              </label>
+              <label className="space-y-2 text-sm text-slate-700">
+                <span className="font-medium">Display name</span>
+                <input
+                  value={form.name}
+                  onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+                  placeholder="Housekeeping"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 outline-none focus:border-teal-700"
+                />
+              </label>
+              <label className="space-y-2 text-sm text-slate-700">
+                <span className="font-medium">Category</span>
+                <input
+                  value={form.category}
+                  onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))}
+                  placeholder="Operations"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 outline-none focus:border-teal-700"
+                />
+              </label>
+              <label className="space-y-2 text-sm text-slate-700">
+                <span className="font-medium">Plan required</span>
+                <input
+                  value={form.planRequired}
+                  onChange={(event) => setForm((current) => ({ ...current, planRequired: event.target.value }))}
+                  placeholder="Optional plan label"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 outline-none focus:border-teal-700"
+                />
+              </label>
+              <label className="space-y-2 text-sm text-slate-700">
+                <span className="font-medium">Scope type</span>
+                <select
+                  value={form.scopeType}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      scopeType: event.target.value as 'MODULE' | 'SUB_FEATURE' | 'LIMIT',
+                    }))
+                  }
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 outline-none focus:border-teal-700"
+                >
+                  <option value="MODULE">Module</option>
+                  <option value="SUB_FEATURE">Sub-feature</option>
+                  <option value="LIMIT">Limit</option>
+                </select>
+              </label>
+              <label className="space-y-2 text-sm text-slate-700">
+                <span className="font-medium">Rollout stage</span>
+                <select
+                  value={form.rolloutStage}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      rolloutStage: event.target.value as 'INTERNAL' | 'BETA' | 'GA' | 'DEPRECATED',
+                    }))
+                  }
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 outline-none focus:border-teal-700"
+                >
+                  <option value="INTERNAL">Internal</option>
+                  <option value="BETA">Beta</option>
+                  <option value="GA">General availability</option>
+                  <option value="DEPRECATED">Deprecated</option>
+                </select>
+              </label>
+            </div>
+
+            <label className="mt-4 block space-y-2 text-sm text-slate-700">
+              <span className="font-medium">Description</span>
+              <textarea
+                value={form.description}
+                onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
+                rows={4}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 outline-none focus:border-teal-700"
+                placeholder="Describe what this entitlement controls."
+              />
+            </label>
+
+            <div className="mt-4 flex flex-wrap gap-6">
+              <label className="inline-flex items-center gap-2 text-sm font-medium text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={form.enabled}
+                  onChange={(event) => setForm((current) => ({ ...current, enabled: event.target.checked }))}
+                />
+                Global flag enabled
+              </label>
+              <label className="inline-flex items-center gap-2 text-sm font-medium text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={form.defaultEnabled}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, defaultEnabled: event.target.checked }))
+                  }
+                />
+                Default enabled
+              </label>
+            </div>
+
+            {error ? <div className="mt-4"><AuthNotice title="Create failed" message={error} /></div> : null}
+
+            <div className="mt-6 flex flex-wrap justify-end gap-3">
+              <button
+                type="button"
+                onClick={close}
+                className="rounded-full border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={save}
+                disabled={isSaving || !form.key.trim()}
+                className="rounded-full bg-teal-900 px-5 py-3 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {isSaving ? 'Creating...' : 'Create entitlement'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
 export function FeatureControlsPageClient() {
   const overviewQuery = usePlatformFeatureCatalogOverview();
   const data = overviewQuery.data;
@@ -77,6 +300,7 @@ export function FeatureControlsPageClient() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [featurePage, setFeaturePage] = useState(1);
 
   useEffect(() => {
     if (!data) return;
@@ -89,6 +313,12 @@ export function FeatureControlsPageClient() {
   }, [data, selectedPlanId]);
 
   const selectedPlan = data?.plans.find((plan) => plan.id === selectedPlanId) ?? null;
+  const totalFeaturePages = Math.max(1, Math.ceil((data?.features.length ?? 0) / FEATURE_PAGE_SIZE));
+  const paginatedFeatures = useMemo(() => {
+    if (!data) return [];
+    const start = (featurePage - 1) * FEATURE_PAGE_SIZE;
+    return data.features.slice(start, start + FEATURE_PAGE_SIZE);
+  }, [data, featurePage]);
 
   const dirtyCount = useMemo(() => {
     if (!data || !selectedPlanId) return 0;
@@ -100,6 +330,12 @@ export function FeatureControlsPageClient() {
       return before.enabled !== after.enabled || before.limitValue !== after.limitValue;
     }).length;
   }, [data, planForm, selectedPlanId]);
+
+  useEffect(() => {
+    if (featurePage > totalFeaturePages) {
+      setFeaturePage(totalFeaturePages);
+    }
+  }, [featurePage, totalFeaturePages]);
 
   const handleSaveEntitlements = async () => {
     if (!selectedPlanId || !data) return;
@@ -157,7 +393,7 @@ export function FeatureControlsPageClient() {
           </article>
         </section>
 
-        <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+        <section className="grid gap-6 xl:grid-cols-[1.4fr_0.6fr]">
           <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
               <div>
@@ -167,6 +403,12 @@ export function FeatureControlsPageClient() {
                 </h2>
               </div>
               <div className="flex flex-wrap items-center gap-3">
+                <FeatureCatalogCreateForm
+                  onCreated={async () => {
+                    await overviewQuery.refetch();
+                    setSaveSuccess('Feature catalog updated.');
+                  }}
+                />
                 <select
                   value={selectedPlanId}
                   onChange={(event) => {
@@ -218,7 +460,7 @@ export function FeatureControlsPageClient() {
                       <td colSpan={5} className="py-4 text-slate-600">No platform features are registered yet.</td>
                     </tr>
                   ) : (
-                    data?.features.map((feature) => (
+                    paginatedFeatures.map((feature) => (
                       <tr key={feature.key}>
                         <td className="py-4 pr-4 align-top">
                           <p className="font-semibold text-slate-900">{feature.name ?? feature.key}</p>
@@ -238,7 +480,7 @@ export function FeatureControlsPageClient() {
                             {scopeTypeLabel(feature.scopeType)} · {rolloutStageLabel(feature.rolloutStage)}
                           </p>
                         </td>
-                        <td className="py-4 pr-4 align-top">
+                        <td className="py-4 pr-4 align-top whitespace-nowrap">
                           <label className="inline-flex items-center gap-2 text-sm font-medium text-slate-700">
                             <input
                               type="checkbox"
@@ -290,6 +532,35 @@ export function FeatureControlsPageClient() {
                   )}
                 </tbody>
               </table>
+              {data && data.features.length > FEATURE_PAGE_SIZE ? (
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
+                  <p className="text-sm text-slate-500">
+                    Showing {(featurePage - 1) * FEATURE_PAGE_SIZE + 1}-
+                    {Math.min(featurePage * FEATURE_PAGE_SIZE, data.features.length)} of {data.features.length} features
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setFeaturePage((current) => Math.max(1, current - 1))}
+                      disabled={featurePage === 1}
+                      className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50"
+                    >
+                      Previous
+                    </button>
+                    <span className="text-sm text-slate-500">
+                      Page {featurePage} of {totalFeaturePages}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setFeaturePage((current) => Math.min(totalFeaturePages, current + 1))}
+                      disabled={featurePage >= totalFeaturePages}
+                      className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </div>
           </article>
 
