@@ -13,6 +13,7 @@ export type FacilityFormValues = {
   status?: string;
   description?: string;
   capacity?: string;
+  bookingPolicy?: 'EXCLUSIVE' | 'SHARED';
   openTime?: string;
   closeTime?: string;
   baseRate?: string;
@@ -57,6 +58,7 @@ function ManageFacilityModal({
     status: 'ACTIVE',
     description: '',
     capacity: '',
+    bookingPolicy: 'EXCLUSIVE',
     openTime: '',
     closeTime: '',
     baseRate: '',
@@ -81,6 +83,7 @@ function ManageFacilityModal({
       status: initialValues?.status ?? 'ACTIVE',
       description: initialValues?.description ?? '',
       capacity: initialValues?.capacity ?? '',
+      bookingPolicy: initialValues?.bookingPolicy ?? 'EXCLUSIVE',
       openTime: initialValues?.openTime ?? '',
       closeTime: initialValues?.closeTime ?? '',
       baseRate: initialValues?.baseRate ?? '',
@@ -110,6 +113,10 @@ function ManageFacilityModal({
     }
     if (values.capacity && Number(values.capacity) < 0) {
       setError('Capacity cannot be negative.');
+      return;
+    }
+    if (values.bookingPolicy === 'SHARED' && (!values.capacity || Number(values.capacity) < 1)) {
+      setError('Shared booking facilities must have a capacity of at least 1.');
       return;
     }
     if (values.baseRate && Number(values.baseRate) < 0) {
@@ -207,6 +214,24 @@ function ManageFacilityModal({
                   {o.label}
                 </option>
               ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-slate-500 uppercase tracking-wider mb-1.5 block">
+              Booking Policy
+            </label>
+            <select
+              value={values.bookingPolicy}
+              onChange={(e) =>
+                setValues((p) => ({
+                  ...p,
+                  bookingPolicy: e.target.value as 'EXCLUSIVE' | 'SHARED',
+                }))
+              }
+              className={inputCls}
+            >
+              <option value="EXCLUSIVE">Exclusive booking</option>
+              <option value="SHARED">Shared capacity booking</option>
             </select>
           </div>
           <div>

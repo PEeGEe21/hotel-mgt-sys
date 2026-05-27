@@ -22,6 +22,7 @@ export type Facility = {
   departmentId?: string | null;
   managerId?: string | null;
   capacity?: number | null;
+  bookingPolicy?: 'EXCLUSIVE' | 'SHARED' | null;
   openTime?: string | null;
   closeTime?: string | null;
   operatingSchedule?: any;
@@ -39,6 +40,7 @@ export type FacilityInput = {
   type: string;
   description?: string;
   capacity?: number;
+  bookingPolicy?: 'EXCLUSIVE' | 'SHARED';
   status?: string;
   openTime?: string;
   closeTime?: string;

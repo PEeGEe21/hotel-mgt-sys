@@ -24,6 +24,7 @@ export type FacilityBooking = {
   chargeType: string;
   isPaid?: boolean;
   invoiceId?: string;
+  hasRoomFolioPosting?: boolean;
   approvedBy?: string;
   approvedAt?: string;
   notes?: string;
@@ -86,6 +87,44 @@ export type CancelFacilityBookingInput = {
   creditNoteId?: string;
   refundId?: string;
 };
+
+export type ApproveFacilityBookingInput = {
+  id: string;
+  approvedAt?: string;
+};
+
+export type CreateFacilityBookingInvoiceInput = {
+  id: string;
+  dueAt?: string;
+  notes?: string;
+};
+
+export type RecordFacilityBookingPaymentInput = {
+  id: string;
+  amount?: number;
+  method?: string;
+  reference?: string;
+  note?: string;
+  paidAt?: string;
+};
+
+export type PostFacilityBookingToRoomInput = {
+  id: string;
+  description?: string;
+  category?: string;
+  quantity?: number;
+};
+
+export function useGenerateFacilityPaymentReference() {
+  return useMutation({
+    mutationFn: async () => {
+      const { data } = await api.post('finance/payments/reference');
+      return data as { reference: string };
+    },
+    onError: (e: any) =>
+      openToast('error', e?.response?.data?.message ?? 'Reference generation failed'),
+  });
+}
 
 export function useFacilityBookings(filters: Filters = {}) {
   return useQuery<FacilityBookingResponse>({
@@ -154,5 +193,57 @@ export function useCancelFacilityBooking() {
       openToast('success', 'Facility Booking canceled');
     },
     onError: (e: any) => openToast('error', e?.response?.data?.message ?? 'Cancel failed'),
+  });
+}
+
+export function useApproveFacilityBooking() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...dto }: ApproveFacilityBookingInput) =>
+      api.post(`${baseUrl}/${id}/approve`, dto).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['facility-bookings'] });
+      openToast('success', 'Facility booking approved');
+    },
+    onError: (e: any) => openToast('error', e?.response?.data?.message ?? 'Approval failed'),
+  });
+}
+
+export function useCreateFacilityBookingInvoice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...dto }: CreateFacilityBookingInvoiceInput) =>
+      api.post(`${baseUrl}/${id}/invoice`, dto).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['facility-bookings'] });
+      openToast('success', 'Facility booking invoice created');
+    },
+    onError: (e: any) => openToast('error', e?.response?.data?.message ?? 'Invoice creation failed'),
+  });
+}
+
+export function useRecordFacilityBookingPayment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...dto }: RecordFacilityBookingPaymentInput) =>
+      api.post(`${baseUrl}/${id}/pay`, dto).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['facility-bookings'] });
+      openToast('success', 'Facility booking payment recorded');
+    },
+    onError: (e: any) => openToast('error', e?.response?.data?.message ?? 'Payment recording failed'),
+  });
+}
+
+export function usePostFacilityBookingToRoom() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...dto }: PostFacilityBookingToRoomInput) =>
+      api.post(`${baseUrl}/${id}/post-to-room`, dto).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['facility-bookings'] });
+      openToast('success', 'Facility booking posted to room folio');
+    },
+    onError: (e: any) => openToast('error', e?.response?.data?.message ?? 'Room posting failed'),
   });
 }

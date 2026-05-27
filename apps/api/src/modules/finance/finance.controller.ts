@@ -67,6 +67,13 @@ export class FinanceController {
     return this.financeService.recordPayment(req.user.hotelId, dto);
   }
 
+  @Post('payments/reference')
+  @Permissions('create:finance')
+  @ApiOperation({ summary: 'Generate a backend payment transaction reference' })
+  generatePaymentReference(@Request() req: any) {
+    return this.financeService.generatePaymentReference(req.user.hotelId);
+  }
+
   @Get('invoices/export')
   @Permissions('view:finance')
   @ApiOperation({ summary: 'Export invoices as CSV' })

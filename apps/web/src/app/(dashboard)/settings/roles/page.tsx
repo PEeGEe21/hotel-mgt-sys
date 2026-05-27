@@ -122,16 +122,6 @@ export default function RolesPage() {
         </div>
       </div>
 
-      {/* Locked roles notice */}
-      <div className="flex items-start gap-3 bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3">
-        <Info size={15} className="text-amber-400 shrink-0 mt-0.5" />
-        <p className="text-sm text-amber-300">
-          <span className="font-semibold">Admin</span> is locked in the tenant app and cannot be
-          restricted here. <span className="font-semibold">Super Admin</span> is platform-only and
-          is managed from the separate admin console, not from hotel settings.
-        </p>
-      </div>
-
       <div className="flex items-start gap-3 bg-blue-500/10 border border-blue-500/20 rounded-xl px-4 py-3">
         <Info size={15} className="text-blue-400 shrink-0 mt-0.5" />
         <p className="text-sm text-blue-300">

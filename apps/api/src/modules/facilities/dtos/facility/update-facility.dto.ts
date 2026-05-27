@@ -6,6 +6,7 @@ export class UpdateFacilityDto {
   @IsOptional() @IsString() type?: string;
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsInt() capacity?: number;
+  @IsOptional() @IsString() bookingPolicy?: string;
   @IsOptional() @IsString() status?: string;
   @IsOptional() @IsBoolean() isActive?: boolean;
   @IsOptional() @IsString() openTime?: string;

@@ -1,22 +1,32 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { HotelCronJobType } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { FilterDto } from '../dtos/filter.dto';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { RealtimeGateway } from '../../realtime/realtime.gateway';
 import { FACILITIES_MAINTENANCE_SYNC_EVENT } from '../../realtime/realtime.events';
+import { FinanceService } from '../../finance/finance.service';
+import { LedgerService } from '../../ledger/ledger.service';
 
-const MAINTENANCE_ESCALATION_SCAN_JOB_TYPE =
-  'MAINTENANCE_ESCALATION_SCAN' as HotelCronJobType;
+const MAINTENANCE_ESCALATION_SCAN_JOB_TYPE = 'MAINTENANCE_ESCALATION_SCAN' as HotelCronJobType;
 
 @Injectable()
 export class FacilitiesService {
   private readonly logger = new Logger(FacilitiesService.name);
+  private readonly bookingBlockingStatuses = ['PENDING', 'CONFIRMED', 'IN_PROGRESS'];
 
   constructor(
     private prisma: PrismaService,
     private notifications: NotificationsService,
     private realtimeGateway: RealtimeGateway,
+    private financeService: FinanceService,
+    private ledgerService: LedgerService,
   ) {}
 
   private emitMaintenanceSync(
@@ -109,7 +119,10 @@ export class FacilitiesService {
     if (!facility) throw new NotFoundException('Facility not found');
   }
 
-  private async assertMaintenanceBelongsToHotel(hotelId: string, maintenanceRequestId?: string | null) {
+  private async assertMaintenanceBelongsToHotel(
+    hotelId: string,
+    maintenanceRequestId?: string | null,
+  ) {
     if (!maintenanceRequestId) return;
     const request = await this.prisma.maintenanceRequest.findFirst({
       where: { id: maintenanceRequestId, hotelId },
@@ -127,13 +140,295 @@ export class FacilitiesService {
     if (!inspection) throw new NotFoundException('Inspection not found');
   }
 
+  private normalizeBookingRange(startTime: Date | string, endTime: Date | string) {
+    const start = startTime instanceof Date ? startTime : new Date(startTime);
+    const end = endTime instanceof Date ? endTime : new Date(endTime);
+
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+      throw new BadRequestException('Booking start and end time must be valid dates.');
+    }
+
+    if (end <= start) {
+      throw new BadRequestException('Booking end time must be after start time.');
+    }
+
+    const durationMins = Math.max(1, Math.round((end.getTime() - start.getTime()) / 60000));
+
+    const hours = Math.floor(durationMins / 60);
+    const mins = durationMins % 60;
+    const durationLabel =
+      hours > 0 && mins > 0 ? `${hours}h ${mins}min` : hours > 0 ? `${hours}h` : `${mins}min`;
+
+    return {
+      start,
+      end,
+      durationMins,
+      durationLabel
+    };
+  }
+
+  private validateFacilityBookingGuestDetails(data: {
+    reservationId?: string | null;
+    guestId?: string | null;
+    guestName?: string | null;
+  }) {
+    const guestName = data.guestName?.trim();
+    if (!guestName) {
+      throw new BadRequestException('Guest name is required for facility bookings.');
+    }
+
+    if (!data.reservationId && !data.guestId && guestName.length < 2) {
+      throw new BadRequestException('Direct bookings must include a recognizable guest name.');
+    }
+  }
+
+  private validateFacilityDurationRules(
+    facility: { minDurationMins?: number | null; maxDurationMins?: number | null },
+    durationMins: number,
+    durationLabel: string,
+  ) {
+    if (facility.minDurationMins && durationMins < facility.minDurationMins) {
+      const minHours = Math.floor(facility.minDurationMins / 60);
+      const minMins = facility.minDurationMins % 60;
+      const minLabel = minHours > 0 && minMins > 0
+        ? `${minHours}h ${minMins}min`
+        : minHours > 0 ? `${minHours}h` : `${minMins}min`;
+
+      throw new BadRequestException(
+        `Booking duration of ${durationLabel} is too short. Minimum is ${minLabel}.`,
+      );
+    }
+
+    if (facility.maxDurationMins && durationMins > facility.maxDurationMins) {
+      const maxHours = Math.floor(facility.maxDurationMins / 60);
+      const maxMins = facility.maxDurationMins % 60;
+      const maxLabel = maxHours > 0 && maxMins > 0
+        ? `${maxHours}h ${maxMins}min`
+        : maxHours > 0 ? `${maxHours}h` : `${maxMins}min`;
+
+      throw new BadRequestException(
+        `Booking duration of ${durationLabel} exceeds the maximum of ${maxLabel}.`,
+      );
+    }
+  }
+
+  private calculateFacilityBookingAmount(args: {
+    baseRate?: number | null;
+    rateUnit?: string | null;
+    startTime: Date;
+    endTime: Date;
+    chargeType?: string | null;
+    manualAmount?: number | null;
+  }) {
+    if ((args.chargeType ?? '').toUpperCase() === 'COMPLIMENTARY') {
+      return 0;
+    }
+
+    if (
+      typeof args.manualAmount === 'number' &&
+      Number.isFinite(args.manualAmount) &&
+      args.manualAmount >= 0
+    ) {
+      return args.manualAmount;
+    }
+
+    const baseRate = args.baseRate ?? null;
+    if (baseRate === null || !Number.isFinite(baseRate) || baseRate < 0) {
+      return 0;
+    }
+
+    const rateUnit = (args.rateUnit ?? 'FLAT').toUpperCase();
+    const durationMs = args.endTime.getTime() - args.startTime.getTime();
+    const durationMins = Math.max(1, Math.round(durationMs / 60000));
+    const hours = Math.max(1, Math.ceil(durationMins / 60));
+    const days = Math.max(1, Math.ceil(durationMs / 86_400_000));
+
+    if (rateUnit === 'PER_HOUR') return baseRate * hours;
+    if (rateUnit === 'PER_DAY') return baseRate * days;
+    if (rateUnit === 'PER_SESSION' || rateUnit === 'FLAT') return baseRate;
+
+    return baseRate;
+  }
+
+  private normalizeFacilityBookingPolicy(value?: string | null) {
+    if (!value) return 'EXCLUSIVE';
+    const normalized = value.trim().toUpperCase();
+    if (normalized !== 'EXCLUSIVE' && normalized !== 'SHARED') {
+      throw new BadRequestException('Booking policy must be EXCLUSIVE or SHARED.');
+    }
+    return normalized;
+  }
+
+  private validateFacilityBookingPolicyConfig(data: {
+    bookingPolicy?: string | null;
+    capacity?: number | null;
+  }) {
+    const bookingPolicy = this.normalizeFacilityBookingPolicy(data.bookingPolicy);
+    const capacity = data.capacity ?? null;
+
+    if (capacity !== null && capacity < 0) {
+      throw new BadRequestException('Facility capacity cannot be negative.');
+    }
+
+    if (bookingPolicy === 'SHARED' && (!capacity || capacity < 1)) {
+      throw new BadRequestException(
+        'Shared-booking facilities must define a capacity of at least 1.',
+      );
+    }
+
+    return bookingPolicy;
+  }
+
+  private assertPendingBookingIsNotPaid(args: {
+    status?: string | null;
+    isPaid?: boolean | null;
+    invoiceId?: string | null;
+  }) {
+    if ((args.status ?? '').toUpperCase() !== 'PENDING') return;
+    if (args.isPaid) {
+      throw new BadRequestException(
+        'Pending facility bookings cannot be marked as paid before approval.',
+      );
+    }
+    if (args.invoiceId) {
+      throw new BadRequestException(
+        'Pending facility bookings cannot issue an invoice before approval.',
+      );
+    }
+  }
+
+  private async assertCanApproveFacilityBooking(args: {
+    hotelId: string;
+    staffId?: string | null;
+    role: string;
+    facilityId: string;
+  }) {
+    if (args.role === 'ADMIN' || args.role === 'MANAGER' || args.role === 'SUPER_ADMIN') {
+      return;
+    }
+
+    if (!args.staffId) {
+      throw new ForbiddenException('You are not allowed to approve this facility booking.');
+    }
+
+    const facility = await this.prisma.facility.findFirst({
+      where: { id: args.facilityId, hotelId: args.hotelId },
+      select: {
+        managerId: true,
+        department: { select: { headId: true } },
+      },
+    });
+
+    if (!facility) {
+      throw new NotFoundException('Facility not found');
+    }
+
+    const canApprove =
+      facility.managerId === args.staffId || facility.department?.headId === args.staffId;
+
+    if (!canApprove) {
+      throw new ForbiddenException('You are not allowed to approve this facility booking.');
+    }
+  }
+
+  private async getBookingSettlementContext(hotelId: string, bookingId: string) {
+    const booking = await this.prisma.facilityBooking.findFirst({
+      where: { id: bookingId, hotelId },
+      include: {
+        facility: { select: { name: true } },
+        invoice: {
+          include: {
+            payments: true,
+          },
+        },
+        folioItems: {
+          select: { id: true },
+        },
+      },
+    });
+
+    if (!booking) {
+      throw new NotFoundException('Booking not found');
+    }
+
+    if (booking.status !== 'CONFIRMED') {
+      throw new BadRequestException('Only confirmed facility bookings can be settled.');
+    }
+
+    return booking;
+  }
+
+  private async assertFacilityBookingAvailability(args: {
+    hotelId: string;
+    facilityId: string;
+    startTime: Date;
+    endTime: Date;
+    pax: number;
+    excludeBookingId?: string;
+    facilityName?: string | null;
+    bookingPolicy?: string | null;
+    capacity?: number | null;
+  }) {
+    const overlappingBookings = await this.prisma.facilityBooking.findMany({
+      where: {
+        hotelId: args.hotelId,
+        facilityId: args.facilityId,
+        status: { in: this.bookingBlockingStatuses },
+        startTime: { lt: args.endTime },
+        endTime: { gt: args.startTime },
+        ...(args.excludeBookingId
+          ? {
+              id: { not: args.excludeBookingId },
+            }
+          : {}),
+      },
+      select: {
+        id: true,
+        pax: true,
+      },
+    });
+
+    if (!overlappingBookings.length) return;
+
+    const facilityLabel = args.facilityName ?? 'facility';
+    const capacity = args.capacity ?? null;
+    const bookingPolicy = this.normalizeFacilityBookingPolicy(args.bookingPolicy);
+    if (bookingPolicy === 'EXCLUSIVE') {
+      throw new BadRequestException(
+        `${facilityLabel} is already booked for the selected time range.`,
+      );
+    }
+
+    if (!capacity || capacity < 1) {
+      throw new BadRequestException(
+        `${facilityLabel} is configured for shared bookings but has no usable capacity.`,
+      );
+    }
+
+    const reservedPax = overlappingBookings.reduce(
+      (sum, booking) => sum + Math.max(booking.pax ?? 1, 1),
+      0,
+    );
+    if (reservedPax + Math.max(args.pax, 1) > capacity) {
+      throw new BadRequestException(
+        `${facilityLabel} does not have enough remaining capacity for the selected time range.`,
+      );
+    }
+  }
+
   private async validateFacilityConfigRelations(hotelId: string, dto: any) {
     const [type, location, department] = await Promise.all([
       dto.typeId
-        ? this.prisma.facilityType.findFirst({ where: { id: dto.typeId, hotelId }, select: { id: true } })
+        ? this.prisma.facilityType.findFirst({
+            where: { id: dto.typeId, hotelId },
+            select: { id: true },
+          })
         : Promise.resolve(null),
       dto.locationId
-        ? this.prisma.facilityLocation.findFirst({ where: { id: dto.locationId, hotelId }, select: { id: true } })
+        ? this.prisma.facilityLocation.findFirst({
+            where: { id: dto.locationId, hotelId },
+            select: { id: true },
+          })
         : Promise.resolve(null),
       dto.departmentId
         ? this.prisma.facilityDepartment.findFirst({
@@ -145,7 +440,8 @@ export class FacilitiesService {
 
     if (dto.typeId && !type) throw new NotFoundException('Facility type not found');
     if (dto.locationId && !location) throw new NotFoundException('Facility location not found');
-    if (dto.departmentId && !department) throw new NotFoundException('Facility department not found');
+    if (dto.departmentId && !department)
+      throw new NotFoundException('Facility department not found');
     await this.assertStaffBelongsToHotel(hotelId, dto.managerId);
   }
 
@@ -251,10 +547,7 @@ export class FacilitiesService {
         facilityName: args.facilityName ?? null,
         roomNumber: args.roomNumber ?? null,
         status: args.status,
-        severity:
-          args.priority === 'URGENT' || args.priority === 'HIGH'
-            ? 'critical'
-            : 'warning',
+        severity: args.priority === 'URGENT' || args.priority === 'HIGH' ? 'critical' : 'warning',
         summary: `${priorityLabel} issue affecting ${target}`,
         href: '/facilities/maintenance',
       },
@@ -459,10 +752,7 @@ export class FacilitiesService {
 
   // ============ FACILITIES =========== //
 
-  async getReportsSummary(
-    hotelId: string,
-    filters: { dateFrom?: string; dateTo?: string },
-  ) {
+  async getReportsSummary(hotelId: string, filters: { dateFrom?: string; dateTo?: string }) {
     const complaintWhere: any = { hotelId };
     const maintenanceWhere: any = { hotelId };
     const requisitionWhere: any = { hotelId };
@@ -523,8 +813,12 @@ export class FacilitiesService {
       ]);
 
     const activeFacilities = facilities.filter((facility) => facility.status === 'ACTIVE').length;
-    const inactiveFacilities = facilities.filter((facility) => facility.status === 'INACTIVE').length;
-    const maintenanceFacilities = facilities.filter((facility) => facility.status === 'MAINTENANCE').length;
+    const inactiveFacilities = facilities.filter(
+      (facility) => facility.status === 'INACTIVE',
+    ).length;
+    const maintenanceFacilities = facilities.filter(
+      (facility) => facility.status === 'MAINTENANCE',
+    ).length;
 
     const openComplaints = complaints.filter((complaint) =>
       ['NEW', 'ACKNOWLEDGED', 'IN_PROGRESS'].includes(complaint.status),
@@ -562,15 +856,21 @@ export class FacilitiesService {
       .reduce((sum, request) => sum + Number(request.totalCost ?? 0), 0);
 
     const facilityHealth = facilities.map((facility) => {
-      const facilityComplaints = complaints.filter((complaint) => complaint.facilityId === facility.id);
-      const facilityInspections = inspections.filter((inspection) => inspection.facilityId === facility.id);
+      const facilityComplaints = complaints.filter(
+        (complaint) => complaint.facilityId === facility.id,
+      );
+      const facilityInspections = inspections.filter(
+        (inspection) => inspection.facilityId === facility.id,
+      );
       const facilityMaintenance = maintenanceRequests.filter(
         (request) => request.facilityId === facility.id,
       );
       const score = facilityInspections.length
         ? Math.round(
-            facilityInspections.reduce((sum, inspection) => sum + Number(inspection.score ?? 0), 0) /
-              facilityInspections.length,
+            facilityInspections.reduce(
+              (sum, inspection) => sum + Number(inspection.score ?? 0),
+              0,
+            ) / facilityInspections.length,
           )
         : 0;
 
@@ -732,6 +1032,7 @@ export class FacilitiesService {
         departmentId: facility.departmentId,
         managerId: facility.managerId,
         capacity: facility.capacity,
+        bookingPolicy: (facility as any).bookingPolicy ?? 'EXCLUSIVE',
         openTime: facility.openTime,
         closeTime: facility.closeTime,
         operatingSchedule: facility.operatingSchedule,
@@ -805,13 +1106,19 @@ export class FacilitiesService {
 
     delete data.type;
     await this.validateFacilityConfigRelations(hotelId, data);
+    data.bookingPolicy = this.validateFacilityBookingPolicyConfig(data);
 
     return this.prisma.facility.create({ data });
   }
 
   async updateFacility(hotelId: string, id: string, dto: any) {
     const facility = await this.getFacility(hotelId, id);
-    const data: any = this.removeEmptyRelationIds(dto, ['typeId', 'locationId', 'departmentId', 'managerId']);
+    const data: any = this.removeEmptyRelationIds(dto, [
+      'typeId',
+      'locationId',
+      'departmentId',
+      'managerId',
+    ]);
 
     if (data.type && !data.typeId) {
       const type = await this.prisma.facilityType.findFirst({
@@ -823,6 +1130,10 @@ export class FacilitiesService {
 
     delete data.type;
     await this.validateFacilityConfigRelations(hotelId, data);
+    data.bookingPolicy = this.validateFacilityBookingPolicyConfig({
+      bookingPolicy: data.bookingPolicy ?? (facility as any).bookingPolicy,
+      capacity: data.capacity ?? facility.capacity,
+    });
     return this.prisma.facility.update({
       where: { id: facility.id },
       data,
@@ -881,13 +1192,23 @@ export class FacilitiesService {
         orderBy: { startTime: 'asc' },
         include: {
           facility: true,
+          invoice: {
+            select: { id: true },
+          },
+          folioItems: {
+            select: { id: true },
+          },
         },
       }),
       this.prisma.facilityBooking.count({ where }),
     ]);
 
     return {
-      bookings,
+      bookings: bookings.map((booking) => ({
+        ...booking,
+        invoiceId: booking.invoiceId ?? booking.invoice?.id ?? null,
+        hasRoomFolioPosting: booking.folioItems.length > 0,
+      })),
       total,
       page,
       limit,
@@ -913,32 +1234,83 @@ export class FacilitiesService {
       'refundId',
       'createdBy',
     ]);
-    const facility = await this.prisma.facility.findFirst({
+    const facility = (await this.prisma.facility.findFirst({
       where: { id: data.facilityId, hotelId },
-      select: { requiresApproval: true },
-    });
+      select: {
+        name: true,
+        capacity: true,
+        baseRate: true,
+        rateUnit: true,
+        requiresApproval: true,
+        minDurationMins: true,
+        maxDurationMins: true,
+      },
+    })) as {
+      name: string;
+      capacity: number | null;
+      baseRate?: { toNumber?: () => number } | number | null;
+      rateUnit?: string | null;
+      requiresApproval: boolean;
+      minDurationMins: number | null;
+      maxDurationMins: number | null;
+      bookingPolicy?: string | null;
+    } | null;
     if (!facility) throw new NotFoundException('Facility not found');
 
-    const start = new Date(data.startTime);
-    const end = new Date(data.endTime);
-    const durationMins =
-      data.durationMins ?? Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000));
+    this.validateFacilityBookingGuestDetails(data);
+
+    const { start, end, durationMins, durationLabel } = this.normalizeBookingRange(data.startTime, data.endTime);
+    const pax = Math.max(Number(data.pax ?? 1), 1);
+    this.validateFacilityDurationRules(facility, durationMins, durationLabel);
 
     const status = data.status ?? (facility.requiresApproval ? 'PENDING' : 'CONFIRMED');
     const createdBy = data.createdBy ?? staffId;
+    this.assertPendingBookingIsNotPaid({
+      status,
+      isPaid: data.isPaid ?? false,
+      invoiceId: data.invoiceId,
+    });
+    const amount = this.calculateFacilityBookingAmount({
+      baseRate:
+        typeof facility.baseRate === 'number'
+          ? facility.baseRate
+          : (facility.baseRate?.toNumber?.() ?? null),
+      rateUnit: facility.rateUnit,
+      startTime: start,
+      endTime: end,
+      chargeType: data.chargeType,
+      manualAmount:
+        typeof data.amount === 'number' && Number.isFinite(data.amount)
+          ? Number(data.amount)
+          : null,
+    });
     await Promise.all([
       this.assertReservationBelongsToHotel(hotelId, data.reservationId),
       this.assertGuestBelongsToHotel(hotelId, data.guestId),
       this.assertStaffBelongsToHotel(hotelId, createdBy),
       this.assertStaffBelongsToHotel(hotelId, data.approvedBy),
     ]);
+    await this.assertFacilityBookingAvailability({
+      hotelId,
+      facilityId: data.facilityId,
+      startTime: start,
+      endTime: end,
+      pax,
+      facilityName: facility.name,
+      bookingPolicy: facility.bookingPolicy,
+      capacity: facility.capacity,
+    });
 
     return this.prisma.facilityBooking.create({
       data: {
         ...data,
         hotelId,
+        pax,
+        startTime: start,
+        endTime: end,
         durationMins,
         status,
+        amount,
         createdBy,
       },
     });
@@ -958,25 +1330,268 @@ export class FacilitiesService {
       where: { id, hotelId },
     });
     if (!booking) throw new NotFoundException('Booking not found');
+
+    if (booking.status === 'PENDING' && data.status && data.status !== 'PENDING') {
+      throw new BadRequestException(
+        'Pending facility bookings must be approved through the approval action before status changes.',
+      );
+    }
+
+    const nextFacilityId = data.facilityId ?? booking.facilityId;
+    const facility = (await this.prisma.facility.findFirst({
+      where: { id: nextFacilityId, hotelId },
+      select: {
+        id: true,
+        name: true,
+        capacity: true,
+        baseRate: true,
+        rateUnit: true,
+        minDurationMins: true,
+        maxDurationMins: true,
+      },
+    })) as {
+      id: string;
+      name: string;
+      capacity: number | null;
+      baseRate?: { toNumber?: () => number } | number | null;
+      rateUnit?: string | null;
+      minDurationMins: number | null;
+      maxDurationMins: number | null;
+      bookingPolicy?: string | null;
+    } | null;
+    if (!facility) throw new NotFoundException('Facility not found');
+
+    this.validateFacilityBookingGuestDetails({
+      reservationId: data.reservationId ?? booking.reservationId,
+      guestId: data.guestId ?? booking.guestId,
+      guestName: data.guestName ?? booking.guestName,
+    });
+
     await Promise.all([
-      this.assertFacilityBelongsToHotel(hotelId, data.facilityId),
+      this.assertFacilityBelongsToHotel(hotelId, nextFacilityId),
       this.assertReservationBelongsToHotel(hotelId, data.reservationId),
       this.assertGuestBelongsToHotel(hotelId, data.guestId),
       this.assertStaffBelongsToHotel(hotelId, data.createdBy),
       this.assertStaffBelongsToHotel(hotelId, data.approvedBy),
     ]);
 
-    if (data.startTime || data.endTime) {
-      const start = new Date(data.startTime ?? booking.startTime);
-      const end = new Date(data.endTime ?? booking.endTime);
-      data.durationMins =
-        data.durationMins ?? Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000));
-    }
+    const { start, end, durationMins, durationLabel } = this.normalizeBookingRange(
+      data.startTime ?? booking.startTime,
+      data.endTime ?? booking.endTime,
+    );
+    const pax = Math.max(Number(data.pax ?? booking.pax ?? 1), 1);
+    this.validateFacilityDurationRules(facility, durationMins, durationLabel);
+    await this.assertFacilityBookingAvailability({
+      hotelId,
+      facilityId: facility.id,
+      startTime: start,
+      endTime: end,
+      pax,
+      excludeBookingId: booking.id,
+      facilityName: facility.name,
+      bookingPolicy: facility.bookingPolicy,
+      capacity: facility.capacity,
+    });
+
+    data.startTime = start;
+    data.endTime = end;
+    data.durationMins = durationMins;
+    data.pax = pax;
+    this.assertPendingBookingIsNotPaid({
+      status: data.status ?? booking.status,
+      isPaid: data.isPaid ?? booking.isPaid ?? false,
+      invoiceId: data.invoiceId ?? booking.invoiceId,
+    });
+    data.amount = this.calculateFacilityBookingAmount({
+      baseRate:
+        typeof facility.baseRate === 'number'
+          ? facility.baseRate
+          : (facility.baseRate?.toNumber?.() ?? null),
+      rateUnit: facility.rateUnit,
+      startTime: start,
+      endTime: end,
+      chargeType: data.chargeType ?? booking.chargeType,
+      manualAmount:
+        typeof data.amount === 'number' && Number.isFinite(data.amount)
+          ? Number(data.amount)
+          : null,
+    });
 
     return this.prisma.facilityBooking.update({
       where: { id: booking.id },
       data,
     });
+  }
+
+  async approveBooking(
+    hotelId: string,
+    id: string,
+    approver: { userId: string; role: string; staffId?: string | null; approvedAt?: string | null },
+  ) {
+    const booking = await this.prisma.facilityBooking.findFirst({
+      where: { id, hotelId },
+      select: {
+        id: true,
+        status: true,
+        facilityId: true,
+        isPaid: true,
+        invoiceId: true,
+      },
+    });
+    if (!booking) throw new NotFoundException('Booking not found');
+
+    if (booking.status !== 'PENDING') {
+      throw new BadRequestException('Only pending facility bookings can be approved.');
+    }
+
+    await this.assertCanApproveFacilityBooking({
+      hotelId,
+      facilityId: booking.facilityId,
+      role: approver.role,
+      staffId: approver.staffId ?? null,
+    });
+
+    return this.prisma.facilityBooking.update({
+      where: { id: booking.id },
+      data: {
+        status: 'CONFIRMED',
+        approvedBy: approver.staffId ?? null,
+        approvedAt: approver.approvedAt ? new Date(approver.approvedAt) : new Date(),
+        isPaid: booking.isPaid ?? false,
+      },
+    });
+  }
+
+  async createBookingInvoice(hotelId: string, id: string, dto: { dueAt?: string; notes?: string }) {
+    const booking = await this.getBookingSettlementContext(hotelId, id);
+
+    if (booking.chargeType !== 'DIRECT_PAYMENT') {
+      throw new BadRequestException(
+        'Only direct-payment facility bookings can generate a standalone invoice.',
+      );
+    }
+    const existingInvoiceId = booking.invoiceId ?? booking.invoice?.id ?? null;
+    if (existingInvoiceId) {
+      if (!booking.invoiceId) {
+        await this.prisma.facilityBooking.update({
+          where: { id: booking.id },
+          data: { invoiceId: existingInvoiceId },
+        });
+      }
+      throw new BadRequestException('This facility booking already has an invoice.');
+    }
+    if (Number(booking.amount) <= 0) {
+      throw new BadRequestException('This facility booking does not have a billable amount.');
+    }
+
+    return this.financeService.createInvoice(hotelId, {
+      sourceType: 'FACILITY',
+      facilityBookingId: booking.id,
+      counterpartyName: booking.guestName,
+      subtotal: Number(booking.amount),
+      dueAt: dto.dueAt,
+      notes: dto.notes?.trim() || booking.notes || `Facility booking for ${booking.facility.name}`,
+    });
+  }
+
+  async recordBookingPayment(
+    hotelId: string,
+    id: string,
+    dto: { amount?: number; method?: string; reference?: string; note?: string; paidAt?: string },
+  ) {
+    const booking = await this.getBookingSettlementContext(hotelId, id);
+
+    if (booking.chargeType !== 'DIRECT_PAYMENT') {
+      throw new BadRequestException(
+        'Only direct-payment facility bookings can be marked paid through invoice settlement.',
+      );
+    }
+    const invoiceId = booking.invoiceId ?? booking.invoice?.id ?? null;
+    if (!invoiceId || !booking.invoice) {
+      throw new BadRequestException(
+        'Generate an invoice for this booking before recording payment.',
+      );
+    }
+    if (!booking.invoiceId && booking.invoice?.id) {
+      await this.prisma.facilityBooking.update({
+        where: { id: booking.id },
+        data: { invoiceId: booking.invoice.id },
+      });
+    }
+    if (booking.isPaid) {
+      throw new BadRequestException('This facility booking is already fully paid.');
+    }
+
+    const paidAmount = booking.invoice.payments.reduce(
+      (sum, payment) => sum + Number(payment.amount),
+      0,
+    );
+    const outstanding = Math.max(Number(booking.invoice.total) - paidAmount, 0);
+    if (outstanding <= 0) {
+      throw new BadRequestException('This invoice is already fully settled.');
+    }
+
+    return this.financeService.recordPayment(hotelId, {
+      invoiceId,
+      amount: dto.amount ?? outstanding,
+      method: dto.method?.trim().toUpperCase() || 'CASH',
+      reference: dto.reference,
+      note: dto.note,
+      paidAt: dto.paidAt,
+    });
+  }
+
+  async postBookingToRoomFolio(
+    hotelId: string,
+    id: string,
+    dto: { description?: string; category?: string; quantity?: number },
+  ) {
+    const booking = await this.getBookingSettlementContext(hotelId, id);
+
+    if (booking.chargeType !== 'ROOM_CHARGE') {
+      throw new BadRequestException(
+        'Only room-charge facility bookings can be posted to a reservation folio.',
+      );
+    }
+    if (!booking.reservationId) {
+      throw new BadRequestException(
+        'This facility booking is not linked to a reservation and cannot be posted to room.',
+      );
+    }
+    if (booking.folioItems.length > 0) {
+      throw new BadRequestException(
+        'This facility booking has already been posted to the room folio.',
+      );
+    }
+
+    const quantity = dto.quantity ?? 1;
+    if (quantity < 1) {
+      throw new BadRequestException('Folio quantity must be at least 1.');
+    }
+
+    const folioItem = await this.prisma.folioItem.create({
+      data: {
+        hotelId,
+        reservationId: booking.reservationId,
+        facilityBookingId: booking.id,
+        description:
+          dto.description?.trim() ||
+          `${booking.facility.name} booking for ${booking.guestName}`.trim(),
+        amount: Number(booking.amount),
+        quantity,
+        category: dto.category?.trim().toUpperCase() || 'MISC',
+      },
+    });
+
+    await this.ledgerService.postFolioCharge(hotelId, {
+      amount: Number(folioItem.amount),
+      category: folioItem.category,
+      description: folioItem.description,
+      reservationId: folioItem.reservationId,
+      folioItemId: folioItem.id,
+    });
+
+    return folioItem;
   }
 
   async cancelBooking(hotelId: string, id: string, dto: any) {
@@ -1269,11 +1884,7 @@ export class FacilitiesService {
       data,
     });
 
-    this.emitMaintenanceSync(
-      hotelId,
-      data.status ? 'status_changed' : 'updated',
-      updated,
-    );
+    this.emitMaintenanceSync(hotelId, data.status ? 'status_changed' : 'updated', updated);
     return updated;
   }
 

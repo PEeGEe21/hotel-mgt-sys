@@ -11,8 +11,10 @@ import { FacilitiesTypeController } from './controllers/facilities-type.controll
 import { FacilitiesDepartmentController } from './controllers/facilities-department.controller';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { RealtimeModule } from '../realtime/realtime.module';
+import { FinanceModule } from '../finance/finance.module';
+import { LedgerModule } from '../ledger/ledger.module';
 @Module({
-  imports: [NotificationsModule, RealtimeModule],
+  imports: [NotificationsModule, RealtimeModule, FinanceModule, LedgerModule],
   providers: [FacilitiesService],
   controllers: [
     FacilitiesController,

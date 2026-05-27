@@ -152,6 +152,27 @@ export class FinanceService {
     return invoiceNo;
   }
 
+  async generatePaymentReference(hotelId: string) {
+    const prefix = `PAY-${dayjs().format('YYYYMMDD')}`;
+    let attempt = 1;
+
+    while (attempt <= 50) {
+      const reference = `${prefix}-${String(dayjs().valueOf()).slice(-6)}-${String(attempt).padStart(2, '0')}`;
+      const existing = await this.prisma.payment.findFirst({
+        where: { hotelId, reference },
+        select: { id: true },
+      });
+
+      if (!existing) {
+        return { reference };
+      }
+
+      attempt += 1;
+    }
+
+    throw new ConflictException('Could not generate a unique payment reference.');
+  }
+
   private async resolveInvoiceSource(
     hotelId: string,
     dto: {
@@ -829,6 +850,13 @@ export class FinanceService {
       if (source.requisitionId) {
         await tx.facilityRequisition.update({
           where: { id: source.requisitionId },
+          data: { invoiceId: invoice.id },
+        });
+      }
+
+      if (source.facilityBookingId) {
+        await tx.facilityBooking.update({
+          where: { id: source.facilityBookingId },
           data: { invoiceId: invoice.id },
         });
       }

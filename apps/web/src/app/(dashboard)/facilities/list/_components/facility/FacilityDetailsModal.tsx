@@ -43,6 +43,16 @@ export default function FacilityDetailsModal({
             <Detail label="Department" value={facility.department} />
             <Detail label="Manager" value={facility.manager} />
             <Detail label="Capacity" value={facility.capacity} />
+            <Detail
+              label="Booking Policy"
+              value={
+                facility.bookingPolicy === 'SHARED'
+                  ? 'Shared capacity booking'
+                  : facility.bookingPolicy === 'EXCLUSIVE'
+                    ? 'Exclusive booking'
+                    : null
+              }
+            />
             <Detail label="Open Time" value={facility.openTime} />
             <Detail label="Close Time" value={facility.closeTime} />
             <Detail label="Base Rate" value={facility.baseRate ? `₦${facility.baseRate.toLocaleString()}` : null} />

@@ -1,13 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Plus, Search, X, BadgeCheck, CircleSlash } from 'lucide-react';
 import { useDebounce } from '@/hooks/useDebounce';
 import {
+  useApproveFacilityBooking,
+  useCreateFacilityBookingInvoice,
   FacilityBooking,
   useCancelFacilityBooking,
   useCreateFacilityBooking,
   useFacilityBookings,
+  useGenerateFacilityPaymentReference,
+  usePostFacilityBookingToRoom,
+  useRecordFacilityBookingPayment,
 } from '@/hooks/facility/useFacilityBooking';
 import { useFacilities } from '@/hooks/facility/useFacility';
 import Pagination from '@/components/ui/pagination';
@@ -49,6 +54,52 @@ function toTime(value?: string) {
   return d.toISOString().slice(11, 16);
 }
 
+function buildBookingDateTime(date?: string, time?: string) {
+  if (!date || !time) return null;
+  const value = new Date(`${date}T${time}:00.000Z`);
+  return Number.isNaN(value.getTime()) ? null : value;
+}
+
+function calculateFacilityBookingAmount(args: {
+  baseRate?: number | null;
+  rateUnit?: string | null;
+  startDate?: string;
+  startTime?: string;
+  endDate?: string;
+  endTime?: string;
+  chargeType?: string;
+}) {
+  if ((args.chargeType ?? '').toUpperCase() === 'COMPLIMENTARY') return 0;
+
+  const baseRate = args.baseRate ?? null;
+  if (baseRate === null || !Number.isFinite(baseRate) || baseRate < 0) return 0;
+
+  const start = buildBookingDateTime(args.startDate, args.startTime);
+  const end = buildBookingDateTime(args.endDate, args.endTime);
+  const rateUnit = (args.rateUnit ?? 'FLAT').toUpperCase();
+
+  if (!start || !end || end <= start) {
+    return rateUnit === 'PER_SESSION' || rateUnit === 'FLAT' ? baseRate : 0;
+  }
+
+  const durationMs = end.getTime() - start.getTime();
+  const durationMins = Math.max(1, Math.round(durationMs / 60000));
+  const hours = Math.max(1, Math.ceil(durationMins / 60));
+  const days = Math.max(1, Math.ceil(durationMs / 86_400_000));
+
+  if (rateUnit === 'PER_HOUR') return baseRate * hours;
+  if (rateUnit === 'PER_DAY') return baseRate * days;
+  if (rateUnit === 'PER_SESSION' || rateUnit === 'FLAT') return baseRate;
+  return baseRate;
+}
+
+function defaultLocalDateTimeValue() {
+  const now = new Date();
+  const offset = now.getTimezoneOffset();
+  const local = new Date(now.getTime() - offset * 60_000);
+  return local.toISOString().slice(0, 16);
+}
+
 export default function FacilityBookingsPage() {
   const { can } = usePermissions();
   const [error, setError] = useState<string | null>(null);
@@ -59,6 +110,12 @@ export default function FacilityBookingsPage() {
 
   const [showCancel, setShowCancel] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<FacilityBooking | null>(null);
+  const [showApprovalFlow, setShowApprovalFlow] = useState(false);
+  const [approvalTarget, setApprovalTarget] = useState<FacilityBooking | null>(null);
+  const [approvalInvoiceId, setApprovalInvoiceId] = useState<string | null>(null);
+  const [approvalStep, setApprovalStep] = useState<'approve' | 'pay'>('approve');
+  const [showPayment, setShowPayment] = useState(false);
+  const [paymentTarget, setPaymentTarget] = useState<FacilityBooking | null>(null);
 
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -77,12 +134,18 @@ export default function FacilityBookingsPage() {
     dateTo: dateTo || undefined,
   });
   const createBooking = useCreateFacilityBooking();
+  const approveBooking = useApproveFacilityBooking();
+  const createInvoice = useCreateFacilityBookingInvoice();
+  const generatePaymentReference = useGenerateFacilityPaymentReference();
+  const recordPayment = useRecordFacilityBookingPayment();
+  const postToRoom = usePostFacilityBookingToRoom();
   const cancelBooking = useCancelFacilityBooking();
   const { data: facilitiesData } = useFacilities({ page: 1, limit: 100 });
 
   const bookings = data?.bookings ?? [];
   const facilities = facilitiesData?.facilities ?? [];
   const canCreateBooking = can('create:facilities');
+  const [amountEdited, setAmountEdited] = useState(false);
 
   const [form, setForm] = useState({
     facilityId: '',
@@ -99,10 +162,54 @@ export default function FacilityBookingsPage() {
     notes: '',
   });
 
+  const selectedFacility = facilities.find((facility) => facility.id === form.facilityId);
+
+  useEffect(() => {
+    if (!form.facilityId || amountEdited) return;
+    const amount = calculateFacilityBookingAmount({
+      baseRate: selectedFacility?.baseRate,
+      rateUnit: selectedFacility?.rateUnit,
+      startDate: form.startDate,
+      startTime: form.startTime,
+      endDate: form.endDate,
+      endTime: form.endTime,
+      chargeType: form.chargeType,
+    });
+
+    setForm((current) => (current.amount === amount ? current : { ...current, amount }));
+  }, [
+    amountEdited,
+    form.chargeType,
+    form.endDate,
+    form.endTime,
+    form.facilityId,
+    form.startDate,
+    form.startTime,
+    selectedFacility?.baseRate,
+    selectedFacility?.rateUnit,
+  ]);
+
   const [cancelForm, setCancelForm] = useState({
     cancelReason: '',
     refundMethod: 'MANUAL_CREDIT',
   });
+  const [paymentForm, setPaymentForm] = useState({
+    amount: '',
+    method: 'CASH',
+    reference: '',
+    note: '',
+    paidAt: defaultLocalDateTimeValue(),
+  });
+
+  const resetPaymentForm = () => {
+    setPaymentForm({
+      amount: '',
+      method: 'CASH',
+      reference: '',
+      note: '',
+      paidAt: defaultLocalDateTimeValue(),
+    });
+  };
 
   const handleCreate = async () => {
     try {
@@ -122,6 +229,7 @@ export default function FacilityBookingsPage() {
         notes: form.notes || undefined,
       });
       setShowAdd(false);
+      setAmountEdited(false);
       setForm({
         facilityId: '',
         guestName: '',
@@ -155,6 +263,115 @@ export default function FacilityBookingsPage() {
       setCancelForm({ cancelReason: '', refundMethod: 'MANUAL_CREDIT' });
     } catch (e: any) {
       setError(e?.response?.data?.message ?? e?.message ?? 'Failed to cancel booking');
+    }
+  };
+
+  const openPaymentDrawer = (booking: FacilityBooking) => {
+    setPaymentTarget(booking);
+    setPaymentForm({
+      amount: String(booking.amount ?? 0),
+      method: 'CASH',
+      reference: '',
+      note: '',
+      paidAt: defaultLocalDateTimeValue(),
+    });
+    setShowPayment(true);
+  };
+
+  const openApprovalFlow = (booking: FacilityBooking) => {
+    setApprovalTarget(booking);
+    setApprovalInvoiceId(null);
+    setApprovalStep('approve');
+    setPaymentForm({
+      amount: String(booking.amount ?? 0),
+      method: 'CASH',
+      reference: '',
+      note: '',
+      paidAt: defaultLocalDateTimeValue(),
+    });
+    setShowApprovalFlow(true);
+  };
+
+  const closeApprovalFlow = () => {
+    setShowApprovalFlow(false);
+    setApprovalTarget(null);
+    setApprovalInvoiceId(null);
+    setApprovalStep('approve');
+    resetPaymentForm();
+  };
+
+  const handleApproveFlow = async () => {
+    if (!approvalTarget) return;
+
+    try {
+      setError(null);
+      await approveBooking.mutateAsync({ id: approvalTarget.id });
+
+      if (approvalTarget.chargeType === 'DIRECT_PAYMENT') {
+        const result = await createInvoice.mutateAsync({ id: approvalTarget.id });
+        const nextInvoiceId =
+          result?.invoice?.id ??
+          result?.id ??
+          null;
+        setApprovalInvoiceId(nextInvoiceId);
+        setApprovalStep('pay');
+        return;
+      }
+
+      closeApprovalFlow();
+      await refetch();
+    } catch (e: any) {
+      setError(e?.response?.data?.message ?? e?.message ?? 'Failed to approve booking');
+    }
+  };
+
+  const handleRecordPayment = async () => {
+    if (!paymentTarget) return;
+
+    try {
+      setError(null);
+      await recordPayment.mutateAsync({
+        id: paymentTarget.id,
+        amount: Number(paymentForm.amount),
+        method: paymentForm.method,
+        reference: paymentForm.reference || undefined,
+        note: paymentForm.note || undefined,
+        paidAt: paymentForm.paidAt || undefined,
+      });
+      setShowPayment(false);
+      setPaymentTarget(null);
+      resetPaymentForm();
+    } catch (e: any) {
+      setError(e?.response?.data?.message ?? e?.message ?? 'Failed to record payment');
+    }
+  };
+
+  const handleRecordApprovalPayment = async () => {
+    if (!approvalTarget) return;
+
+    try {
+      setError(null);
+      await recordPayment.mutateAsync({
+        id: approvalTarget.id,
+        amount: Number(paymentForm.amount),
+        method: paymentForm.method,
+        reference: paymentForm.reference || undefined,
+        note: paymentForm.note || undefined,
+        paidAt: paymentForm.paidAt || undefined,
+      });
+      closeApprovalFlow();
+      await refetch();
+    } catch (e: any) {
+      setError(e?.response?.data?.message ?? e?.message ?? 'Failed to record payment');
+    }
+  };
+
+  const handleGeneratePaymentReference = async () => {
+    try {
+      const result = await generatePaymentReference.mutateAsync();
+      setPaymentForm((current) => ({ ...current, reference: result.reference }));
+    } catch {
+      // toast handled in hook
     }
   };
 
@@ -324,16 +541,62 @@ export default function FacilityBookingsPage() {
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <button
-                        onClick={() => {
-                          setCancelTarget(b);
-                          setShowCancel(true);
-                        }}
-                        disabled={b.status === 'CANCELLED' || cancelBooking.isPending}
-                        className="text-xs bg-red-500/15 text-red-400 hover:bg-red-500/25 px-2 py-1 rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        Cancel
-                      </button>
+                      <div className="flex items-center gap-2">
+                        {b.status === 'PENDING' ? (
+                          <button
+                            onClick={() => openApprovalFlow(b)}
+                            disabled={approveBooking.isPending}
+                            className="text-xs bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 px-2 py-1 rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            Approve
+                          </button>
+                        ) : null}
+                        {b.status === 'CONFIRMED' &&
+                        b.chargeType === 'DIRECT_PAYMENT' &&
+                        !b.invoiceId ? (
+                          <button
+                            onClick={() => createInvoice.mutate({ id: b.id })}
+                            disabled={createInvoice.isPending}
+                            className="text-xs bg-cyan-500/15 text-cyan-400 hover:bg-cyan-500/25 px-2 py-1 rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            Invoice
+                          </button>
+                        ) : null}
+                        {b.status === 'CONFIRMED' &&
+                        b.chargeType === 'DIRECT_PAYMENT' &&
+                        !!b.invoiceId &&
+                        !b.isPaid ? (
+                          <button
+                            onClick={() => openPaymentDrawer(b)}
+                            disabled={recordPayment.isPending}
+                            className="text-xs bg-violet-500/15 text-violet-400 hover:bg-violet-500/25 px-2 py-1 rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            Mark Paid
+                          </button>
+                        ) : null}
+                        {b.status === 'CONFIRMED' &&
+                        b.chargeType === 'ROOM_CHARGE' &&
+                        !!b.reservationId &&
+                        !b.hasRoomFolioPosting ? (
+                          <button
+                            onClick={() => postToRoom.mutate({ id: b.id })}
+                            disabled={postToRoom.isPending}
+                            className="text-xs bg-amber-500/15 text-amber-400 hover:bg-amber-500/25 px-2 py-1 rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            Post To Room
+                          </button>
+                        ) : null}
+                        <button
+                          onClick={() => {
+                            setCancelTarget(b);
+                            setShowCancel(true);
+                          }}
+                          disabled={b.status === 'CANCELLED' || cancelBooking.isPending}
+                          className="text-xs bg-red-500/15 text-red-400 hover:bg-red-500/25 px-2 py-1 rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Cancel
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -346,6 +609,156 @@ export default function FacilityBookingsPage() {
           <Pagination meta={data.meta} currentPage={page} handlePageChange={setPage} />
         )}
       </div>
+
+      <Drawer
+        open={showApprovalFlow}
+        onOpenChange={(open) => {
+          if (!open) closeApprovalFlow();
+          else setShowApprovalFlow(open);
+        }}
+        direction="right"
+      >
+        <DrawerOverlay className="bg-black/50 backdrop-blur-sm data-[state=open]:animate-fadeIn" />
+        <DrawerContent className="flex h-full w-full max-w-md flex-col border-l border-[#1e2536] bg-[#161b27] sm:!max-w-md">
+          <DrawerHeader className="flex flex-row items-center justify-between border-b border-[#1e2536] px-5 py-4">
+            <DrawerTitle className="text-base font-bold text-white">
+              <h2 className="text-lg font-bold text-white">
+                {approvalStep === 'approve' ? 'Approve Booking' : 'Invoice Created'}
+              </h2>
+            </DrawerTitle>
+            <button onClick={closeApprovalFlow} className="text-slate-500 hover:text-slate-300">
+              <X size={18} />
+            </button>
+          </DrawerHeader>
+          <div className="flex-1 overflow-y-auto p-5">
+            <div className="space-y-4">
+              <div className="rounded-xl border border-[#1e2536] bg-[#0f1117] p-4">
+                <p className="text-sm font-semibold text-white">
+                  {approvalTarget?.facility?.name ?? 'Facility booking'}
+                </p>
+                <p className="mt-1 text-xs text-slate-400">{approvalTarget?.guestName ?? 'Guest'}</p>
+                <p className="mt-2 text-xs text-slate-500">
+                  {approvalStep === 'approve'
+                    ? 'Approve this pending booking and proceed with settlement if needed.'
+                    : `Invoice${approvalInvoiceId ? ` ${approvalInvoiceId}` : ''} created. You can record payment now without leaving this flow.`}
+                </p>
+              </div>
+
+              {approvalStep === 'pay' ? (
+                <div className="space-y-4">
+                  <div>
+                    <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
+                      Amount
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={paymentForm.amount}
+                      onChange={(e) =>
+                        setPaymentForm((current) => ({ ...current, amount: e.target.value }))
+                      }
+                      className="w-full rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-2.5 text-sm text-slate-200"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
+                      Method
+                    </label>
+                    <select
+                      value={paymentForm.method}
+                      onChange={(e) =>
+                        setPaymentForm((current) => ({ ...current, method: e.target.value }))
+                      }
+                      className="w-full rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-2.5 text-sm text-slate-200"
+                    >
+                      {['CASH', 'CARD', 'BANK_TRANSFER', 'POS'].map((method) => (
+                        <option key={method} value={method}>
+                          {method}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
+                      Reference
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        value={paymentForm.reference}
+                        onChange={(e) =>
+                          setPaymentForm((current) => ({ ...current, reference: e.target.value }))
+                        }
+                        placeholder="Transaction reference"
+                        className="w-full rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-2.5 text-sm text-slate-200"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleGeneratePaymentReference}
+                        disabled={generatePaymentReference.isPending}
+                        className="shrink-0 rounded-lg border border-[#29406f] bg-[#17233b] px-3 py-2.5 text-xs font-semibold text-slate-100 transition-colors hover:bg-[#1d2d4a] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        Generate
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
+                      Paid At
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={paymentForm.paidAt}
+                      onChange={(e) =>
+                        setPaymentForm((current) => ({ ...current, paidAt: e.target.value }))
+                      }
+                      className="w-full rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-2.5 text-sm text-slate-200"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
+                      Note
+                    </label>
+                    <textarea
+                      value={paymentForm.note}
+                      onChange={(e) =>
+                        setPaymentForm((current) => ({ ...current, note: e.target.value }))
+                      }
+                      rows={4}
+                      className="w-full rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-2.5 text-sm text-slate-200"
+                    />
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </div>
+          <div className="flex gap-3 border-t border-[#1e2536] px-5 py-4">
+            <button
+              onClick={closeApprovalFlow}
+              className="flex-1 rounded-lg bg-white/5 py-2.5 text-sm font-medium text-slate-300 transition-colors hover:bg-white/10"
+            >
+              {approvalStep === 'pay' ? 'Finish Later' : 'Cancel'}
+            </button>
+            {approvalStep === 'approve' ? (
+              <button
+                onClick={handleApproveFlow}
+                disabled={approveBooking.isPending || createInvoice.isPending}
+                className="flex-1 rounded-lg bg-emerald-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Approve And Proceed
+              </button>
+            ) : (
+              <button
+                onClick={handleRecordApprovalPayment}
+                disabled={recordPayment.isPending}
+                className="flex-1 rounded-lg bg-violet-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Mark Paid
+              </button>
+            )}
+          </div>
+        </DrawerContent>
+      </Drawer>
 
       <Drawer
         open={showAdd && canCreateBooking}
@@ -373,7 +786,10 @@ export default function FacilityBookingsPage() {
                 </label>
                 <select
                   value={form.facilityId}
-                  onChange={(e) => setForm({ ...form, facilityId: e.target.value })}
+                  onChange={(e) => {
+                    setAmountEdited(false);
+                    setForm({ ...form, facilityId: e.target.value });
+                  }}
                   className="w-full bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-2.5 text-sm text-slate-200"
                 >
                   <option value="">Select facility</option>
@@ -465,7 +881,10 @@ export default function FacilityBookingsPage() {
                 </label>
                 <select
                   value={form.chargeType}
-                  onChange={(e) => setForm({ ...form, chargeType: e.target.value })}
+                  onChange={(e) => {
+                    setAmountEdited(false);
+                    setForm({ ...form, chargeType: e.target.value });
+                  }}
                   className="w-full bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-2.5 text-sm text-slate-200"
                 >
                   {['ROOM_CHARGE', 'DIRECT_PAYMENT', 'COMPLIMENTARY'].map((c) => (
@@ -482,9 +901,17 @@ export default function FacilityBookingsPage() {
                 <input
                   type="number"
                   value={form.amount}
-                  onChange={(e) => setForm({ ...form, amount: Number(e.target.value) })}
+                  onChange={(e) => {
+                    setAmountEdited(true);
+                    setForm({ ...form, amount: Number(e.target.value) });
+                  }}
                   className="w-full bg-[#0f1117] border border-[#1e2536] rounded-lg px-3 py-2.5 text-sm text-slate-200"
                 />
+                <p className="mt-1 text-xs text-slate-500">
+                  {selectedFacility?.baseRate
+                    ? `Prefilled from ${selectedFacility.name} ${selectedFacility.rateUnit?.toLowerCase() ?? 'flat'} pricing.`
+                    : 'No default facility price set.'}
+                </p>
               </div>
               <div>
                 <label className="text-xs text-slate-500 uppercase tracking-wider mb-1.5 block">
@@ -522,6 +949,143 @@ export default function FacilityBookingsPage() {
                 {createBooking.isPending ? 'Saving...' : 'Save'}
               </button>
             </div>
+          </div>
+        </DrawerContent>
+      </Drawer>
+
+      <Drawer
+        open={showPayment}
+        onOpenChange={(open) => {
+          setShowPayment(open);
+          if (!open) setPaymentTarget(null);
+        }}
+        direction="right"
+      >
+        <DrawerOverlay className="bg-black/50 backdrop-blur-sm data-[state=open]:animate-fadeIn" />
+        <DrawerContent className="flex h-full w-full max-w-md flex-col border-l border-[#1e2536] bg-[#161b27] sm:!max-w-md">
+          <DrawerHeader className="flex flex-row items-center justify-between border-b border-[#1e2536] px-5 py-4">
+            <DrawerTitle className="text-base font-bold text-white">
+              <h2 className="text-lg font-bold text-white">Record Payment</h2>
+            </DrawerTitle>
+            <button
+              onClick={() => {
+                setShowPayment(false);
+                setPaymentTarget(null);
+              }}
+              className="text-slate-500 hover:text-slate-300"
+            >
+              <X size={18} />
+            </button>
+          </DrawerHeader>
+          <div className="flex-1 overflow-y-auto p-5">
+            <div className="space-y-4">
+              <div className="rounded-xl border border-[#1e2536] bg-[#0f1117] p-4">
+                <p className="text-sm font-semibold text-white">
+                  {paymentTarget?.facility?.name ?? 'Facility booking'}
+                </p>
+                <p className="mt-1 text-xs text-slate-400">{paymentTarget?.guestName ?? 'Guest'}</p>
+                <p className="mt-2 text-xs text-slate-500">
+                  Invoice-linked payment for a confirmed direct-payment booking.
+                </p>
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
+                  Amount
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={paymentForm.amount}
+                  onChange={(e) => setPaymentForm((current) => ({ ...current, amount: e.target.value }))}
+                  className="w-full rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-2.5 text-sm text-slate-200"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
+                  Method
+                </label>
+                <select
+                  value={paymentForm.method}
+                  onChange={(e) => setPaymentForm((current) => ({ ...current, method: e.target.value }))}
+                  className="w-full rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-2.5 text-sm text-slate-200"
+                >
+                  {['CASH', 'CARD', 'BANK_TRANSFER', 'POS'].map((method) => (
+                    <option key={method} value={method}>
+                      {method}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
+                  Reference
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    value={paymentForm.reference}
+                    onChange={(e) =>
+                      setPaymentForm((current) => ({ ...current, reference: e.target.value }))
+                    }
+                    placeholder="Transaction reference"
+                    className="w-full rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-2.5 text-sm text-slate-200"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleGeneratePaymentReference}
+                    disabled={generatePaymentReference.isPending}
+                    className="shrink-0 rounded-lg border border-[#29406f] bg-[#17233b] px-3 py-2.5 text-xs font-semibold text-slate-100 transition-colors hover:bg-[#1d2d4a] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Generate
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
+                  Paid At
+                </label>
+                <input
+                  type="datetime-local"
+                  value={paymentForm.paidAt}
+                  onChange={(e) => setPaymentForm((current) => ({ ...current, paidAt: e.target.value }))}
+                  className="w-full rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-2.5 text-sm text-slate-200"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-500">
+                  Note
+                </label>
+                <textarea
+                  value={paymentForm.note}
+                  onChange={(e) => setPaymentForm((current) => ({ ...current, note: e.target.value }))}
+                  rows={4}
+                  className="w-full rounded-lg border border-[#1e2536] bg-[#0f1117] px-3 py-2.5 text-sm text-slate-200"
+                />
+              </div>
+            </div>
+          </div>
+          <div className="flex gap-3 border-t border-[#1e2536] px-5 py-4">
+            <button
+              onClick={() => {
+                setShowPayment(false);
+                setPaymentTarget(null);
+              }}
+              className="flex-1 rounded-lg bg-white/5 py-2.5 text-sm font-medium text-slate-300 transition-colors hover:bg-white/10"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleRecordPayment}
+              disabled={recordPayment.isPending}
+              className="flex-1 rounded-lg bg-violet-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Save Payment
+            </button>
           </div>
         </DrawerContent>
       </Drawer>

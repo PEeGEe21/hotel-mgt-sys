@@ -6,6 +6,7 @@ export class CreateFacilityDto {
   @IsString() type!: string;
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsInt() capacity?: number;
+  @IsOptional() @IsString() bookingPolicy?: string;
   @IsOptional() @IsString() status?: string;
   @IsOptional() @IsString() openTime?: string;
   @IsOptional() @IsString() closeTime?: string;

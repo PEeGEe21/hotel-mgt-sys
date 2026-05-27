@@ -43,6 +43,11 @@ enum FacilityStatus {
   MAINTENANCE
 }
 
+enum FacilityBookingPolicy {
+  EXCLUSIVE
+  SHARED
+}
+
 enum RoomType {
   STANDARD
   DELUXE
@@ -1881,6 +1886,7 @@ model Facility {
   typeId            String?
   description       String?
   capacity          Int?
+  bookingPolicy     FacilityBookingPolicy @default(EXCLUSIVE)
   status            FacilityStatus @default(ACTIVE)
   openTime          String?
   closeTime         String?
