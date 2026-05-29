@@ -29,7 +29,6 @@ async function proxyRequest(req: NextRequest, params: { path: string[] }) {
   const search = req.nextUrl.search || '';
   const body = req.method === 'GET' || req.method === 'HEAD' ? undefined : await req.text();
 
-  console.log(API_URL, 'API_URL');
   const sendRequest = (accessToken: string) =>
     fetch(`${API_URL}/platform/${upstreamPath}${search}`, {
       method: req.method,

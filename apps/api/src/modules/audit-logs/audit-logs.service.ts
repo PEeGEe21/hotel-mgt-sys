@@ -5,6 +5,33 @@ import { PrismaService } from '../../prisma/prisma.service';
 export class AuditLogsService {
   constructor(private prisma: PrismaService) {}
 
+  private buildVisibleUser(
+    user: {
+      id: string;
+      email: string;
+      role?: string;
+      staff?: { firstName: string; lastName: string } | null;
+    } | null,
+  ) {
+    if (!user) {
+      return null;
+    }
+
+    if (user.role === 'SUPER_ADMIN') {
+      return {
+        id: user.id,
+        email: 'Hidden',
+        name: 'Platform admin',
+      };
+    }
+
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.staff ? `${user.staff.firstName} ${user.staff.lastName}`.trim() : user.email,
+    };
+  }
+
   async list(params: {
     hotelId: string;
     page?: number;
@@ -43,8 +70,22 @@ export class AuditLogsService {
         skip,
         take: limit,
         include: {
-          actor: { select: { id: true, email: true, staff: { select: { firstName: true, lastName: true } } } },
-          targetUser: { select: { id: true, email: true, staff: { select: { firstName: true, lastName: true } } } },
+          actor: {
+            select: {
+              id: true,
+              email: true,
+              role: true,
+              staff: { select: { firstName: true, lastName: true } },
+            },
+          },
+          targetUser: {
+            select: {
+              id: true,
+              email: true,
+              role: true,
+              staff: { select: { firstName: true, lastName: true } },
+            },
+          },
         },
       }),
       this.prisma.auditLog.count({ where }),
@@ -60,22 +101,8 @@ export class AuditLogsService {
       userAgent: row.userAgent ?? null,
       metadata: row.metadata ?? null,
       createdAt: row.createdAt,
-      actor: {
-        id: row.actor.id,
-        email: row.actor.email,
-        name: row.actor.staff
-          ? `${row.actor.staff.firstName} ${row.actor.staff.lastName}`.trim()
-          : row.actor.email,
-      },
-      targetUser: row.targetUser
-        ? {
-            id: row.targetUser.id,
-            email: row.targetUser.email,
-            name: row.targetUser.staff
-              ? `${row.targetUser.staff.firstName} ${row.targetUser.staff.lastName}`.trim()
-              : row.targetUser.email,
-          }
-        : null,
+      actor: this.buildVisibleUser(row.actor),
+      targetUser: this.buildVisibleUser(row.targetUser),
     }));
 
     return {
